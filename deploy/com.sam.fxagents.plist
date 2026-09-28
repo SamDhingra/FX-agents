@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Keeps FX-Agents running on the Mac (restart on crash, start at login).
+     1) edit the two paths below  2) cp to ~/Library/LaunchAgents/
+     3) launchctl load ~/Library/LaunchAgents/com.sam.fxagents.plist
+     Also: System Settings → Battery → prevent sleep when on power adapter. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.sam.fxagents</string>
+  <key>WorkingDirectory</key><string>/Users/YOU/fx-agents</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/YOU/fx-agents/.venv/bin/python</string><string>main.py</string>
+    <string>--mode</string><string>paper</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/fxagents.log</string>
+  <key>StandardErrorPath</key><string>/tmp/fxagents.err</string>
+</dict></plist>

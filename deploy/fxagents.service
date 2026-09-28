@@ -1,0 +1,12 @@
+# Linux (e.g. Lightsail) with IB Gateway run headless via IBC (github.com/IbcAlpha/IBC)
+[Unit]
+Description=FX-Agents
+After=network-online.target
+[Service]
+WorkingDirectory=/opt/fx-agents
+ExecStart=/opt/fx-agents/.venv/bin/python main.py --mode paper
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/fx-agents/.env
+[Install]
+WantedBy=multi-user.target

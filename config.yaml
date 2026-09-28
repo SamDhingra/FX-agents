@@ -1,0 +1,145 @@
+# ───────────────────────────────────────────────────────────────────────────
+#  FX-Agents configuration
+#  mode: sim   → synthetic market + paper broker (no accounts needed)
+#        paper → IBKR market data + IBKR PAPER account (port 4002 / 7497)
+#        live  → IBKR market data + LIVE account (port 4001 / 7496)
+# ───────────────────────────────────────────────────────────────────────────
+mode: sim
+timezone: America/New_York          # all session logic runs on NY time (ICT convention)
+base_currency: USD
+starting_equity: 100000             # only used in sim mode
+
+ibkr:
+  host: 127.0.0.1
+  port: 4002                        # IB Gateway paper = 4002, live = 4001 (TWS: 7497 / 7496)
+  client_id: 17
+  account: ""                       # leave blank to use the default account
+  market_data_type: 1               # 1 live, 3 delayed (useful if you lack a CME data subscription)
+
+# Instruments. Default = CME micro futures (tight spreads, nearly 24h, available to IBKR Canada).
+# Alternatives are listed per symbol; swap `contract` if you prefer spot gold / index CFDs.
+instruments:
+  XAUUSD:
+    contract: {secType: CONTFUT, symbol: MGC, exchange: COMEX}   # alt: {secType: CMDTY, symbol: XAUUSD, exchange: SMART}
+    multiplier: 10
+    tick_size: 0.1
+    commission_per_unit: 0.85
+    max_units: 10
+    sim_start_price: 3650
+    sim_daily_vol: 0.012
+  SPX:
+    contract: {secType: CONTFUT, symbol: MES, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUS500, exchange: SMART}
+    multiplier: 5
+    tick_size: 0.25
+    commission_per_unit: 0.62
+    max_units: 20
+    sim_start_price: 6600
+    sim_daily_vol: 0.010
+  NDQ:
+    contract: {secType: CONTFUT, symbol: MNQ, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUST100, exchange: SMART}
+    multiplier: 2
+    tick_size: 0.25
+    commission_per_unit: 0.62
+    max_units: 20
+    sim_start_price: 24500
+    sim_daily_vol: 0.013
+  US30:
+    contract: {secType: CONTFUT, symbol: MYM, exchange: CBOT}    # alt CFD: {secType: CFD, symbol: IBUS30, exchange: SMART}
+    multiplier: 0.5
+    tick_size: 1.0
+    commission_per_unit: 0.62
+    max_units: 20
+    sim_start_price: 46500
+    sim_daily_vol: 0.009
+
+timeframes:
+  signal: 5min            # strategies evaluate on 5-minute closes
+  bias: 60min             # higher-timeframe bias
+  history_days: 12        # history pulled at start-up for evaluation / warm-up
+
+# ── Risk: hard rules enforced by the Risk agent AND again inside the broker layer ──
+risk:
+  require_stop_loss: true            # an order without a stop is rejected, always
+  max_stop_pct_of_trade_value: 0.10  # your rule: stop distance ≤ 10% of trade value
+  risk_per_trade_pct: 0.005          # size so a full stop-out costs ≤ 0.5% of equity
+  max_open_positions: 3
+  max_positions_per_symbol: 1
+  daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
+  max_drawdown_pct: 0.06             # kill switch vs. equity peak
+  min_stop_atr: 0.5                  # stops tighter than 0.5 ATR are widened (noise protection)
+  news_blackout:                     # no new entries ±window around these (NY time)
+    recurring_weekdays: ["08:30", "10:00"]   # US data releases; add FOMC/NFP etc. under events
+    window_min: 5
+    events: []                       # e.g. {date: "2026-10-02", time: "08:30", window_min: 30, label: NFP}
+
+# ── Sessions (NY time). Entries only inside windows; everything flat before close ──
+sessions:
+  entry_windows:
+    - ["02:00", "05:00"]   # London killzone
+    - ["08:30", "11:30"]   # NY AM (incl. 10–11 Silver Bullet)
+    - ["13:30", "15:30"]   # NY PM
+  flatten_at: "15:50"      # day trading: all positions closed here
+  max_hold_minutes: 240
+
+# ── Trade management: start steady at 1:1, pyramid winners, stops only move toward profit ──
+management:
+  rr_initial: 1.0              # first target = 1R (the learner may raise per strategy)
+  rr_max: 2.5                  # the learner can never push the first target past this
+  partial_at_target: 0.5       # bank 50% at the first target
+  lock_r: 0.1                  # stop moves to +0.1R (into profit) when the target is hit
+  trail_step_r: 1.0            # each further +1R step trails the stop up one step
+  pyramid:
+    enabled: true
+    max_adds: 2
+    add_size_frac: 0.5         # each add = 50% of the initial size
+    require_continuation: true # Jev must rate continuation likely before adding
+    min_continuation_prob: 0.55
+    never_risk_open_profit: true   # an add is refused if worst case would turn the trade negative
+
+# ── Jev (TypeSafe) scoring, same pattern as the custom harness ──
+jev:
+  enabled: true                # falls back to the local heuristic scorer if no TYPESAFE_API_KEY
+  model: null                  # null = account default (jev-latest)
+  timeout_s: 6
+  weight: 0.6                  # blend: weight × Jev + (1 − weight) × quant stats
+  min_select_score: 0.55       # below this, the symbol sits out the hour
+  min_signal_quality: 0.5      # per-setup gate
+  min_signal_confidence: 0.5
+
+selector:
+  top_n_per_symbol: 1          # strategies traded per symbol per hour
+  min_trades_for_stats: 8
+  hour_shrinkage_k: 12         # Bayesian shrink of hour-of-day stats toward overall
+
+evaluator:
+  lookback_days: 10
+  refresh_minutes: 60          # rolling re-evaluation of every strategy version
+  optimize_every_hours: 24     # parameter search + new strategy generation
+  optimize_at: "17:05"         # NY time, during the CME daily break
+  min_trades_promote: 25
+  promote_margin_r: 0.05       # candidate must beat incumbent expectancy by this (out-of-sample)
+  demote_below_r: -0.05        # live strategies below this expectancy go back to shadow
+  max_candidates: 6
+
+notifications:
+  ntfy_topic: ""               # e.g. "sam-fx-agents-7f3k" → install the ntfy app on your phone
+  ntfy_server: https://ntfy.sh
+  telegram_bot_token: ""       # or set TELEGRAM_BOT_TOKEN
+  telegram_chat_id: ""         # or set TELEGRAM_CHAT_ID
+  events: [entry, exit, stop_to_profit, pyramid, kill_switch, agent_down, promotion, daily_summary]
+
+dashboard:
+  host: 0.0.0.0                # reachable over Tailscale from your phone
+  port: 8088
+  token: ""                    # set DASHBOARD_TOKEN; required for Pause / Flatten buttons
+
+tradingview:
+  webhook_secret: ""           # set TV_WEBHOOK_SECRET; alerts post to /webhook/tradingview
+
+sim:
+  speed: 0                     # seconds per simulated minute (0 = as fast as possible)
+  days: 3                      # simulated trading days after warm-up
+  seed: 7
+
+storage:
+  db_path: data/journal.sqlite

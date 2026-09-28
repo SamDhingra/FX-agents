@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>FX-Agents</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#f0efec; --line:#e2e0da;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#7a7873;
+  --series-1:#2a78d6; --good:#0ca30c; --good-text:#006300; --warn:#fab219; --critical:#d03b3b; --crit-text:#b02a2a;
+  --accent:#2a78d6; --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --bg:#121211; --surface:#1a1a19; --surface-2:#232321; --line:#2f2f2c;
+    --text:#ffffff; --text-2:#c3c2b7; --muted:#8f8e86;
+    --series-1:#3987e5; --good-text:#4cc24c; --crit-text:#ff7a7a; --accent:#3987e5;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#121211; --surface:#1a1a19; --surface-2:#232321; --line:#2f2f2c;
+  --text:#ffffff; --text-2:#c3c2b7; --muted:#8f8e86;
+  --series-1:#3987e5; --good-text:#4cc24c; --crit-text:#ff7a7a; --accent:#3987e5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
+.hrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:1400px;margin:0 auto}
+h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+.badge{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--text-2);white-space:nowrap}
+.badge.on::before{content:"● ";color:var(--good)} .badge.off::before{content:"■ ";color:var(--critical)}
+.spacer{flex:1}
+button{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer}
+button.danger{border-color:var(--critical);color:var(--crit-text)}
+nav{display:flex;gap:14px;overflow-x:auto;max-width:1400px;margin:8px auto 0;font-size:13px;scrollbar-width:none}
+nav a{color:var(--text-2);text-decoration:none;white-space:nowrap}
+main{max-width:1400px;margin:0 auto;padding:14px 16px 40px;display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0}
+.card h2{font-size:13px;margin:0 0 10px;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.span12{grid-column:span 12}.span8{grid-column:span 8}.span6{grid-column:span 6}.span4{grid-column:span 4}
+@media (max-width:980px){.span8,.span6,.span4{grid-column:span 12}}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.kpis .kpi:last-child{grid-column:span 2}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.kpi .l{font-size:12px;color:var(--text-2)} .kpi .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
+.kpi .s{font-size:12px;color:var(--muted)}
+.pos{color:var(--good-text)} .neg{color:var(--crit-text)}
+.tbl{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600}
+td.r,th.r{text-align:right}
+tr.click{cursor:pointer} tr.click:hover{background:var(--surface-2)}
+.empty{color:var(--muted);padding:8px 0}
+.sym{display:grid;gap:6px;margin-bottom:12px}
+.sym .top{display:flex;justify-content:space-between;align-items:baseline}
+.pick{display:grid;grid-template-columns:minmax(120px,1.4fr) 3fr 44px;gap:8px;align-items:center;font-size:13px}
+.pick .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:8px;background:var(--surface-2);border-radius:4px;position:relative}
+.fill{height:8px;background:var(--series-1);border-radius:4px}
+.pick.sel .name{font-weight:650} .pick:not(.sel){opacity:.72}
+.gate{position:absolute;top:-3px;width:2px;height:14px;background:var(--text-2)}
+.feed{max-height:340px;overflow:auto;font-size:13px}
+.feed div{padding:6px 0;border-bottom:1px solid var(--line)}
+.feed .t{color:var(--muted);font-size:12px;margin-right:6px}
+.chart{position:relative}
+.chart svg{width:100%;height:220px;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+  font-size:12px;box-shadow:0 4px 14px rgb(0 0 0 / .12);display:none;white-space:nowrap}
+select{font:inherit;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+.bar{display:inline-block;height:8px;border-radius:2px;vertical-align:middle;margin-left:6px}
+.bar.p{background:var(--series-1)} .bar.n{background:var(--critical)}
+.health{display:flex;flex-wrap:wrap;gap:8px}
+.health span{font-size:12px;padding:4px 8px;border-radius:8px;background:var(--surface-2)}
+details summary{cursor:pointer;color:var(--text-2)}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--surface-2);padding:8px;border-radius:8px;max-height:260px;overflow:auto}
+.lvl-error{color:var(--crit-text)} .lvl-warn{color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <h1>FX-Agents</h1>
+    <span class="badge" id="mode">—</span>
+    <span class="badge" id="status">—</span>
+    <span class="badge" id="jev">—</span>
+    <span class="badge" id="clock">—</span>
+    <span class="spacer"></span>
+    <button id="btnPause">Pause</button>
+    <button id="btnResume">Resume</button>
+    <button class="danger" id="btnFlatten">Flatten all</button>
+  </div>
+  <nav>
+    <a href="#positions">Positions</a><a href="#hour">This hour</a><a href="#equity">Equity</a>
+    <a href="#board">Strategies</a><a href="#journal">Journal</a><a href="#jevlog">Jev decisions</a>
+    <a href="#learner">Learner</a><a href="#activity">Activity</a>
+  </nav>
+</header>
+<main>
+  <section class="span12 kpis" id="kpis"></section>
+
+  <section class="card span8" id="positions"><h2>Open positions</h2><div class="tbl" id="posTbl"></div></section>
+  <section class="card span4" id="hour"><h2>This hour's strategy per symbol</h2><div id="picks"></div>
+    <div class="s" style="font-size:12px;color:var(--muted)">Bar = blended score (Jev × confidence + hour-of-day stats). Tick = selection gate. ✓ = active.</div></section>
+
+  <section class="card span12" id="equity"><h2>Equity</h2>
+    <div class="chart"><svg id="eq" role="img" aria-label="Equity curve"></svg><div class="tip" id="eqTip"></div></div></section>
+
+  <section class="card span12" id="board"><h2>Strategy leaderboard <select id="boardSym"></select></h2><div class="tbl" id="boardTbl"></div></section>
+
+  <section class="card span12" id="journal"><h2>Trade journal <a href="api/journal.csv" style="font-size:12px;text-transform:none;letter-spacing:0;margin-left:8px">CSV</a></h2>
+    <div class="tbl" id="jTbl"></div><div id="jDetail"></div></section>
+
+  <section class="card span6" id="jevlog"><h2>Jev decisions</h2><div class="feed" id="decisions"></div></section>
+  <section class="card span6" id="learner"><h2>Strategist · learning log</h2><div class="feed" id="learnerFeed"></div></section>
+  <section class="card span8" id="activity"><h2>Activity &amp; alerts</h2><div class="feed" id="alerts"></div></section>
+  <section class="card span4"><h2>Agent health</h2><div class="health" id="health"></div></section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const fmt = (x, d=2) => x==null ? "—" : Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const money = x => (x<0?"−$":"$") + fmt(Math.abs(x));
+const signed = (x, d=2, suf="") => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), d) + suf;
+const cls = x => x>0 ? "pos" : x<0 ? "neg" : "";
+const esc = s => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const t = iso => iso ? iso.slice(5,16).replace("T"," ") : "";
+let S = null, boardSym = "ALL";
+
+function kpis(s){
+  const k = [
+    ["Equity", money(s.equity), s.mode.toUpperCase()],
+    ["Day P&L", `<span class="${cls(s.day_pnl)}">${s.day_pnl>=0?"▲":"▼"} ${money(s.day_pnl)}</span>`, `realized ${money(s.realized_today)}`],
+    ["Unrealized", `<span class="${cls(s.unrealized)}">${money(s.unrealized)}</span>`, `${s.positions.length} open`],
+    ["Open risk", money(s.open_risk), "to current stops"],
+    ["Today", `${s.today.trades} · ${Math.round(s.today.win_rate*100)}%`, `${signed(s.today.sum_r,2,"R")} · avg ${signed(s.today.avg_r,2,"R")}`],
+  ];
+  $("#kpis").innerHTML = k.map(([l,v,x])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${x}</div></div>`).join("");
+}
+
+function positions(s){
+  if(!s.positions.length){ $("#posTbl").innerHTML = `<div class="empty">Flat. Agents are watching ${Object.keys(s.prices).join(", ")}.</div>`; return; }
+  $("#posTbl").innerHTML = `<table><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th class=r>Qty</th><th class=r>Entry</th><th class=r>Price</th>
+    <th class=r>Stop</th><th class=r>R now</th><th>Stage</th><th class=r>Unreal.</th><th>Jev</th></tr>` +
+    s.positions.map(p=>`<tr><td><b>${p.symbol}</b></td><td>${p.side==="LONG"?"▲ Long":"▼ Short"}</td><td>${esc(p.strategy)}</td>
+      <td class=r>${fmt(p.qty,0)}${p.adds?` <span style="color:var(--muted)">(+${p.adds})</span>`:""}</td><td class=r>${fmt(p.avg_entry)}</td>
+      <td class=r>${fmt(p.price)}</td><td class=r>${fmt(p.stop)} ${p.stop_in_profit?"🔒":""}</td>
+      <td class="r ${cls(p.r_now)}">${signed(p.r_now,2,"R")}</td><td>${p.stage? "step "+p.stage : "initial"}${p.partial_done?" · partial":""}</td>
+      <td class="r ${cls(p.unrealized)}">${money(p.unrealized)}</td><td>${p.jev_quality!=null?fmt(p.jev_quality)+" / "+fmt(p.jev_confidence):"—"} <span style="color:var(--muted)">${p.jev_source}</span></td></tr>`).join("") + `</table>`;
+}
+
+function picks(s){
+  const gate = 0.55;
+  const html = Object.entries(s.selections).map(([sym, list])=>{
+    const top = list.slice(0,3);
+    const sel = list.filter(x=>x.selected).map(x=>x.id);
+    const note = sel.length ? "active: "+esc(sel.join(", ")) : list.length ? "sitting out (no strategy cleared the gate)" : "no entry window this hour";
+    return `<div class="sym"><div class="top"><b>${sym}</b><span style="font-size:12px;color:var(--muted)">${note}</span></div>` +
+      top.map(x=>`<div class="pick ${x.selected?"sel":""}" title="Jev ${x.jev} (conf ${x.jev_conf}) · stats ${x.quant} · hour exp ${x.hour_exp}R · n ${x.n}">
+        <span class="name">${x.selected?"✓ ":""}${esc(x.id)}</span>
+        <span class="track"><span class="fill" style="display:block;width:${Math.round(x.combined*100)}%"></span><span class="gate" style="left:${gate*100}%"></span></span>
+        <span style="text-align:right">${fmt(x.combined)}</span></div>`).join("") + `</div>`;
+  }).join("");
+  $("#picks").innerHTML = html || `<div class="empty">Waiting for the first evaluation…</div>`;
+}
+
+function equity(s){
+  const pts = s.equity_curve; const svg = $("#eq");
+  if(pts.length < 2){ svg.innerHTML = ""; return; }
+  const W = svg.clientWidth || 800, H = 220, L = 64, R = 12, T = 12, B = 26;
+  const ys = pts.map(p=>p.equity); let lo = Math.min(...ys), hi = Math.max(...ys);
+  if(hi-lo < 1){ hi += 50; lo -= 50; }
+  const pad = (hi-lo)*0.08; lo -= pad; hi += pad;
+  const x = i => L + (W-L-R) * i/(pts.length-1), y = v => T + (H-T-B) * (1-(v-lo)/(hi-lo));
+  const ticks = [0,.25,.5,.75,1].map(f=>lo+(hi-lo)*f);
+  const d = pts.map((p,i)=>(i?"L":"M")+x(i).toFixed(1)+","+y(p.equity).toFixed(1)).join("");
+  const xt = [0, Math.floor(pts.length/2), pts.length-1];
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = ticks.map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/>
+      <text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${"$"+Math.round(v).toLocaleString()}</text>`).join("") +
+    xt.map(i=>`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===pts.length-1?"end":"middle"}" font-size="11" fill="var(--muted)">${t(pts[i].ts)}</text>`).join("") +
+    `<path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>
+     <line id="xh" y1="${T}" y2="${H-B}" stroke="var(--text-2)" stroke-dasharray="3 3" visibility="hidden"/>
+     <circle id="xd" r="4" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>
+     <rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent" id="hit"/>`;
+  const tip = $("#eqTip"), hit = svg.querySelector("#hit");
+  const move = ev => {
+    const r = svg.getBoundingClientRect(); const px = (ev.touches?ev.touches[0].clientX:ev.clientX) - r.left;
+    const i = Math.max(0, Math.min(pts.length-1, Math.round((px*W/r.width - L)/(W-L-R)*(pts.length-1))));
+    const cx = x(i), cy = y(pts[i].equity);
+    svg.querySelector("#xh").setAttribute("x1",cx); svg.querySelector("#xh").setAttribute("x2",cx);
+    svg.querySelector("#xh").setAttribute("visibility","visible");
+    const dot = svg.querySelector("#xd"); dot.setAttribute("cx",cx); dot.setAttribute("cy",cy); dot.setAttribute("visibility","visible");
+    const chg = pts[i].equity - pts[0].equity;
+    tip.innerHTML = `<b>${money(pts[i].equity)}</b><br>${t(pts[i].ts)} · ${chg>=0?"+":"−"}${money(Math.abs(chg)).replace("−","")} since start`;
+    tip.style.display = "block";
+    const tx = cx*r.width/W; tip.style.left = Math.min(r.width-170, Math.max(0, tx+10)) + "px"; tip.style.top = "8px";
+  };
+  const leave = () => { tip.style.display="none"; svg.querySelector("#xh")?.setAttribute("visibility","hidden"); svg.querySelector("#xd")?.setAttribute("visibility","hidden"); };
+  hit.addEventListener("mousemove", move); hit.addEventListener("touchmove", move, {passive:true});
+  hit.addEventListener("mouseleave", leave); hit.addEventListener("touchend", leave);
+}
+
+function board(s){
+  const syms = ["ALL", ...new Set(s.board.map(b=>b.symbol))];
+  const sel = $("#boardSym");
+  if(sel.options.length !== syms.length){ sel.innerHTML = syms.map(x=>`<option>${x}</option>`).join(""); sel.value = boardSym; }
+  let rows = s.board.filter(b=>boardSym==="ALL"||b.symbol===boardSym).sort((a,b)=>b.expectancy-a.expectancy);
+  const max = Math.max(0.5, ...rows.map(r=>Math.abs(r.expectancy)));
+  $("#boardTbl").innerHTML = rows.length ? `<table><tr><th>Symbol</th><th>Strategy</th><th>Status</th><th class=r>Trades</th><th class=r>Win</th>
+    <th>Expectancy</th><th class=r>PF</th><th class=r>Last 36h</th><th class=r>This hour</th><th class=r>R:R</th></tr>` +
+    rows.map(r=>`<tr><td>${r.symbol}</td><td>${esc(r.id)}</td><td>${r.status}</td><td class=r>${r.n}</td><td class=r>${Math.round(r.win_rate*100)}%</td>
+      <td class="${cls(r.expectancy)}">${signed(r.expectancy,2,"R")}<span class="bar ${r.expectancy>=0?"p":"n"}" style="width:${Math.round(Math.abs(r.expectancy)/max*60)}px"></span></td>
+      <td class=r>${r.pf}</td><td class="r ${cls(r.recent_exp)}">${signed(r.recent_exp,2,"R")}</td>
+      <td class=r>${r.hour? signed(r.hour.exp,2,"R")+" ("+r.hour.n+")" : "—"}</td><td class=r>1:${r.rr}</td></tr>`).join("") + `</table>`
+    : `<div class="empty">No statistics yet.</div>`;
+}
+
+function feeds(s){
+  $("#decisions").innerHTML = s.decisions.map(d=>`<div><span class="t">${t(d.ts)}</span><b>${d.kind}</b> ${esc(d.symbol||"")} ${esc(d.strategy||"")}
+    <span class="badge">${d.source} · ${d.latency_ms}ms</span>
+    <details><summary>outputs</summary><pre>${esc(JSON.stringify(d.outputs,null,1))}</pre></details></div>`).join("") || `<div class="empty">No decisions yet.</div>`;
+  $("#learnerFeed").innerHTML = s.learner.map(l=>`<div><span class="t">${t(l.ts)}</span>${esc(l.msg)}</div>`).join("") || `<div class="empty">First learning cycle pending.</div>`;
+  $("#alerts").innerHTML = s.alerts.map(a=>`<div class="lvl-${a.level}"><span class="t">${t(a.ts)}</span>${a.level==="error"?"⚠ ":""}${esc(a.msg)}</div>`).join("") || `<div class="empty">Quiet.</div>`;
+  const now = Date.now()/1000;
+  $("#health").innerHTML = Object.entries(s.heartbeats).map(([k,v])=>{ const age = Math.round(now - v);
+    return `<span>${age<120?"●":"○"} ${k} · ${age}s</span>`; }).join("");
+}
+
+function header(s){
+  $("#mode").textContent = s.mode.toUpperCase();
+  const st = $("#status"); st.className = "badge " + (s.trading_enabled?"on":"off");
+  st.textContent = s.trading_enabled ? "Trading" : "Halted: " + s.halt_reason;
+  $("#jev").textContent = s.jev_live ? "Jev live" : "Jev: heuristic fallback";
+  $("#clock").textContent = s.now ? s.now.slice(0,16).replace("T"," ") + " NY" : "—";
+}
+
+function render(s){ S = s; header(s); kpis(s); positions(s); picks(s); equity(s); board(s); feeds(s); }
+
+async function journal(){
+  try{
+    const rows = await (await fetch("api/trades?limit=60",{credentials:"same-origin"})).json();
+    $("#jTbl").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th class=r>Entry</th><th class=r>Exit</th>
+      <th class=r>R</th><th class=r>P&amp;L</th><th class=r>MFE</th><th>Adds</th><th>Exit</th><th>Jev</th></tr>` +
+      rows.map((r,i)=>`<tr class="click" data-i="${i}"><td>${t(r.closed)}</td><td>${r.symbol}</td><td>${r.side}</td><td>${esc(r.strategy)}</td>
+        <td class=r>${fmt(r.entry)}</td><td class=r>${fmt(r.exit_price)}</td><td class="r ${cls(r.r_multiple)}">${signed(r.r_multiple,2,"R")}</td>
+        <td class="r ${cls(r.realized)}">${money(r.realized)}</td><td class=r>${fmt(r.mfe_r)}R</td><td>${r.adds}</td><td>${esc(r.exit_reason)}</td>
+        <td>${r.jev_quality!=null?fmt(r.jev_quality):"—"}</td></tr>`).join("") + `</table>` : `<div class="empty">No closed trades yet.</div>`;
+    document.querySelectorAll("#jTbl tr.click").forEach(tr=>tr.onclick=()=>{
+      const r = rows[+tr.dataset.i];
+      $("#jDetail").innerHTML = `<details open><summary>${r.symbol} ${r.side} · ${esc(r.strategy)} · ${esc(r.reason)}</summary>
+        <pre>${esc(r.events.map(e=>`${e.ts.slice(11,16)}  ${e.kind}  ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k])=>!["ts","kind"].includes(k))))}`).join("\n"))}</pre>
+        ${r.notes?`<p>Note: ${esc(r.notes)}</p>`:""}</details>`;
+    });
+  }catch(e){}
+}
+
+async function control(a){
+  if(a==="flatten" && !confirmFlatten()) return;
+  const r = await fetch("api/control/"+a,{method:"POST",credentials:"same-origin"});
+  if(!r.ok) $("#alerts").insertAdjacentHTML("afterbegin", `<div class="lvl-error">Control failed (${r.status}) — set DASHBOARD_TOKEN and open the page with ?token=…</div>`);
+}
+let flattenArmed = 0;
+function confirmFlatten(){ // two taps within 4s instead of a blocking dialog
+  const b = $("#btnFlatten");
+  if(Date.now() - flattenArmed < 4000){ b.textContent = "Flatten all"; return true; }
+  flattenArmed = Date.now(); b.textContent = "Tap again to flatten"; setTimeout(()=>b.textContent="Flatten all", 4000); return false;
+}
+$("#btnPause").onclick = ()=>control("pause");
+$("#btnResume").onclick = ()=>control("resume");
+$("#btnFlatten").onclick = ()=>control("flatten");
+$("#boardSym").onchange = e => { boardSym = e.target.value; if(S) board(S); };
+
+function connect(){
+  const ws = new WebSocket((location.protocol==="https:"?"wss://":"ws://") + location.host + location.pathname.replace(/[^/]*$/,"") + "ws");
+  ws.onmessage = e => render(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+fetch("api/state",{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
+connect(); journal(); setInterval(journal, 10000);
+window.addEventListener("resize", ()=> S && equity(S));
+</script>
+</body>
+</html>
