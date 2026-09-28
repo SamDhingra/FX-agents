@@ -208,7 +208,8 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
   .app{grid-template-columns:1fr} aside{display:none}
   main{padding:0 14px calc(92px + env(safe-area-inset-bottom))}
   .top{padding:calc(12px + env(safe-area-inset-top)) 0 10px}
-  .top{gap:8px} .top h1{font-size:20px;white-space:nowrap} .hide-m{display:none}
+  .top{gap:8px} .top h1{font-size:19px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto} .hide-m{display:none}
+  .top .chip{padding:5px 8px;flex:none} .top .sp{min-width:0}
   .top .btn{padding:7px 9px} .top .btn.icon{padding:7px}
   .bias-row{grid-auto-flow:column;grid-template-columns:none!important;grid-auto-columns:82%;overflow-x:auto;scroll-snap-type:x mandatory;
     margin:0 -14px;padding:0 14px 4px;scrollbar-width:none}
@@ -217,8 +218,10 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
   .kpi .v{font-size:21px}.kpi.main .v{font-size:30px}
   .card{padding:14px;border-radius:14px}
   .c3{grid-column:span 12}
+  .filters{flex-wrap:nowrap;overflow-x:auto;margin:0 -14px 12px;padding:0 14px;scrollbar-width:none} .fchip{flex:none}
   .msum{grid-template-columns:1fr 1fr}.msum .card:first-child{grid-column:span 2}
-  .cal{gap:4px}.day{min-height:62px;padding:6px;border-radius:9px}.day .pl{font-size:10.5px;letter-spacing:-.3px;white-space:nowrap}.day .tc{display:none}.day .dn{font-size:11px}
+  .cal{gap:5px;grid-template-columns:repeat(5,minmax(0,1fr))} .cal .wk,.cal .dow.we{display:none}
+  .calhead{flex-wrap:nowrap} .calhead h2{font-size:17px;min-width:0;white-space:nowrap}.day{min-height:62px;padding:6px;border-radius:9px}.day .pl{font-size:10.5px;letter-spacing:-.3px;white-space:nowrap}.day .tc{display:none}.day .dn{font-size:11px}
   .dots{top:6px;right:6px}.dots i{width:5px;height:5px}
   .dow{font-size:10px}
   .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;
@@ -371,13 +374,14 @@ let S = null, page = "home", eqRange = "1W", theme = null;
 
 /* ── navigation ── */
 const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const shortTitles = {calendar:"Calendar", agents:"Agents"};
 function go(p){
   if(p === "more") p = page === "news" ? "agents" : "news";
   page = p;
   $$(".page").forEach(x => x.classList.toggle("on", x.id === "p-"+p));
   $$(".nav").forEach(x => x.classList.toggle("on", x.dataset.p === p));
   $$(".tabbar button").forEach(x => x.classList.toggle("on", x.dataset.p === p || (x.dataset.p==="more" && (p==="news"||p==="agents"))));
-  $("#title").textContent = titles[p];
+  $("#title").textContent = (matchMedia("(max-width:760px)").matches && shortTitles[p]) || titles[p];
   if(p === "calendar") loadCalendar();
   if(p === "trades") loadTrades();
   if(S) render(S);
@@ -523,7 +527,7 @@ async function loadCalendar(){
 }
 function compact(x){ // full amount on desktop, +1.4k style on phones
   if(!matchMedia("(max-width:760px)").matches || Math.abs(x) < 1000) return smoney(x);
-  return (x>0?"+":"−") + "$" + (Math.abs(x)/1000).toFixed(1) + "k";
+  return (x>0?"+":"−") + "$" + (Math.abs(x)/1000).toFixed(Math.abs(x) >= 10000 ? 0 : 1) + "k";
 }
 function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function renderCalendar(){
@@ -535,7 +539,7 @@ function renderCalendar(){
   const maxAbs = Math.max(1, ...monthDays.map(([,v]) => Math.abs(v.pnl)));
   const evs = {}; (calData.events||[]).forEach(e => (evs[e.date] = evs[e.date]||[]).push(e));
   const todayK = S && S.now ? S.now.slice(0,10) : ymd(new Date());
-  let h = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<div class="dow">${d}</div>`).join("");
+  let h = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d,i)=>`<div class="dow ${i>4?"we":""}">${d}</div>`).join("");
   for(let i=0;i<42;i++){
     const d = new Date(start); d.setDate(start.getDate()+i); const k = ymd(d), v = days[k];
     if(i>=35 && d.getMonth()!==mo) break;
@@ -610,6 +614,15 @@ function renderTrades(){
   const syms = ["ALL", ...new Set(tradeRows.map(t=>t.symbol))];
   chips($("#tfilters"), [["sym", syms], ["res", ["ALL","Winners","Losers"]], ["tf", ["ALL","5m","15m"]]]);
   const rows = tradeRows.filter(t => (tf.sym==="ALL"||t.symbol===tf.sym) && (tf.res==="ALL"||(tf.res==="Winners"?t.realized>0:t.realized<=0)) && (tf.tf==="ALL"||t.tf===tf.tf));
+  if(matchMedia("(max-width:760px)").matches){   // phone: tappable cards instead of a wide table
+    $("#trades").innerHTML = rows.length ? rows.map((t,i)=>`<div class="fi" style="cursor:pointer" data-i="${i}"><span class="when">${md(t.closed)}<br>${hm(t.closed)}</span>
+      <div style="flex:1;min-width:0"><div><span class="side ${t.side[0]}">${t.side}</span> <b>${t.symbol}</b> <span class="tag">${t.tf||""}</span></div>
+      <small class="mut">${esc(t.strategy.split(":")[0])} · ${esc(t.exit_reason)}${t.adds?` · +${t.adds} adds`:""}</small></div>
+      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</small></div></div>`).join("")
+      : `<div class="empty">No trades match.</div>`;
+    $$("#trades .fi").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
+    return;
+  }
   $("#trades").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Bias</th><th class=r>Entry</th><th class=r>Exit</th><th class=r>R</th><th class=r>P&amp;L</th><th>Exit</th></tr>` +
     rows.map((t,i)=>`<tr class="row" data-i="${i}"><td class="mut">${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td><span class="side ${t.side[0]}">${t.side}</span></td>
       <td>${esc(t.strategy)}</td><td class="mut">${esc(t.bias_mode||"")}</td><td class="r num">${fmt(t.entry)}</td><td class="r num">${fmt(t.exit_price)}</td>
@@ -627,7 +640,7 @@ function openTrade(t){
       <div class="card kpi"><div class="l">Best excursion</div><div class="v num">${sR(t.mfe_r,1)}</div></div>
       <div class="card kpi"><div class="l">Jev grade</div><div class="v num">${fmt(t.jev_quality,2)}</div><div class="s">${esc(t.jev_source||"")} · bias ${esc(t.bias_mode||"")}</div></div></div>
     <div class="tl">${ev.map(e => { const {ts, kind, ...rest} = e; return `<div><span class="k">${kind.replace(/_/g," ")}</span> <span class="mut num">${hm(ts)}</span>
-      <small class="num">${Object.entries(rest).map(([k,v])=>`${k.replace(/_/g," ")}: ${typeof v==="number"?fmt(v, Math.abs(v)<10?2:2):esc(v)}`).join(" · ")}</small></div>`; }).join("")}</div>`;
+      <small class="num">${Object.entries(rest).map(([k,v])=>`${k.replace(/_/g," ")}: ${typeof v==="number"?fmt(v, Number.isInteger(v)?0:2):esc(v)}`).join(" · ")}</small></div>`; }).join("")}</div>`;
   $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
   $("#dclose").onclick = closeDrawer;
 }
