@@ -63,6 +63,7 @@ class Broker:
     async def on_bar(self, bar: Bar) -> None: ...
     async def broker_positions(self) -> dict[str, float]: return {}
     async def unprotected(self) -> list[str]: return []
+    async def flatten_orphan(self, sym: str, qty: float) -> None: ...
 
 
 class PaperBroker(Broker):
@@ -263,6 +264,18 @@ class IBKRBroker(Broker):
             if s:
                 out[s] = out.get(s, 0) + float(p.position)
         return out
+
+    async def flatten_orphan(self, sym: str, qty: float) -> None:
+        """Close a broker position this process doesn't know about (e.g. after a restart) and
+        cancel its resting orders. Day-trading system: we never carry unknown exposure."""
+        from ib_async import MarketOrder
+        c = self._c(sym)
+        for t in self.ib.openTrades():
+            if t.contract.conId == c.conId:
+                self.ib.cancelOrder(t.order)
+        act = "SELL" if qty > 0 else "BUY"
+        t = self.ib.placeOrder(c, MarketOrder(act, abs(qty), account=self.account))
+        await self._fill(t)
 
     async def unprotected(self) -> list[str]:
         """Symbols with a broker position but no working stop order."""

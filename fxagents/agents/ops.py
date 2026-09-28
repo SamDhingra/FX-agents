@@ -128,6 +128,7 @@ class MonitorAgent(Agent):
         self.day = None
         self.summary_sent = None
         self._last_check = 0.0
+        self._orphan_seen: dict[str, int] = {}
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
@@ -156,6 +157,24 @@ class MonitorAgent(Agent):
         if time.time() - self._last_check < 30:
             return
         self._last_check = time.time()
+        # positions at the broker that this process isn't managing (e.g. after a restart)
+        known: dict[str, float] = {}
+        for p in st.positions.values():
+            if p.status == "open":
+                known[p.symbol] = known.get(p.symbol, 0) + p.side * p.open_qty
+        for sym, q in (await self.ctx.broker.broker_positions()).items():
+            if q and abs(q - known.get(sym, 0)) > 1e-9:
+                self._orphan_seen[sym] = self._orphan_seen.get(sym, 0) + 1
+                if self._orphan_seen[sym] >= 2:          # seen on two checks 30 s apart → not a fill race
+                    diff = q - known.get(sym, 0)
+                    await self.alert(f"{sym}: {diff:+g} units at the broker not managed by the app — flattening them")
+                    try:
+                        await self.ctx.broker.flatten_orphan(sym, diff)
+                    except Exception as e:  # noqa: BLE001
+                        await self.alert(f"{sym}: could not flatten orphan position: {e}")
+                    self._orphan_seen[sym] = 0
+            else:
+                self._orphan_seen.pop(sym, None)
         for sym in await self.ctx.broker.unprotected():
             await self.alert(f"{sym} position has NO working stop at the broker — flattening")
             await self.bus.publish("flatten_symbol", {"symbol": sym, "why": "unprotected"})

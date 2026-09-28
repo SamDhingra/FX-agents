@@ -99,6 +99,13 @@ Live needs `python main.py --mode live --i-understand-live-trading` and port 400
 **Futures roll:** the continuous contract resolves to the front month at start-up. Restart the
 app after each roll: equity index futures roll quarterly (Mar/Jun/Sep/Dec); micro gold rolls bimonthly.
 
+## Running it in the cloud
+
+See **[DEPLOY-CLOUD.md](DEPLOY-CLOUD.md)**. The setup is the same as the Jev app: AWS Lightsail
+(Canada Central) with Docker Compose running IB Gateway (headless, IBC), the agents and
+cloudflared, behind a Cloudflare Tunnel with Cloudflare Access email codes. Nothing is exposed
+directly to the internet. `./fx.sh up` starts everything.
+
 ## Phone + laptop dashboard
 
 * On the Mac it runs at `http://localhost:8088`. From your iPhone over **Tailscale**, use

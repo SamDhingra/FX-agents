@@ -1,0 +1,57 @@
+# FX-Agents in the cloud: IB Gateway (headless, IBC) + the agents + a Cloudflare tunnel.
+# Nothing is published to the internet. The dashboard is reached only through the tunnel
+# (trade.<your-domain>, protected by Cloudflare Access). Start with:  ./fx.sh up
+name: fx-agents
+
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:stable
+    restart: unless-stopped
+    environment:
+      TWS_USERID: ${TWS_USERID:?set TWS_USERID in .env}
+      TWS_PASSWORD: ${TWS_PASSWORD:?set TWS_PASSWORD in .env}
+      TRADING_MODE: ${TRADING_MODE:-paper}          # paper | live
+      READ_ONLY_API: "no"
+      TIME_ZONE: America/New_York
+      AUTO_RESTART_TIME: ${IB_AUTO_RESTART_TIME:-05:05 PM}   # daily restart in the CME break (all flat by then)
+      TWOFA_TIMEOUT_ACTION: restart
+      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+      TWS_ACCEPT_INCOMING: accept
+      VNC_SERVER_PASSWORD: ${VNC_SERVER_PASSWORD:-}  # optional; only for troubleshooting the login screen
+    ports:
+      - "127.0.0.1:5900:5900"                       # VNC, localhost only → use an SSH tunnel
+    networks: [fxnet]
+    logging: &logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  fxagents:
+    build: .
+    image: fx-agents:latest
+    restart: unless-stopped
+    depends_on: [ib-gateway]
+    env_file: .env
+    environment:
+      IB_HOST: ib-gateway
+      # the gateway container relays the API: 4004 = paper, 4003 = live
+      IB_PORT: ${IB_PORT:-4004}
+      FX_DB_PATH: /app/data/journal.sqlite
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8088:8088"                       # localhost only (SSH tunnel fallback)
+    networks: [fxnet]
+    logging: *logs
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN:?set CF_TUNNEL_TOKEN in .env}
+    depends_on: [fxagents]
+    networks: [fxnet]
+    logging: *logs
+
+networks:
+  fxnet: {}

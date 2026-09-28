@@ -49,6 +49,13 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         "dashboard.token": "DASHBOARD_TOKEN",
         "tradingview.webhook_secret": "TV_WEBHOOK_SECRET",
         "mode": "FX_MODE",
+        # cloud / container overrides
+        "ibkr.host": "IB_HOST",
+        "ibkr.port": "IB_PORT",
+        "ibkr.client_id": "IB_CLIENT_ID",
+        "ibkr.account": "IB_ACCOUNT",
+        "dashboard.port": "DASHBOARD_PORT",
+        "storage.db_path": "FX_DB_PATH",
     }
     for dotted, env in env_map.items():
         if os.environ.get(env):

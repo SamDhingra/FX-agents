@@ -169,8 +169,9 @@ def build_app(ctx) -> FastAPI:
             raise HTTPException(401, "bad secret")
         if body.get("symbol") not in ctx.cfg["instruments"]:
             raise HTTPException(400, "unknown symbol")
-        await ctx.bus.publish("tv_signal", body)
-        return {"ok": True}
+        # TradingView cancels webhooks that take > 3 s: acknowledge now, process in the background
+        asyncio.create_task(ctx.bus.publish("tv_signal", body))
+        return {"ok": True, "queued": True}
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):

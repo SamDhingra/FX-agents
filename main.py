@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 
@@ -48,7 +49,16 @@ async def build(cfg, args):
         from ib_async import IB
         ib = IB()
         ic = cfg["ibkr"]
-        await ib.connectAsync(ic["host"], int(ic["port"]), clientId=int(ic["client_id"]), timeout=20)
+        # IB Gateway can take a minute or two to log in after a (re)start → keep trying
+        for attempt in range(1, 61):
+            try:
+                await ib.connectAsync(ic["host"], int(ic["port"]), clientId=int(ic["client_id"]), timeout=20)
+                break
+            except Exception as e:  # noqa: BLE001
+                log.warning("IBKR %s:%s not ready (attempt %d/60): %s", ic["host"], ic["port"], attempt, e)
+                await asyncio.sleep(10)
+        else:
+            sys.exit("Could not connect to IB Gateway after 10 minutes")
         log.info("connected to IBKR %s:%s (accounts %s)", ic["host"], ic["port"], ib.managedAccounts())
         feed = IBKRFeed(cfg, bus, state, ib)
         await feed.qualify()
@@ -86,7 +96,8 @@ async def main(args):
         cfg["dashboard"]["port"] = args.port
     if args.speed is not None:
         cfg["sim"]["speed"] = args.speed
-    if cfg["mode"] == "live" and not args.i_understand_live_trading:
+    live_ok = args.i_understand_live_trading or os.environ.get("I_UNDERSTAND_LIVE_TRADING", "").lower() == "yes"
+    if cfg["mode"] == "live" and not live_ok:
         sys.exit("Refusing to start LIVE trading without --i-understand-live-trading. Run paper first.")
     ctx, feed, agents, ib = await build(cfg, args)
     strategist = next(a for a in agents if a.name == "strategist")
@@ -115,8 +126,18 @@ async def main(args):
             loop.add_signal_handler(sig, done.set)
         except NotImplementedError:
             pass
+    exit_code = 0
     if ib is not None:
-        ib.disconnectedEvent += lambda: ctx.state.alert("error", "IBKR disconnected — resting stops remain at the broker")
+        def on_disconnect():
+            # Stops rest at IBKR, so nothing is unprotected. Exit non-zero and let the supervisor
+            # (Docker restart policy / launchd) start a fresh process that reconnects cleanly.
+            nonlocal exit_code
+            exit_code = 3
+            ctx.state.alert("error", "IBKR disconnected — restarting to reconnect; resting stops remain at the broker")
+            asyncio.ensure_future(ctx.bus.publish("alert", {"msg": "IBKR disconnected — app restarting to reconnect",
+                                                            "event": "agent_down", "title": "⚠ FX-Agents"}))
+            loop.call_later(5, done.set)
+        ib.disconnectedEvent += on_disconnect
     await done.wait()
 
     if cfg["mode"] == "sim":
@@ -140,6 +161,7 @@ async def main(args):
     await ctx.jev.aclose()
     if ib is not None:
         ib.disconnect()
+    return exit_code
 
 
 if __name__ == "__main__":
@@ -158,4 +180,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-5s %(name)-16s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    asyncio.run(main(a))
+    sys.exit(asyncio.run(main(a)) or 0)

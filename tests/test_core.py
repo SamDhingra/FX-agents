@@ -190,3 +190,35 @@ def test_barstore_views_refresh_after_store_is_full():
     for ts, r in d1.iloc[1440:1500].iterrows():
         st.append(Bar("X", ts, r.open, r.high, r.low, r.close))
     assert len(st.m1("X")) == 1440 and st.tf("X", "5min").index[-1] > before
+
+
+# ── cloud / container behaviour ───────────────────────────────────────────────
+def test_env_overrides_for_containers(monkeypatch):
+    monkeypatch.setenv("IB_HOST", "ib-gateway")
+    monkeypatch.setenv("IB_PORT", "4004")
+    monkeypatch.setenv("FX_MODE", "paper")
+    c = load_config("config.yaml")
+    assert c["ibkr"]["host"] == "ib-gateway" and int(c["ibkr"]["port"]) == 4004 and c["mode"] == "paper"
+
+
+def test_monitor_flattens_orphan_broker_positions():
+    import time
+    from fxagents.agents.core import Ctx
+    from fxagents.agents.ops import MonitorAgent
+
+    class FakeBroker:
+        def __init__(self): self.flattened = []
+        async def broker_positions(self): return {"NDQ": 2.0}
+        async def unprotected(self): return []
+        async def flatten_orphan(self, sym, qty): self.flattened.append((sym, qty))
+
+    st = LiveState(); st.now = pd.Timestamp("2026-09-28 10:00", tz=TZ)
+    st.equity = st.day_start_equity = st.equity_peak = 100000
+    fb = FakeBroker()
+    ctx = Ctx(CFG, Bus(), st, None, fb, None, None, None)
+    m = MonitorAgent(ctx); m.start()
+    asyncio.run(m.on_clock(st.now))          # first sighting: could be a fill race → no action
+    assert fb.flattened == []
+    m._last_check = time.time() - 31
+    asyncio.run(m.on_clock(st.now))          # second sighting → flatten
+    assert fb.flattened == [("NDQ", 2.0)]
