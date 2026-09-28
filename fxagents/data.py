@@ -27,6 +27,22 @@ class BarStore:
         self.frames[symbol] = df[["open", "high", "low", "close", "volume"]].copy()
         self._buf[symbol] = []
 
+    def load_h1(self, symbol: str, df: pd.DataFrame) -> None:
+        """Long hourly history for Daily/4H/1H structure."""
+        self.h1_hist = getattr(self, "h1_hist", {})
+        self.h1_hist[symbol] = df[["open", "high", "low", "close"]].copy()
+
+    def h1(self, symbol: str) -> pd.DataFrame:
+        """Hourly bars: long history + hours rebuilt from live 1m bars (incl. the forming hour,
+        which the bias engine ignores until it closes)."""
+        recent = self.tf(symbol, "1h", complete_only=False)[["open", "high", "low", "close"]]
+        hist = getattr(self, "h1_hist", {}).get(symbol)
+        if hist is None or not len(hist):
+            return recent
+        if len(recent):
+            hist = hist[hist.index < recent.index[0]]
+        return pd.concat([hist, recent])
+
     def append(self, bar: Bar) -> None:
         self._buf.setdefault(bar.symbol, []).append(
             {"ts": bar.ts, "open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close, "volume": bar.volume})
@@ -44,7 +60,8 @@ class BarStore:
     def tf(self, symbol: str, rule: str, complete_only: bool = True) -> pd.DataFrame:
         m1 = self.m1(symbol)
         key = (symbol, rule)
-        if key in self._cache and self._cache[key][0] == len(m1):
+        stamp = (len(m1), m1.index[-1] if len(m1) else None)   # length alone goes stale once the store is full
+        if key in self._cache and self._cache[key][0] == stamp:
             return self._cache[key][1]
         df = resample_ohlc(m1, rule)
         if complete_only and len(df) and len(m1):
@@ -52,7 +69,7 @@ class BarStore:
             last_close = df.index[-1] + pd.Timedelta(rule)
             if m1.index[-1] + pd.Timedelta("1min") < last_close:
                 df = df.iloc[:-1]
-        self._cache[key] = (len(m1), df)
+        self._cache[key] = (stamp, df)
         return df
 
 
@@ -64,21 +81,27 @@ class SimFeed:
         self.tz = cfg["timezone"]
         sim = cfg["sim"]
         warm = cfg["timeframes"]["history_days"]
-        start = pd.Timestamp.now(tz=self.tz).normalize() - pd.Timedelta(days=warm + sim["days"] + 3)
+        long = max(cfg["timeframes"].get("h1_history_days", 45), warm)
+        start = pd.Timestamp.now(tz=self.tz).normalize() - pd.Timedelta(days=long + sim["days"] + 3)
         self.frames = {}
         for j, (sym, ic) in enumerate(cfg["instruments"].items()):
             df = synth_1m(ic["sim_start_price"], ic["sim_daily_vol"], start,
-                          warm + sim["days"] + 3, sim["seed"] + j, self.tz)
+                          long + sim["days"] + 3, sim["seed"] + j, self.tz)
             self.frames[sym] = df
         first = next(iter(self.frames.values()))
         days = sorted(set(first.index.normalize()))
         split_day = days[-sim["days"]] if len(days) > sim["days"] else days[0]
         self.split = split_day
+        self.warm_start = split_day - pd.Timedelta(days=warm)
         self.speed = float(sim.get("speed", 0))
 
     def history(self, symbol: str) -> pd.DataFrame:
         df = self.frames[symbol]
-        return df[df.index < self.split]
+        return df[(df.index < self.split) & (df.index >= self.warm_start)]
+
+    def h1_history(self, symbol: str) -> pd.DataFrame:
+        df = self.frames[symbol]
+        return resample_ohlc(df[df.index < self.warm_start], "1h")
 
     async def run(self) -> None:
         live = {s: df[df.index >= self.split] for s, df in self.frames.items()}
@@ -125,6 +148,7 @@ class IBKRFeed:
         self.trade_contracts: dict = {}
         self._subs = {}
         self._hist: dict[str, pd.DataFrame] = {}
+        self._h1: dict[str, pd.DataFrame] = {}
 
     async def qualify(self) -> None:
         from ib_async import Contract
@@ -153,12 +177,22 @@ class IBKRFeed:
                                 "close": b.close, "volume": float(b.volume or 0)} for b in bars[:-1]])
             df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
             self._hist[sym] = df.set_index("ts")
+            h1 = await self.ib.reqHistoricalDataAsync(
+                c, endDateTime="", durationStr=f"{self.cfg['timeframes'].get('h1_history_days', 45)} D",
+                barSizeSetting="1 hour", whatToShow=self._what(sym), useRTH=False, formatDate=2)
+            hdf = pd.DataFrame([{"ts": b.date, "open": b.open, "high": b.high, "low": b.low, "close": b.close}
+                                for b in h1])
+            hdf["ts"] = pd.to_datetime(hdf["ts"], utc=True).dt.tz_convert(self.tz)
+            self._h1[sym] = hdf.set_index("ts")
             bars.updateEvent += self._make_handler(sym)
             self._subs[sym] = bars
             log.info("%s: %d historical 1m bars", sym, len(df))
 
     def history(self, symbol: str) -> pd.DataFrame:
         return self._hist[symbol]
+
+    def h1_history(self, symbol: str) -> pd.DataFrame:
+        return self._h1[symbol]
 
     def _make_handler(self, sym: str):
         def on_update(bars, has_new_bar):

@@ -35,7 +35,7 @@ def snapshot(ctx) -> dict:
         for sid, s in per.items():
             board.append({"symbol": sym, "id": sid, "status": s.get("status"), "n": s["n"],
                           "win_rate": s["win_rate"], "expectancy": s["expectancy"], "pf": s["pf"],
-                          "recent_exp": s["recent_exp"], "rr": s.get("rr"),
+                          "recent_exp": s["recent_exp"], "rr": s.get("rr"), "tf": s.get("tf"),
                           "hour": s["by_hour"].get(st.now.hour if st.now is not None else -1)})
     return {
         "mode": cfg["mode"], "now": st.now.isoformat() if st.now is not None else None,
@@ -50,6 +50,8 @@ def snapshot(ctx) -> dict:
                       for d in list(st.decisions)[:40]],
         "equity_curve": list(st.equity_curve)[-600:],
         "registry": st.strategy_registry, "jev_live": ctx.jev.live,
+        "bias": st.bias, "news": st.news[:40], "news_source": st.news_source, "news_block": st.news_block,
+        "min_align": cfg["bias"]["min_align"],
     }
 
 
@@ -109,6 +111,20 @@ def build_app(ctx) -> FastAPI:
         for r in rows:
             r["inputs"], r["outputs"] = json.loads(r["inputs"] or "null"), json.loads(r["outputs"] or "null")
         return rows
+
+    @app.get("/api/calendar")
+    async def api_calendar(request: Request, start: str | None = None, end: str | None = None):
+        need(request)
+        return {"days": ctx.journal.daily(start, end),
+                "events": [{"date": e["ts"].strftime("%Y-%m-%d"), "title": e["title"], "tier": e["tier"],
+                            "time": e["ts"].strftime("%H:%M")} for e in (ctx.news.events if ctx.news else [])]}
+
+    @app.get("/api/day/{day}")
+    async def api_day(day: str, request: Request):
+        need(request)
+        return {"trades": ctx.journal.day_trades(day),
+                "events": [{"title": e["title"], "tier": e["tier"], "time": e["ts"].strftime("%H:%M")}
+                           for e in (ctx.news.events if ctx.news else []) if e["ts"].strftime("%Y-%m-%d") == day]}
 
     @app.get("/api/journal.csv")
     async def journal_csv(request: Request):

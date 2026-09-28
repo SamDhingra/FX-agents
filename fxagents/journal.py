@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS trades(
   opened TEXT, closed TEXT, hour INTEGER, entry REAL, avg_entry REAL, exit_price REAL,
   initial_stop REAL, final_stop REAL, qty_initial REAL, qty_gross REAL, adds INTEGER, stage INTEGER,
   realized REAL, commissions REAL, r_multiple REAL, mfe_r REAL, mae_r REAL, exit_reason TEXT,
-  jev_quality REAL, jev_confidence REAL, jev_source TEXT, reason TEXT, events TEXT, notes TEXT);
+  jev_quality REAL, jev_confidence REAL, jev_source TEXT, reason TEXT, events TEXT, notes TEXT,
+  bias_mode TEXT, tf TEXT);
 CREATE TABLE IF NOT EXISTS decisions(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, kind TEXT, source TEXT, symbol TEXT, strategy TEXT,
   latency_ms REAL, inputs TEXT, outputs TEXT);
@@ -49,7 +50,8 @@ class Journal:
             r_multiple=round(r_mult, 3) if r_mult is not None else None, mfe_r=round(pos.mfe_r, 2),
             mae_r=round(pos.mae_r, 2), exit_reason=pos.exit_reason, jev_quality=pos.jev_quality,
             jev_confidence=pos.jev_confidence, jev_source=pos.jev_source, reason=pos.reason,
-            events=json.dumps(pos.events, default=str), notes=None)
+            events=json.dumps(pos.events, default=str), notes=None, bias_mode=pos.bias_mode,
+            tf=pos.strategy.split(":")[1].split("@")[0] if ":" in pos.strategy and "@" in pos.strategy else "")
         cols = ",".join(row)
         q = ",".join("?" * len(row))
         upd = ",".join(f"{k}=excluded.{k}" for k in row if k not in ("id", "notes"))
@@ -119,6 +121,28 @@ class Journal:
         wins = [x for x in rr if x > 0]
         return {"trades": n, "pnl": round(pnl, 2), "win_rate": round(len(wins) / n, 3) if n else 0.0,
                 "avg_r": round(sum(rr) / len(rr), 3) if rr else 0.0, "sum_r": round(sum(rr), 2)}
+
+    def daily(self, start: str | None = None, end: str | None = None) -> dict[str, dict]:
+        """P&L per trading day (NY calendar date of the exit)."""
+        q = ("SELECT substr(closed,1,10) d, COUNT(*) n, SUM(realized) pnl, SUM(r_multiple) r, "
+             "SUM(CASE WHEN realized>0 THEN 1 ELSE 0 END) w, MAX(realized) best, MIN(realized) worst "
+             "FROM trades WHERE status='closed'")
+        args: list = []
+        if start:
+            q += " AND substr(closed,1,10)>=?"; args.append(start)
+        if end:
+            q += " AND substr(closed,1,10)<=?"; args.append(end)
+        q += " GROUP BY d ORDER BY d"
+        return {r["d"]: {"trades": r["n"], "pnl": round(r["pnl"] or 0, 2), "r": round(r["r"] or 0, 2),
+                         "wins": r["w"], "best": round(r["best"] or 0, 2), "worst": round(r["worst"] or 0, 2)}
+                for r in self.db.execute(q, args)}
+
+    def day_trades(self, day: str) -> list[dict]:
+        rows = [dict(r) for r in self.db.execute(
+            "SELECT * FROM trades WHERE status='closed' AND substr(closed,1,10)=? ORDER BY closed", (day,))]
+        for r in rows:
+            r["events"] = json.loads(r["events"] or "[]")
+        return rows
 
     def equity_series(self, limit: int = 2000) -> list[dict]:
         rows = self.db.execute("SELECT ts, equity FROM equity ORDER BY ts DESC LIMIT ?", (limit,))

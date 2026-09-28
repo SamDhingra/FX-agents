@@ -30,6 +30,10 @@ class LiveState:
     alerts: deque = field(default_factory=lambda: deque(maxlen=200))
     equity_curve: deque = field(default_factory=lambda: deque(maxlen=3000))
     learner_log: deque = field(default_factory=lambda: deque(maxlen=200))
+    bias: dict[str, dict] = field(default_factory=dict)              # symbol -> multi-TF bias + safeguards
+    news: list[dict] = field(default_factory=list)                   # upcoming events
+    news_source: str = ""
+    news_block: dict | None = None
 
     def beat(self, agent: str) -> None:
         self.heartbeats[agent] = time.time()

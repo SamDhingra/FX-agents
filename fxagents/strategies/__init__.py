@@ -5,10 +5,12 @@ import pandas as pd
 
 from .base import RawSignal, Strategy
 from .classic import MACDCross, RSIReversion, SRRejection
-from .smc import DTFXZone, ICTFvgSweep, ICTOte, StoicSBS
+from .smc import (DTFXZone, ICTFvgSweep, ICTOte, SMCBreaker, SMCInverseFVG, SMCLiquiditySweep,
+                  SMCOrderBlock, StoicSBS)
 
 BUILTIN: dict[str, type[Strategy]] = {c.name: c for c in
-                                      (ICTFvgSweep, ICTOte, DTFXZone, StoicSBS, SRRejection, RSIReversion, MACDCross)}
+                                      (ICTFvgSweep, ICTOte, DTFXZone, StoicSBS, SMCOrderBlock, SMCBreaker,
+                                       SMCInverseFVG, SMCLiquiditySweep, SRRejection, RSIReversion, MACDCross)}
 
 
 class Confluence(Strategy):
@@ -19,14 +21,14 @@ class Confluence(Strategy):
     description = "Learner-generated: primary strategy entries filtered by other strategies' directional bias."
 
     def __init__(self, params: dict, version: str = "v1", rr: float = 1.0, status: str = "candidate",
-                 origin: str = "learner") -> None:
-        super().__init__(params, version, rr, status, origin)
+                 origin: str = "learner", tf: str = "5min") -> None:
+        super().__init__(params, version, rr, status, origin, tf)
         self.primary = build_strategy(params["primary"])
         self.filters = [build_strategy(f) for f in params["filters"]]
 
     @property
     def id(self) -> str:
-        return f"{self.primary.name}+{'+'.join(f.name for f in self.filters)}@{self.version}"
+        return f"{self.primary.name}+{'+'.join(f.name for f in self.filters)}:{self.tf_label}@{self.version}"
 
     def _scan(self, df, ctx):
         sigs = self.primary.scan(df, ctx)
@@ -45,14 +47,15 @@ class Confluence(Strategy):
 def build_strategy(spec: dict) -> Strategy:
     cls = spec["class"]
     kw = dict(version=spec.get("version", "v1"), rr=spec.get("rr", 1.0),
-              status=spec.get("status", "live"), origin=spec.get("origin", "builtin"))
+              status=spec.get("status", "live"), origin=spec.get("origin", "builtin"), tf=spec.get("tf", "5min"))
     st = Confluence(spec["params"], **kw) if cls == "confluence" else BUILTIN[cls](spec.get("params"), **kw)
     st.created = spec.get("created")  # type: ignore[attr-defined]
     return st
 
 
-def default_specs(rr: float = 1.0) -> list[dict]:
-    return [c().spec() | {"rr": rr} for c in BUILTIN.values()]
+def default_specs(rr: float = 1.0, tfs: tuple[str, ...] = ("5min", "15min")) -> list[dict]:
+    """Every builtin strategy on every entry timeframe; the 5m and 15m versions compete hourly."""
+    return [c(tf=tf).spec() | {"rr": rr} for tf in tfs for c in BUILTIN.values()]
 
 
 __all__ = ["Strategy", "RawSignal", "BUILTIN", "Confluence", "build_strategy", "default_specs"]

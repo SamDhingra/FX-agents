@@ -17,6 +17,7 @@ import time
 import numpy as np
 import pandas as pd
 
+from ..bias import bias_frame
 from ..sim import Mgmt, backtest, stats
 from ..strategies import BUILTIN, Confluence, Strategy, build_strategy
 from .core import Agent
@@ -50,27 +51,46 @@ class StrategistAgent(Agent):
         if due_daily or due_every:
             await self.learn()
 
-    def frames(self) -> dict[str, pd.DataFrame]:
-        bars = int(self.ec["lookback_days"] * 24 * 60 / 5)
-        return {s: self.ctx.store.tf(s, self.cfg["timeframes"]["signal"]).iloc[-bars:].copy()
-                for s in self.cfg["instruments"]}
+    def frames(self) -> dict[tuple[str, str], dict]:
+        """(symbol, tf) → bars + the multi-TF bias score known at each bar close (hard rule in backtests)."""
+        out = {}
+        for s in self.cfg["instruments"]:
+            h1 = self.ctx.store.h1(s)
+            for tf in self.cfg["timeframes"]["entry"]:
+                n = int(self.ec["lookback_days"] * 24 * 60 / (pd.Timedelta(tf).total_seconds() / 60))
+                df = self.ctx.store.tf(s, tf).iloc[-n:].copy()
+                if len(df) < 120 or len(h1) < 48:
+                    continue
+                b = bias_frame(h1, df.index + pd.Timedelta(tf), weights=self.cfg["bias"]["weights"])
+                out[(s, tf)] = {"df": df, "bias": b["score"].to_numpy()}
+        return out
 
     def mgmt(self, st: Strategy) -> Mgmt:
-        return Mgmt.from_cfg(self.cfg, rr=st.rr)
+        return Mgmt.from_cfg(self.cfg, rr=st.rr, bar_minutes=int(pd.Timedelta(st.tf).total_seconds() // 60))
+
+    def _bt(self, st: Strategy, item: dict, part: str = "full", ctx: dict | None = None) -> list[dict]:
+        s = self.cfg["sessions"]
+        df, bias = item["df"], item["bias"]
+        kw = dict(min_align=self.cfg["bias"]["min_align"])
+        split = int(len(df) * 0.7)
+        if part == "is":
+            d = df.iloc[:split]
+            return backtest(st, d, Strategy.context(d), self.mgmt(st), s["entry_windows"], s["flatten_at"],
+                            bias_score=bias[:split], **kw)
+        ctx = ctx or Strategy.context(df)
+        return backtest(st, df, ctx, self.mgmt(st), s["entry_windows"], s["flatten_at"],
+                        start_i=split if part == "oos" else 0, bias_score=bias, **kw)
 
     # ── rolling evaluation ────────────────────────────────────────────────
     def _eval(self, frames, strategies, now):
         out, trades = {}, {}
-        s = self.cfg["sessions"]
-        for sym, df in frames.items():
-            if len(df) < 300:
-                continue
-            ctx = Strategy.context(df)
-            out[sym], trades[sym] = {}, {}
-            for st in strategies:
-                tr = backtest(st, df, ctx, self.mgmt(st), s["entry_windows"], s["flatten_at"])
+        for (sym, tf), item in frames.items():
+            ctx = Strategy.context(item["df"])
+            out.setdefault(sym, {}); trades.setdefault(sym, {})
+            for st in [x for x in strategies if x.tf == tf]:
+                tr = self._bt(st, item, "full", ctx)
                 trades[sym][st.id] = tr
-                out[sym][st.id] = stats(tr, now) | {"status": st.status, "rr": st.rr}
+                out[sym][st.id] = stats(tr, now) | {"status": st.status, "rr": st.rr, "tf": st.tf_label}
         return out, trades
 
     async def evaluate_all(self):
@@ -90,19 +110,10 @@ class StrategistAgent(Agent):
 
     # ── pooled helpers ────────────────────────────────────────────────────
     def _pooled(self, st: Strategy, frames, part: str) -> dict:
-        s = self.cfg["sessions"]
         tr = []
-        for df in frames.values():
-            if len(df) < 300:
-                continue
-            split = int(len(df) * 0.7)
-            if part == "is":
-                d = df.iloc[:split]
-                tr += backtest(st, d, Strategy.context(d), self.mgmt(st), s["entry_windows"], s["flatten_at"])
-            elif part == "oos":
-                tr += backtest(st, df, Strategy.context(df), self.mgmt(st), s["entry_windows"], s["flatten_at"], start_i=split)
-            else:
-                tr += backtest(st, df, Strategy.context(df), self.mgmt(st), s["entry_windows"], s["flatten_at"])
+        for (sym, tf), item in frames.items():
+            if tf == st.tf:
+                tr += self._bt(st, item, part)
         return stats(tr)
 
     def _search(self, frames, live: list[Strategy]) -> list[dict]:
@@ -111,7 +122,7 @@ class StrategistAgent(Agent):
         rr_max = self.cfg["management"]["rr_max"]
         for st in [x for x in live if not isinstance(x, Confluence)]:
             base_is = self._pooled(st, frames, "is")
-            trials = [(p, st.rr) for p in st.variants(max_n=5, rng=self.rng)]
+            trials = [(p, st.rr) for p in st.variants(max_n=4, rng=self.rng)]
             full = self._pooled(st, frames, "full")
             for step in (0.25, 0.5):  # R:R progression, only if price actually travels that far
                 rr = round(st.rr + step, 2)
@@ -119,7 +130,7 @@ class StrategistAgent(Agent):
                     trials.append(({}, rr))
             best, best_is = None, base_is
             for params, rr in trials:
-                cand = build_strategy({"class": st.name, "params": {**st.params, **params}, "rr": rr})
+                cand = build_strategy({"class": st.name, "params": {**st.params, **params}, "rr": rr, "tf": st.tf})
                 r = self._pooled(cand, frames, "is")
                 if r["n"] >= 10 and r["expectancy"] > best_is["expectancy"] + 0.02:
                     best, best_is = (cand, params, rr), r
@@ -127,7 +138,8 @@ class StrategistAgent(Agent):
                 continue
             cand, params, rr = best
             oos_c, oos_i = self._pooled(cand, frames, "oos"), self._pooled(st, frames, "oos")
-            props.append({"kind": "tune", "parent": st.id, "spec": {"class": st.name, "params": cand.params, "rr": rr},
+            props.append({"kind": "tune", "parent": st.id,
+                          "spec": {"class": st.name, "params": cand.params, "rr": rr, "tf": st.tf},
                           "change": {**params, **({"rr": rr} if rr != st.rr else {})},
                           "is": best_is, "oos": oos_c, "incumbent_oos": oos_i, "incumbent_is": base_is})
         # confluence creation
@@ -138,10 +150,10 @@ class StrategistAgent(Agent):
             combos = [combos[j] for j in self.rng.choice(len(combos), 5, replace=False)]
         existing = {s.id.split("@")[0] for s in self.ctx.book.items.values()}
         for p, f in combos:
-            if f"{p.name}+{f}" in existing:
+            if f"{p.name}+{f}:{p.tf_label}" in existing:
                 continue
-            spec = {"class": "confluence", "rr": p.rr,
-                    "params": {"primary": p.spec(), "filters": [BUILTIN[f]().spec()]}}
+            spec = {"class": "confluence", "rr": p.rr, "tf": p.tf,
+                    "params": {"primary": p.spec(), "filters": [BUILTIN[f](tf=p.tf).spec()]}}
             cand = build_strategy(spec)
             oos_c, oos_i = self._pooled(cand, frames, "oos"), self._pooled(p, frames, "oos")
             is_c = self._pooled(cand, frames, "is")

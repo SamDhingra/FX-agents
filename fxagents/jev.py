@@ -158,7 +158,43 @@ class JevScorer:
         res = await self._ask("pyramid_continuation", info, questions, fb, {"symbol": info["symbol"]})
         return {"prob": res["answers"].get("continue", fb["continue"])["value"], "source": res["source"]}
 
-    # ── 4. learner: is a candidate's improvement real ────────────────────
+    # ── 4. bias safeguards ────────────────────────────────────────────────
+    async def bias_audit(self, info: dict) -> dict:
+        """Hourly: is the higher-timeframe bias still valid given what price is doing now?"""
+        questions: dict[str, Any] = {}
+        if self.live:
+            questions["valid"] = Noul(instructions=(
+                f"The composite Daily/4H/1H bias for {info['symbol']} is {info['label']} (score {info['score']}). "
+                "Given the recent hourly bars, where price sits in the prior day's range, the liquidity pools "
+                "and upcoming news, is this directional bias still valid for the next few hours?"))
+        agree = info.get("h1", 0) * (1 if info["score"] > 0 else -1)
+        v = 0.72 if agree > 0 else 0.42
+        if info.get("pd_pos") is not None:  # buying in deep premium / selling in deep discount → less sure
+            if (info["score"] > 0 and info["pd_pos"] > 1.0) or (info["score"] < 0 and info["pd_pos"] < 0.0):
+                v -= 0.12
+        fb = {"valid": {"value": round(v, 4), "confidence": 0.35}}
+        res = await self._ask("bias_audit", info, questions, fb, {"symbol": info["symbol"]})
+        return {"prob": res["answers"].get("valid", fb["valid"])["value"], "source": res["source"]}
+
+    async def reversal(self, info: dict) -> dict:
+        """Counter-bias exception: is this a genuine reversal after a liquidity raid?"""
+        questions: dict[str, Any] = {}
+        if self.live:
+            questions["reversal"] = Noul(instructions=(
+                f"This {info['side']} setup on {info['symbol']} goes AGAINST the higher-timeframe bias "
+                f"({info['bias_label']}). A liquidity pool was raided ({info['raided']}) and the 1H structure "
+                "has shifted in the trade's direction. Is this a genuine reversal worth a reduced-size trade, "
+                "rather than a pullback inside the prevailing trend?"))
+        v = 0.5 + (0.12 if info.get("raided") else 0) + (0.1 if info.get("h1_flipped") else 0)
+        pd_pos = info.get("pd_pos")
+        if pd_pos is not None and ((info["side"] == "LONG" and pd_pos < 0.25) or (info["side"] == "SHORT" and pd_pos > 0.75)):
+            v += 0.05
+        fb = {"reversal": {"value": round(min(v, 0.9), 4), "confidence": 0.35}}
+        res = await self._ask("reversal_exception", info, questions, fb, {"symbol": info["symbol"],
+                                                                          "strategy": info.get("strategy")})
+        return {"prob": res["answers"].get("reversal", fb["reversal"])["value"], "source": res["source"]}
+
+    # ── 5. learner: is a candidate's improvement real ────────────────────
     async def rate_candidate(self, info: dict) -> dict:
         questions: dict[str, Any] = {}
         if self.live:

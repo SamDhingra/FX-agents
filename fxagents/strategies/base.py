@@ -36,8 +36,9 @@ class Strategy:
     param_grid: ClassVar[dict[str, list]] = {}
 
     def __init__(self, params: dict | None = None, version: str = "v1", rr: float = 1.0,
-                 status: str = "live", origin: str = "builtin") -> None:
+                 status: str = "live", origin: str = "builtin", tf: str = "5min") -> None:
         self.params = {**self.default_params, **(params or {})}
+        self.tf = tf            # entry timeframe: "5min" | "15min" (anything pandas understands)
         self.version = version
         self.rr = rr
         self.status = status  # live | shadow | candidate | retired
@@ -45,11 +46,15 @@ class Strategy:
 
     # ── identity ──────────────────────────────────────────────────────────
     @property
+    def tf_label(self) -> str:
+        return f"{int(pd.Timedelta(self.tf).total_seconds() // 60)}m"
+
+    @property
     def id(self) -> str:
-        return f"{self.name}@{self.version}"
+        return f"{self.name}:{self.tf_label}@{self.version}"
 
     def spec(self) -> dict:
-        return {"id": self.id, "class": self.name, "version": self.version, "params": self.params,
+        return {"id": self.id, "class": self.name, "version": self.version, "params": self.params, "tf": self.tf,
                 "rr": self.rr, "status": self.status, "origin": self.origin, "family": self.family,
                 "created": getattr(self, "created", None)}
 

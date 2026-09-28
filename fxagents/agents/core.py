@@ -21,6 +21,7 @@ class Ctx:
     journal: Any
     jev: Any
     book: "StrategyBook"
+    news: Any = None
 
 
 class Agent:
@@ -47,10 +48,10 @@ class Agent:
 class StrategyBook:
     """All strategy versions: live (tradeable), shadow (evaluated, not traded), retired."""
 
-    def __init__(self, journal, rr: float) -> None:
+    def __init__(self, journal, rr: float, tfs: tuple[str, ...] = ("5min", "15min")) -> None:
         self.journal = journal
         self.items: dict[str, Strategy] = {}
-        specs = journal.load_strategies() or default_specs(rr)
+        specs = journal.load_strategies() or default_specs(rr, tfs)
         for s in specs:
             if s.get("status") != "retired":
                 st = build_strategy(s)

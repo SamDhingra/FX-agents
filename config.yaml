@@ -53,9 +53,44 @@ instruments:
     sim_daily_vol: 0.009
 
 timeframes:
-  signal: 5min            # strategies evaluate on 5-minute closes
-  bias: 60min             # higher-timeframe bias
-  history_days: 12        # history pulled at start-up for evaluation / warm-up
+  entry: [5min, 15min]    # every strategy runs on both; the 5m and 15m versions compete each hour
+  history_days: 12        # 1-minute history pulled at start-up (entries + evaluation)
+  h1_history_days: 45     # 1-hour history for Daily / 4H / 1H structure (bias)
+
+# ── Higher-timeframe bias: HARD RULE for every strategy, with safeguards for when it is wrong ──
+bias:
+  weights: {d: 0.40, h4: 0.35, h1: 0.25}   # composite score in [-1, 1]
+  min_align: 0.25          # trade only in the bias direction: side × score ≥ 0.25
+  neutral_policy: skip     # skip | reduced   (TFs disagree → no trades, or half size + no pyramiding)
+  safeguards:
+    suspend_after_losses: 2      # 2 bias-aligned losses in a row on a symbol → bias suspended…
+                                 # …until the 1H structure prints a fresh break (either way)
+    jev_audit: true              # hourly: Jev judges whether the bias is still valid
+    audit_doubt_below: 0.35      #   below this → "in doubt": half size, only A-grade setups
+    doubt_min_quality: 0.7
+    reversal_exception: true     # counter-bias trade ONLY if: liquidity pool raided (PDH/PDL/Asia)
+    reversal_min_jev: 0.7        #   + 1H structure already flipped the trade's way + Jev reversal ≥ 0.7
+    reversal_risk_mult: 0.5      #   → half size, 1:1, no pyramiding
+    accuracy_horizon_h: 4        # track how often the bias called the next 4 hours correctly
+
+# ── Economic calendar ──
+news:
+  enabled: true
+  feed_url: https://nfs.faireconomy.media/ff_calendar_thisweek.json
+  refresh_minutes: 60
+  currencies: [USD]
+  include_medium: true
+  tier1_keywords: [FOMC, Federal Funds Rate, Fed Chair, Powell, Non-Farm, CPI, PCE, Advance GDP]
+  windows:                  # minutes [before, after] with NO new entries
+    tier1: [30, 30]
+    high: [15, 15]
+    medium: [5, 5]
+  pre_news_action:          # what happens to OPEN positions just before the release
+    tier1: {minutes: 5, action: protect}   # protect = stop to breakeven+ if in profit, else close
+    high: {minutes: 2, action: protect}
+  event_day_risk_mult: 0.5  # tier-1 day (FOMC, NFP, CPI, PCE…) → half size all day
+  heads_up_minutes: 30      # push notification before each event
+  manual_events: []         # e.g. {title: "Powell testimony", date: "2026-10-07T10:00:00-04:00", impact: High, country: USD}
 
 # ── Risk: hard rules enforced by the Risk agent AND again inside the broker layer ──
 risk:
@@ -67,10 +102,6 @@ risk:
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak
   min_stop_atr: 0.5                  # stops tighter than 0.5 ATR are widened (noise protection)
-  news_blackout:                     # no new entries ±window around these (NY time)
-    recurring_weekdays: ["08:30", "10:00"]   # US data releases; add FOMC/NFP etc. under events
-    window_min: 5
-    events: []                       # e.g. {date: "2026-10-02", time: "08:30", window_min: 30, label: NFP}
 
 # ── Sessions (NY time). Entries only inside windows; everything flat before close ──
 sessions:
@@ -107,7 +138,7 @@ jev:
   min_signal_confidence: 0.5
 
 selector:
-  top_n_per_symbol: 1          # strategies traded per symbol per hour
+  top_n_per_tf: 1              # per symbol per hour: best 5m strategy + best 15m strategy
   min_trades_for_stats: 8
   hour_shrinkage_k: 12         # Bayesian shrink of hour-of-day stats toward overall
 
@@ -126,7 +157,7 @@ notifications:
   ntfy_server: https://ntfy.sh
   telegram_bot_token: ""       # or set TELEGRAM_BOT_TOKEN
   telegram_chat_id: ""         # or set TELEGRAM_CHAT_ID
-  events: [entry, exit, stop_to_profit, pyramid, kill_switch, agent_down, promotion, daily_summary]
+  events: [entry, exit, stop_to_profit, pyramid, kill_switch, agent_down, promotion, daily_summary, news, bias]
 
 dashboard:
   host: 0.0.0.0                # reachable over Tailscale from your phone

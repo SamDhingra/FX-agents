@@ -72,6 +72,8 @@ class Position:
     jev_confidence: Optional[float] = None
     jev_source: str = ""
     reason: str = ""
+    bias_mode: str = ""            # aligned | in_doubt | neutral_reduced | reversal_exception
+    risk_mult: float = 1.0
     status: str = "open"
     exit_reason: str = ""
     closed_ts: Optional[datetime] = None
@@ -122,4 +124,5 @@ class Position:
             "stop_in_profit": (self.stop - self.entry) * self.side > 0,
             "jev_quality": self.jev_quality, "jev_confidence": self.jev_confidence,
             "jev_source": self.jev_source, "opened": self.opened_ts.isoformat(), "reason": self.reason,
+            "bias_mode": self.bias_mode, "risk_mult": self.risk_mult,
         }

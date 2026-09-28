@@ -127,3 +127,66 @@ def test_jev_response_parsing_with_stub_client():
     assert res["source"] == "jev" and abs(r["value"] - 0.7375) < 1e-6 and r["confidence"] == 0.8
     assert res["trade_ok"]["value"] == 0.9
     assert st.decisions[0]["kind"] == "strategy_rating"
+
+
+# ── bias / news / 15m ─────────────────────────────────────────────────────────
+def test_bias_frame_is_causal():
+    from fxagents.bias import bias_frame
+    import numpy as np
+    d1 = synth_1m(24500, 0.013, pd.Timestamp("2026-08-03", tz=TZ), 35, 11)
+    h1 = resample_ohlc(d1, "1h")
+    when = resample_ohlc(d1, "5min").index + pd.Timedelta("5min")
+    full = bias_frame(h1, when)["score"].to_numpy()
+    cut = len(when) // 2
+    part = bias_frame(h1[h1.index < when[cut]], when[:cut])["score"].to_numpy()
+    assert np.allclose(full[:cut], part)
+
+
+def test_bias_rule_labels():
+    from fxagents.bias import rule_check
+    assert rule_check(1, 0.6, 0.25) == "aligned"
+    assert rule_check(-1, 0.6, 0.25) == "counter"
+    assert rule_check(1, 0.1, 0.25) == "neutral"
+
+
+def test_backtest_respects_hard_bias_rule():
+    import numpy as np
+    d1 = synth_1m(3650, 0.012, pd.Timestamp("2026-09-07", tz=TZ), 8, 5)
+    df = resample_ohlc(d1, "5min")
+    ctx = Strategy.context(df)
+    bearish = np.full(len(df), -1.0)
+    tr = backtest(BUILTIN["sr_rejection"](), df, ctx, Mgmt.from_cfg(CFG), CFG["sessions"]["entry_windows"], "15:50",
+                  bias_score=bearish, min_align=0.25)
+    assert all(t["side"] == -1 for t in tr)
+
+
+def test_news_calendar_windows_and_event_day():
+    from fxagents.news import NewsCalendar
+    cal = NewsCalendar(CFG)
+    cal.load([{"title": "Non-Farm Employment Change", "country": "USD", "date": "2026-10-02T08:30:00-04:00", "impact": "High"},
+              {"title": "Final GDP q/q", "country": "USD", "date": "2026-09-30T08:30:00-04:00", "impact": "High"},
+              {"title": "BoJ thing", "country": "JPY", "date": "2026-10-02T08:30:00-04:00", "impact": "High"}], "test")
+    assert len(cal.events) == 2                                             # JPY filtered out
+    nfp = pd.Timestamp("2026-10-02 08:30", tz=TZ)
+    assert cal.blocked(nfp - pd.Timedelta("29min"))["tier"] == "tier1"      # 30-min pre window
+    assert cal.blocked(nfp - pd.Timedelta("31min")) is None
+    assert cal.blocked(pd.Timestamp("2026-09-30 08:40", tz=TZ))["tier"] == "high"   # 15-min post window
+    assert cal.pre_actions(nfp - pd.Timedelta("3min"))[0]["action"] == "protect"
+    assert cal.risk_mult(pd.Timestamp("2026-10-02 13:00", tz=TZ)) == 0.5 and cal.risk_mult(pd.Timestamp("2026-10-01 13:00", tz=TZ)) == 1.0
+
+
+def test_strategies_exist_on_5m_and_15m():
+    from fxagents.strategies import default_specs, build_strategy
+    ids = {build_strategy(s).id for s in default_specs()}
+    assert "smc_order_block:15m@v1" in ids and "stoic_sbs:5m@v1" in ids and len(ids) == 2 * len(BUILTIN)
+
+
+def test_barstore_views_refresh_after_store_is_full():
+    from fxagents.data import BarStore
+    d1 = synth_1m(3650, 0.012, pd.Timestamp("2026-09-07", tz=TZ), 3, 2)
+    st = BarStore(TZ, max_days=1)
+    st.load_history("X", d1.iloc[:1440])
+    before = st.tf("X", "5min").index[-1]
+    for ts, r in d1.iloc[1440:1500].iterrows():
+        st.append(Bar("X", ts, r.open, r.high, r.low, r.close))
+    assert len(st.m1("X")) == 1440 and st.tf("X", "5min").index[-1] > before

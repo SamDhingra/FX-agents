@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from ..bias import rule_check
 from ..broker import OrderRejected
 from ..indicators import in_windows
 from ..models import Bar, Position, Signal
@@ -18,31 +19,15 @@ def _hm(s: str) -> int:
     return h * 60 + m
 
 
-def news_blackout(cfg, ts: pd.Timestamp, lookahead_min: int = 0) -> str | None:
-    nb = cfg["risk"]["news_blackout"]
-    w = nb.get("window_min", 5)
-    mins = ts.hour * 60 + ts.minute
-    if ts.dayofweek < 5:
-        for t in nb.get("recurring_weekdays", []):
-            if _hm(t) - w - lookahead_min <= mins <= _hm(t) + w:
-                return f"news window {t}"
-    for ev in nb.get("events", []) or []:
-        if str(ev["date"]) == ts.strftime("%Y-%m-%d"):
-            ew = ev.get("window_min", w)
-            if _hm(ev["time"]) - ew - lookahead_min <= mins <= _hm(ev["time"]) + ew:
-                return ev.get("label", "news")
-    return None
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 class MarketDataAgent(Agent):
-    """Stores bars, lets the broker check resting stops, then fans out 1m and 5m events."""
+    """Stores bars, lets the broker check resting stops, then fans out 1m and entry-TF (5m, 15m) events."""
     name = "market_data"
 
     def start(self):
         super().start()
         self.bus.subscribe("bar", self.on_bar)
-        self.sig_minutes = int(pd.Timedelta(self.cfg["timeframes"]["signal"]).total_seconds() // 60)
+        self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in self.cfg["timeframes"]["entry"]]
 
     async def on_bar(self, bar: Bar):
         self.beat()
@@ -51,8 +36,11 @@ class MarketDataAgent(Agent):
         self.state.last_bar_ts[bar.symbol] = bar.ts.isoformat()
         await self.ctx.broker.on_bar(bar)                 # 1) resting stops
         await self.bus.publish("bar_1m", bar)              # 2) trade management
-        if (bar.ts.minute + 1) % self.sig_minutes == 0:    # 3) new entries on signal-TF close
-            await self.bus.publish("bar_signal", {"symbol": bar.symbol, "ts": bar.ts + pd.Timedelta("1min")})
+        mins = bar.ts.hour * 60 + bar.ts.minute + 1
+        for tf, n in self.tfs:                             # 3) new entries on each entry-TF close
+            if mins % n == 0:
+                await self.bus.publish("bar_signal", {"symbol": bar.symbol, "tf": tf,
+                                                      "ts": bar.ts + pd.Timedelta("1min")})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +66,7 @@ class SelectorAgent(Agent):
             await self.select_all()
 
     def regime(self, symbol: str, now: pd.Timestamp) -> dict:
-        df = self.ctx.store.tf(symbol, self.cfg["timeframes"]["signal"])
+        df = self.ctx.store.tf(symbol, "5min")
         if len(df) < 60:
             return {}
         ctx = Strategy.context(df.iloc[-600:])
@@ -86,11 +74,13 @@ class SelectorAgent(Agent):
         pct = float((a[-1] > a[-288:]).mean()) if len(a) > 20 else 0.5
         wins = self.cfg["sessions"]["entry_windows"]
         nxt = now + pd.Timedelta("30min")
+        b = self.state.bias.get(symbol, {})
         return {"atr_percentile": round(pct, 2), "adx": round(float(ctx["adx"][-1]), 1),
-                "htf_bias": int(ctx["htf"][-1]), "rsi": round(float(ctx["rsi"][-1]), 1),
-                "in_entry_window": in_windows(nxt, wins),
-                "news_soon": news_blackout(self.cfg, now, lookahead_min=60),
-                "trend": "up" if df["close"].iloc[-1] > ctx["ema200"][-1] else "down"}
+                "htf_bias": {k: b.get(k) for k in ("label", "score", "d", "h4", "h1", "pd_pos", "state")},
+                "rsi": round(float(ctx["rsi"][-1]), 1), "in_entry_window": in_windows(nxt, wins),
+                "news_soon": self.ctx.news.brief(now, hours=1.5) if self.ctx.news else [],
+                "event_day": bool(self.ctx.news and self.ctx.news.risk_mult(now) < 1),
+                "trend_5m": "up" if df["close"].iloc[-1] > ctx["ema200"][-1] else "down"}
 
     async def select_all(self, force: bool = False):
         now = self.now()
@@ -121,7 +111,7 @@ class SelectorAgent(Agent):
             shrunk = (h["n"] * h["exp"] + k * s["expectancy"]) / (h["n"] + k)
             live_rec = self.ctx.journal.live_stats(sym, st.id)
             cands[st.id] = {
-                "name": st.id, "family": st.family, "description": st.description[:220],
+                "name": st.id, "family": st.family, "timeframe": st.tf_label, "description": st.description[:220],
                 "overall": {k2: s[k2] for k2 in ("n", "win_rate", "expectancy", "pf", "max_dd_r")},
                 "this_hour": h, "this_hour_exp_shrunk": round(shrunk, 3),
                 "recent": {"n": s["recent_n"], "exp": s["recent_exp"]},
@@ -144,8 +134,14 @@ class SelectorAgent(Agent):
                            "source": rating["source"]})
         ranked.sort(key=lambda x: -x["combined"])
         trade_ok = rating["trade_ok"]["value"]
-        for j, r in enumerate(ranked):
-            r["selected"] = j < sel_cfg["top_n_per_symbol"] and r["combined"] >= jcfg["min_select_score"] and trade_ok >= 0.4
+        per_tf: dict[str, int] = {}
+        for r in ranked:   # best strategy per entry timeframe (5m and 15m each get a pick)
+            tf = self.ctx.book.get(r["id"]).tf_label
+            r["tf"] = tf
+            ok = r["combined"] >= jcfg["min_select_score"] and trade_ok >= 0.4 and per_tf.get(tf, 0) < sel_cfg["top_n_per_tf"]
+            r["selected"] = ok
+            if ok:
+                per_tf[tf] = per_tf.get(tf, 0) + 1
         self.state.selections[sym] = ranked
         picked = [r["id"] for r in ranked if r["selected"]]
         await self.bus.publish("selection", {"symbol": sym, "hour": hour, "picked": picked,
@@ -166,12 +162,13 @@ class TraderAgent(Agent):
 
     async def on_signal_bar(self, ev):
         self.beat()
-        sym = ev["symbol"]
+        sym, tf = ev["symbol"], ev["tf"]
         picks = [r["id"] for r in self.state.selections.get(sym, []) if r.get("selected")]
+        picks = [p for p in picks if self.ctx.book.get(p) is not None and self.ctx.book.get(p).tf == tf]
         if not picks:
             return
-        df = self.ctx.store.tf(sym, self.cfg["timeframes"]["signal"]).iloc[-self.window:]
-        if len(df) < 250:
+        df = self.ctx.store.tf(sym, tf).iloc[-self.window:]
+        if len(df) < 120:
             return
         ctx = Strategy.context(df)
         last = len(df) - 1
@@ -186,16 +183,40 @@ class TraderAgent(Agent):
                              rs.features, rs.structural_target, rr=st.rr)
                 await self.evaluate(sig, ctx, df)
 
+    def bias_precheck(self, sig: Signal) -> str | None:
+        """Cheap hard-rule check BEFORE spending a Jev call (Risk re-checks everything)."""
+        bc = self.cfg["bias"]
+        b = self.state.bias.get(sig.symbol)
+        if not b:
+            return "bias not ready"
+        if b["suspended"]:
+            return "bias suspended"
+        mode = rule_check(sig.side, b["score"], bc["min_align"])
+        if mode == "neutral" and bc.get("neutral_policy", "skip") == "skip":
+            return f"bias neutral ({b['score']:+.2f})"
+        if mode == "counter" and not (bc["safeguards"].get("reversal_exception") and b["h1"] == sig.side):
+            return f"counter to {b['label']} bias"
+        return None
+
     async def evaluate(self, sig: Signal, ctx: dict | None, df: pd.DataFrame):
+        why = self.bias_precheck(sig)
+        if why:
+            self.ctx.journal.add_signal({"ts": sig.ts.isoformat(), "symbol": sig.symbol, "strategy": sig.strategy,
+                                         "side": "LONG" if sig.side > 0 else "SHORT", "entry": sig.entry,
+                                         "stop": sig.stop, "action": "filtered", "why": why})
+            return
         stats = self.state.strategy_stats.get(sig.symbol, {}).get(sig.strategy, {})
         recent = df.iloc[-12:][["open", "high", "low", "close"]].round(4)
+        b = self.state.bias.get(sig.symbol, {})
         info = {"symbol": sig.symbol, "strategy": sig.strategy, "side": "LONG" if sig.side > 0 else "SHORT",
                 "entry": sig.entry, "stop": sig.stop, "target_1r": sig.target, "structural_target": sig.structural_target,
                 "reason": sig.reason, "risk_atr": sig.features.get("risk_atr"),
-                "htf_bias": int(ctx["htf"][-1]) if ctx else 0,
+                "htf_bias": 1 if b.get("score", 0) > 0 else -1 if b.get("score", 0) < 0 else 0,
+                "htf_detail": {k: b.get(k) for k in ("label", "score", "d", "h4", "h1", "pd_pos", "pdh", "pdl", "state")},
+                "news_next_hours": self.ctx.news.brief(self.now(), 3) if self.ctx.news else [],
                 "rsi": round(float(ctx["rsi"][-1]), 1) if ctx else None,
                 "strategy_expectancy": stats.get("expectancy", 0.0), "strategy_win_rate": stats.get("win_rate"),
-                "recent_bars_5m": recent.to_dict("split")["data"], "time_ny": str(sig.ts)}
+                "recent_bars": recent.to_dict("split")["data"], "time_ny": str(sig.ts)}
         g = await self.ctx.jev.rate_signal(info)
         jc = self.cfg["jev"]
         ok = g["quality"] >= jc["min_signal_quality"] and g["confidence"] >= jc["min_signal_confidence"] * 0.8
@@ -213,12 +234,12 @@ class TraderAgent(Agent):
         price = float(payload.get("price") or self.state.last_prices.get(sym, 0))
         stop = payload.get("stop")
         if stop is None:  # no stop in alert → derive 1 ATR stop (a trade never goes without one)
-            df = self.ctx.store.tf(sym, self.cfg["timeframes"]["signal"]).iloc[-300:]
+            df = self.ctx.store.tf(sym, "5min").iloc[-300:]
             a = float(Strategy.context(df)["atr"][-1]) if len(df) > 20 else price * 0.002
             stop = price - side * a
         sig = Signal(sym, f"tradingview:{payload.get('strategy', 'alert')}", side, price, float(stop),
                      self.now(), payload.get("comment", "TradingView alert"), {}, rr=float(payload.get("rr", 1.0)))
-        df = self.ctx.store.tf(sym, self.cfg["timeframes"]["signal"]).iloc[-self.window:]
+        df = self.ctx.store.tf(sym, "5min").iloc[-self.window:]
         await self.evaluate(sig, Strategy.context(df) if len(df) > 60 else None, df)
 
 
@@ -248,9 +269,9 @@ class RiskAgent(Agent):
             return self._reject(rec, "outside entry windows")
         if now.hour * 60 + now.minute >= _hm(s["flatten_at"]) - 20 and now.hour < 17:
             return self._reject(rec, "too close to session flatten")
-        nb = news_blackout(self.cfg, now)
+        nb = self.ctx.news.blocked(now) if self.ctx.news else None
         if nb:
-            return self._reject(rec, f"news blackout ({nb})")
+            return self._reject(rec, f"news blackout: {nb['title']} ({nb['tier']}, {nb['phase']})")
         open_pos = [p for p in self.state.positions.values() if p.status == "open"]
         if len(open_pos) >= r["max_open_positions"]:
             return self._reject(rec, "max open positions")
@@ -258,6 +279,12 @@ class RiskAgent(Agent):
             return self._reject(rec, "already positioned in symbol")
         if sig.stop is None:
             return self._reject(rec, "no stop loss")
+
+        # ── HARD higher-timeframe bias rule (all strategies) + safeguards ──
+        gate = await self.bias_gate(sig, req["grade"], now)
+        if gate.get("reject"):
+            return self._reject(rec, gate["reject"])
+        risk_mult = gate["risk_mult"] * (self.ctx.news.risk_mult(now) if self.ctx.news else 1.0)
 
         ic = self.cfg["instruments"][sig.symbol]
         mult, tick = float(ic["multiplier"]), float(ic["tick_size"])
@@ -274,7 +301,7 @@ class RiskAgent(Agent):
         if dist / price > r["max_stop_pct_of_trade_value"]:
             return self._reject(rec, f"stop {dist/price:.2%} of trade value > {r['max_stop_pct_of_trade_value']:.0%}")
         equity = self.state.equity or await self.ctx.broker.equity()
-        risk_ccy = equity * r["risk_per_trade_pct"]
+        risk_ccy = equity * r["risk_per_trade_pct"] * risk_mult
         qty = math.floor(risk_ccy / (dist * mult))
         qty = min(qty, int(ic["max_units"]))
         if qty < 1:
@@ -282,17 +309,66 @@ class RiskAgent(Agent):
 
         pos = Position(sig.symbol, sig.side, sig.strategy, stop, stop, dist, sig.rr, now,
                        jev_quality=req["grade"]["quality"], jev_confidence=req["grade"]["confidence"],
-                       jev_source=req["grade"]["source"], reason=sig.reason)
+                       jev_source=req["grade"]["source"], reason=sig.reason,
+                       bias_mode=gate["mode"], risk_mult=round(risk_mult, 3))
+        if gate.get("no_pyramid"):
+            pos.meta["no_pyramid"] = True
+        if gate.get("rr"):
+            pos.rr = gate["rr"]
         try:
             px = await self.ctx.broker.open(pos, qty, price)
         except OrderRejected as e:
             return self._reject(rec, f"broker: {e}")
         pos.risk_per_unit = abs(px - pos.initial_stop)
         pos.last_price = px
-        pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2))
+        pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),
+                bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3))
         self.state.positions[pos.id] = pos
         self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}"})
         await self.bus.publish("position_opened", pos)
+
+
+    async def bias_gate(self, sig: Signal, grade: dict, now) -> dict:
+        bc = self.cfg["bias"]
+        sg = bc["safeguards"]
+        b = self.state.bias.get(sig.symbol)
+        if not b:
+            return {"reject": "bias not ready (need hourly history)"}
+        if b["suspended"]:
+            return {"reject": f"bias suspended after {b['aligned_losses']} aligned losses — waiting for fresh 1H break"}
+        mode = rule_check(sig.side, b["score"], bc["min_align"])
+        if mode == "aligned":
+            if b["in_doubt"]:
+                if grade["quality"] < sg["doubt_min_quality"]:
+                    return {"reject": f"bias in doubt (Jev audit {b['audit_p']}) and setup grade {grade['quality']:.2f} < {sg['doubt_min_quality']}"}
+                return {"mode": "in_doubt", "risk_mult": 0.5, "score": b["score"]}
+            return {"mode": "aligned", "risk_mult": 1.0, "score": b["score"]}
+        if mode == "neutral":
+            if bc.get("neutral_policy", "skip") == "reduced":
+                return {"mode": "neutral_reduced", "risk_mult": 0.5, "no_pyramid": True, "score": b["score"]}
+            return {"reject": f"bias neutral (score {b['score']:+.2f}: D{b['d']:+d} 4H{b['h4']:+d} 1H{b['h1']:+d})"}
+        # counter-bias → only the controlled reversal exception
+        if not sg.get("reversal_exception", True):
+            return {"reject": f"counter to {b['label']} bias"}
+        df = self.ctx.store.tf(sig.symbol, "5min").iloc[-30:]   # last ~2.5h
+        raided = []
+        if sig.side > 0:
+            lo = float(df["low"].min())
+            raided += [n for n, lv in (("PDL", b["pdl"]), ("Asia low", b["asia_lo"])) if lv and lo < lv]
+        else:
+            hi = float(df["high"].max())
+            raided += [n for n, lv in (("PDH", b["pdh"]), ("Asia high", b["asia_hi"])) if lv and hi > lv]
+        h1_flipped = b["h1"] == sig.side
+        if not raided or not h1_flipped:
+            return {"reject": f"counter to {b['label']} bias (exception needs raid {'✓' if raided else '✗'} + 1H shift {'✓' if h1_flipped else '✗'})"}
+        res = await self.ctx.jev.reversal({"symbol": sig.symbol, "strategy": sig.strategy,
+                                           "side": "LONG" if sig.side > 0 else "SHORT", "bias_label": b["label"],
+                                           "raided": ", ".join(raided), "h1_flipped": h1_flipped, "pd_pos": b.get("pd_pos"),
+                                           "setup_grade": grade["quality"]})
+        if res["prob"] < sg["reversal_min_jev"]:
+            return {"reject": f"counter-bias reversal not confirmed by Jev ({res['prob']:.2f})"}
+        return {"mode": "reversal_exception", "risk_mult": sg["reversal_risk_mult"], "no_pyramid": True,
+                "rr": 1.0, "score": b["score"]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -307,6 +383,7 @@ class PositionManagerAgent(Agent):
         self.bus.subscribe("stop_filled", self.on_stop)
         self.bus.subscribe("flatten_all", self.on_flatten_all)
         self.bus.subscribe("flatten_symbol", self.on_flatten_symbol)
+        self.bus.subscribe("pre_news", self.on_pre_news)
         self.m = self.cfg["management"]
 
     def lvl(self, pos: Position, step: int) -> float:
@@ -362,8 +439,10 @@ class PositionManagerAgent(Agent):
 
     async def maybe_pyramid(self, pos: Position, level: float, mult: float, bar: Bar):
         pc = self.m["pyramid"]
-        if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled:
+        if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled or pos.meta.get("no_pyramid"):
             return
+        if self.ctx.news and self.ctx.news.blocked(self.now()):
+            return  # never add into a news release
         add_qty = max(1, round(pos.initial_qty * pc["add_size_frac"]))
         # hard ceiling on units
         if pos.open_qty + add_qty > float(self.cfg["instruments"][pos.symbol]["max_units"]):
@@ -377,7 +456,7 @@ class PositionManagerAgent(Agent):
             pos.log(self.now(), "pyramid_skipped", why="would risk open profit", worst=round(worst, 2))
             return
         if pc["require_continuation"]:
-            df = self.ctx.store.tf(pos.symbol, self.cfg["timeframes"]["signal"]).iloc[-300:]
+            df = self.ctx.store.tf(pos.symbol, "5min").iloc[-300:]
             c = Strategy.context(df) if len(df) > 60 else None
             mom = 0
             if c is not None:
@@ -386,6 +465,7 @@ class PositionManagerAgent(Agent):
                 "symbol": pos.symbol, "side": "LONG" if pos.side > 0 else "SHORT", "strategy": pos.strategy,
                 "r_now": round(pos.r_now(bar.close), 2), "stage": pos.stage, "stop_locked_r": round(pos.r_now(pos.stop), 2),
                 "momentum_aligned": mom, "adx": round(float(c["adx"][-1]), 1) if c is not None else None,
+                "news_next_hours": self.ctx.news.brief(self.now(), 2) if self.ctx.news else [],
                 "recent_bars_5m": df.iloc[-8:][["open", "high", "low", "close"]].round(4).to_dict("split")["data"]})
             if res["prob"] < pc["min_continuation_prob"]:
                 pos.log(self.now(), "pyramid_skipped", why=f"continuation {res['prob']:.2f}")
@@ -414,6 +494,20 @@ class PositionManagerAgent(Agent):
         pos: Position = ev["position"]
         reason = "stop" if pos.stage == 0 else ("breakeven_plus_stop" if pos.stage == 1 else "trail_stop")
         await self.finalize(pos, ev["price"], reason)
+
+    async def on_pre_news(self, ev):
+        """Just before a release: protect winners (stop to breakeven+), close everything else."""
+        for pos in list(self.state.positions.values()):
+            px = self.state.last_prices.get(pos.symbol, pos.entry)
+            if ev["action"] == "protect" and pos.r_now(px) > self.m["lock_r"] + 0.05:
+                be = pos.entry + pos.side * self.m["lock_r"] * pos.risk_per_unit
+                if (be - pos.stop) * pos.side > 0:
+                    await self.ctx.broker.move_stop(pos, be)
+                    pos.log(self.now(), "stop_moved", stop=pos.stop, stage=pos.stage, why=f"pre-news {ev['event']}")
+                    await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
+                                                                "msg": f"pre-news ({ev['event']}): stop → {pos.stop}"})
+            else:
+                await self.close(pos, px, f"pre-news: {ev['event']}")
 
     async def on_flatten_all(self, why):
         for pos in list(self.state.positions.values()):

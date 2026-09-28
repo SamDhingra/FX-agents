@@ -97,7 +97,9 @@ def _close(realized, units, px_r, reason, bars, mfe, mae, step) -> dict:
 
 
 def backtest(strat: Strategy, df: pd.DataFrame, ctx: dict, m: Mgmt, entry_windows, flatten_at: str,
-             start_i: int = 0) -> list[dict]:
+             start_i: int = 0, bias_score: np.ndarray | None = None, min_align: float = 0.25) -> list[dict]:
+    """bias_score (aligned to df rows, known at each bar close) applies the live HARD bias rule:
+    only signals with side × score ≥ min_align are taken — so stats reflect what can really trade."""
     O, H, L, C = (df[c].to_numpy() for c in ("open", "high", "low", "close"))
     close_ts = ctx["close_ts"]
     fh, fm = map(int, flatten_at.split(":"))
@@ -109,6 +111,8 @@ def backtest(strat: Strategy, df: pd.DataFrame, ctx: dict, m: Mgmt, entry_window
     for s in strat.scan(df, ctx):
         if s.i <= busy or s.i < start_i or not in_windows(close_ts[s.i], entry_windows) or flat_mask[s.i]:
             continue
+        if bias_score is not None and s.side * bias_score[s.i] < min_align:
+            continue
         entry, stop = s.entry, s.stop
         if abs(entry - stop) < m.min_stop_atr * a[s.i]:
             stop = entry - s.side * m.min_stop_atr * a[s.i]
@@ -119,7 +123,7 @@ def backtest(strat: Strategy, df: pd.DataFrame, ctx: dict, m: Mgmt, entry_window
         busy = s.i + res["bars"]
         ts = close_ts[s.i]
         trades.append({"ts": ts, "hour": ts.hour, "side": s.side, "entry": entry, "stop": stop,
-                       "reason": s.reason, **res})
+                       "reason": s.reason, "bias": float(bias_score[s.i]) if bias_score is not None else None, **res})
     return trades
 
 

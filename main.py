@@ -14,6 +14,7 @@ import sys
 
 import pandas as pd
 
+from fxagents.agents.context import BiasAgent, NewsAgent
 from fxagents.agents.core import Ctx, StrategyBook
 from fxagents.agents.ops import JournalAgent, MonitorAgent, NotifierAgent
 from fxagents.agents.strategist import StrategistAgent
@@ -25,6 +26,7 @@ from fxagents.config import load_config
 from fxagents.data import BarStore, IBKRFeed, SimFeed
 from fxagents.jev import JevScorer
 from fxagents.journal import Journal
+from fxagents.news import NewsCalendar
 from fxagents.state import LiveState
 
 log = logging.getLogger("main")
@@ -36,7 +38,8 @@ async def build(cfg, args):
     journal = Journal(cfg["storage"]["db_path"])
     store = BarStore(cfg["timezone"], max_days=cfg["timeframes"]["history_days"] + 3)
     jev = JevScorer(cfg, state, bus)
-    book = StrategyBook(journal, rr=cfg["management"]["rr_initial"])
+    book = StrategyBook(journal, rr=cfg["management"]["rr_initial"], tfs=tuple(cfg["timeframes"]["entry"]))
+    news = NewsCalendar(cfg)
     ib = None
     if cfg["mode"] == "sim":
         feed = SimFeed(cfg, bus, state)
@@ -54,12 +57,18 @@ async def build(cfg, args):
         await broker.connect()
     for sym in cfg["instruments"]:
         store.load_history(sym, feed.history(sym))
+        store.load_h1(sym, feed.h1_history(sym))
     first = store.m1(next(iter(cfg["instruments"])))
     state.now = (first.index[-1] + pd.Timedelta("1min")) if len(first) else pd.Timestamp.now(tz=cfg["timezone"])
     state.equity = state.equity_peak = state.day_start_equity = await broker.equity()
-    ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book)
-    agents = [MarketDataAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx), TraderAgent(ctx), RiskAgent(ctx),
-              PositionManagerAgent(ctx), JournalAgent(ctx), NotifierAgent(ctx), MonitorAgent(ctx)]
+    if cfg["mode"] == "sim":
+        news.load_sim(feed.split, cfg["sim"]["days"] + 2)
+    else:
+        await news.refresh(state.now)
+    ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book, news)
+    agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
+              TraderAgent(ctx), RiskAgent(ctx), PositionManagerAgent(ctx), JournalAgent(ctx), NotifierAgent(ctx),
+              MonitorAgent(ctx)]
     for a in agents:
         a.start()
     return ctx, feed, agents, ib
@@ -73,13 +82,19 @@ async def main(args):
         cfg["sim"]["days"] = args.days
     if args.db:
         cfg["storage"]["db_path"] = args.db
+    if args.port:
+        cfg["dashboard"]["port"] = args.port
+    if args.speed is not None:
+        cfg["sim"]["speed"] = args.speed
     if cfg["mode"] == "live" and not args.i_understand_live_trading:
         sys.exit("Refusing to start LIVE trading without --i-understand-live-trading. Run paper first.")
     ctx, feed, agents, ib = await build(cfg, args)
     strategist = next(a for a in agents if a.name == "strategist")
     log.info("mode=%s  strategies=%s  jev=%s", cfg["mode"], [s.id for s in ctx.book.live()], ctx.jev.source)
 
-    await strategist.evaluate_all()          # stats → selector picks for the current hour
+    bias_agent = next(a for a in agents if a.name == "bias")
+    await bias_agent.update_all(ctx.state.now)   # HTF bias before anything can trade
+    await strategist.evaluate_all()              # stats → selector picks for the current hour
     tasks = []
     server = None
     if not args.no_dashboard:
@@ -133,6 +148,8 @@ if __name__ == "__main__":
     ap.add_argument("--mode", choices=["sim", "paper", "live"])
     ap.add_argument("--days", type=int, help="sim: trading days to replay")
     ap.add_argument("--db", help="override journal path")
+    ap.add_argument("--port", type=int, help="dashboard port")
+    ap.add_argument("--speed", type=float, help="sim: seconds per simulated minute")
     ap.add_argument("--no-dashboard", action="store_true")
     ap.add_argument("--exit-after-sim", action="store_true")
     ap.add_argument("--i-understand-live-trading", action="store_true")

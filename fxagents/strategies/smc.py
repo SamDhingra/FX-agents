@@ -242,3 +242,184 @@ class StoicSBS(Strategy):
                                      structural_target=side * p3.price,
                                      features={"seq_range_atr": float((p3.price - p0.price) / a[i])}))
         return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Core SMC toolkit: order blocks, breaker blocks, inverse FVGs, liquidity sweeps
+# ─────────────────────────────────────────────────────────────────────────────
+def _levels(df, ctx) -> dict:
+    """PDH/PDL and Asia high/low known at each bar close (cached per frame)."""
+    if "_levels" not in ctx:
+        from ..bias import bias_frame
+        from ..indicators import resample_ohlc
+        h1 = resample_ohlc(df, "1h")
+        b = bias_frame(h1, ctx["close_ts"])
+        ctx["_levels"] = {k: b[k].to_numpy() for k in ("pdh", "pdl", "asia_hi", "asia_lo")}
+    return ctx["_levels"]
+
+
+class SMCOrderBlock(Strategy):
+    name = "smc_order_block"
+    family = "smc"
+    description = ("SMC order block: after a displacement leg breaks structure (BOS), the last opposing "
+                   "candle before the leg is the order block. Enter on the first return into the block, "
+                   "stop beyond it. Optional: the leg must leave an FVG.")
+    default_params = dict(swing=3, disp_atr=1.2, require_fvg=True, max_age=30, stop_buf_atr=0.1)
+    param_grid = {"swing": [2, 3, 5], "disp_atr": [0.8, 1.2, 1.8], "require_fvg": [True, False],
+                  "max_age": [15, 30, 50]}
+
+    def _scan(self, df, ctx):
+        p, a = self.params, ctx["atr"]
+        out = []
+        for side, (O, H, L, C, piv) in _mirror(df, self.pivots(df, ctx, p["swing"], p["swing"])):
+            order = _known_iter(piv)
+            ptr, known, broken, blocks = 0, [], set(), []
+            for i in range(3, len(C)):
+                while ptr < len(order) and order[ptr].known_at <= i:
+                    known.append(order[ptr]); ptr += 1
+                highs = [q for q in known if q.kind == "H"]
+                lows = [q for q in known if q.kind == "L"]
+                if highs and lows and highs[-1].idx not in broken and C[i] > highs[-1].price:
+                    broken.add(highs[-1].idx)
+                    start = lows[-1].idx
+                    leg = H[start:i + 1].max() - L[start:i + 1].min()
+                    fvg = any(L[k] > H[k - 2] for k in range(max(start + 2, 2), i + 1))
+                    if leg >= p["disp_atr"] * a[i] * 2 and (fvg or not p["require_fvg"]):
+                        for k in range(i, start - 1, -1):        # last down-candle before the leg
+                            if C[k] < O[k] and k <= start + max(1, (i - start) // 2):
+                                blocks.append({"hi": H[k], "lo": L[k], "created": i})
+                                break
+                keep = []
+                for b in blocks:
+                    if i - b["created"] > p["max_age"] or C[i] < b["lo"]:
+                        continue
+                    if i > b["created"] and L[i] <= b["hi"] and C[i] >= b["lo"]:
+                        out.append(RawSignal(i, side, side * C[i], side * (b["lo"] - p["stop_buf_atr"] * a[i]),
+                                             "BOS → return to order block",
+                                             features={"ob_atr": float((b["hi"] - b["lo"]) / a[i])}))
+                        continue
+                    keep.append(b)
+                blocks = keep
+        return out
+
+
+class SMCBreaker(Strategy):
+    name = "smc_breaker"
+    family = "smc"
+    description = ("SMC/ICT breaker block: price sweeps a swing low (liquidity), then breaks the swing high "
+                   "(MSS). The last up-candle before the sweep leg is the breaker; enter on the retest, "
+                   "stop below the sweep low.")
+    default_params = dict(swing=3, max_wait=24, max_age=30, stop_buf_atr=0.1, stop_at="breaker")
+    param_grid = {"swing": [2, 3, 5], "max_age": [15, 30, 50], "stop_at": ["breaker", "sweep"]}
+
+    def _scan(self, df, ctx):
+        p, a = self.params, ctx["atr"]
+        out = []
+        for side, (O, H, L, C, piv) in _mirror(df, self.pivots(df, ctx, p["swing"], p["swing"])):
+            order = _known_iter(piv)
+            ptr, known, used, zones = 0, [], set(), []
+            for i in range(3, len(C)):
+                while ptr < len(order) and order[ptr].known_at <= i:
+                    known.append(order[ptr]); ptr += 1
+                if len(known) >= 3:
+                    l1, h1, l2 = known[-3:] if known[-1].kind == "L" else (None, None, None)
+                    if l1 and [l1.kind, h1.kind] == ["L", "H"] and l2.price < l1.price and h1.idx not in used \
+                            and i - l2.known_at <= p["max_wait"] and C[i] > h1.price:
+                        used.add(h1.idx)
+                        for k in range(l2.idx, h1.idx - 1, -1):   # last up-candle before the sweep leg
+                            if C[k] > O[k]:
+                                zones.append({"hi": H[k], "lo": L[k], "sweep": l2.price, "created": i})
+                                break
+                keep = []
+                for z in zones:
+                    if i - z["created"] > p["max_age"] or C[i] < z["sweep"]:
+                        continue
+                    if i > z["created"] and L[i] <= z["hi"] and C[i] >= z["lo"]:
+                        ref = z["lo"] if p["stop_at"] == "breaker" else z["sweep"]
+                        out.append(RawSignal(i, side, side * C[i], side * (min(ref, L[i]) - p["stop_buf_atr"] * a[i]),
+                                             "Sweep → MSS → breaker retest"))
+                        continue
+                    keep.append(z)
+                zones = keep
+        return out
+
+
+class SMCInverseFVG(Strategy):
+    name = "smc_ifvg"
+    family = "smc"
+    description = ("Inverse FVG: an opposing fair value gap that price closes through flips polarity; "
+                   "enter on the retest of the inverted gap, stop beyond it.")
+    default_params = dict(min_fvg_atr=0.3, inv_body_atr=0.6, max_age=40, retest_age=20, stop_buf_atr=0.15)
+    param_grid = {"min_fvg_atr": [0.2, 0.3, 0.5], "inv_body_atr": [0.4, 0.6, 1.0], "max_age": [20, 40, 80],
+                  "retest_age": [10, 20, 30]}
+
+    def _scan(self, df, ctx):
+        p, a = self.params, ctx["atr"]
+        out = []
+        for side, (O, H, L, C, piv) in _mirror(df, []):
+            gaps, inverted = [], []
+            for i in range(2, len(C)):
+                if L[i - 2] - H[i] > p["min_fvg_atr"] * a[i]:           # bearish gap (in this view)
+                    gaps.append({"top": L[i - 2], "bot": H[i], "created": i})
+                keep = []
+                for g in gaps:
+                    if i - g["created"] > p["max_age"]:
+                        continue
+                    if i > g["created"] and C[i] > g["top"] and C[i] - O[i] >= p["inv_body_atr"] * a[i]:
+                        # displacement close through the gap → inverted
+                        inverted.append(g | {"inv": i})
+                        continue
+                    keep.append(g)
+                gaps = keep
+                keep = []
+                for g in inverted:
+                    if i - g["inv"] > p["retest_age"] or C[i] < g["bot"]:
+                        continue
+                    if i > g["inv"] and L[i] <= g["top"] and C[i] >= g["top"]:
+                        out.append(RawSignal(i, side, side * C[i], side * (g["bot"] - p["stop_buf_atr"] * a[i]),
+                                             "Inverse FVG retest"))
+                        continue
+                    keep.append(g)
+                inverted = keep
+        return out
+
+
+class SMCLiquiditySweep(Strategy):
+    name = "smc_liquidity_sweep"
+    family = "smc"
+    description = ("Liquidity raid: price runs the previous day's low/high or the Asia range extreme, closes "
+                   "back inside, then shifts structure (CHoCH) on the entry timeframe. Stop beyond the raid.")
+    default_params = dict(swing=2, choch_window=12, stop_buf_atr=0.1, pools=["pd", "asia"])
+    param_grid = {"swing": [2, 3], "choch_window": [6, 12, 24], "pools": [["pd", "asia"], ["pd"], ["asia"]]}
+
+    def _scan(self, df, ctx):
+        p, a = self.params, ctx["atr"]
+        lv = _levels(df, ctx)
+        out = []
+        for side, (O, H, L, C, piv) in _mirror(df, self.pivots(df, ctx, p["swing"], p["swing"])):
+            pools = []
+            if "pd" in p["pools"]:
+                pools.append(lv["pdl"] if side > 0 else -lv["pdh"])
+            if "asia" in p["pools"]:
+                pools.append(lv["asia_lo"] if side > 0 else -lv["asia_hi"])
+            order = _known_iter(piv)
+            ptr, known, raid, taken = 0, [], None, set()
+            for i in range(1, len(C)):
+                while ptr < len(order) and order[ptr].known_at <= i:
+                    known.append(order[ptr]); ptr += 1
+                for lvl in pools:
+                    x = lvl[i]
+                    if np.isfinite(x) and L[i] < x and C[i] > x and (round(float(x), 6)) not in taken:
+                        taken.add(round(float(x), 6))
+                        highs = [q for q in known if q.kind == "H" and q.idx < i]
+                        raid = {"i": i, "low": L[i], "level": float(x),
+                                "choch": highs[-1].price if highs else H[max(0, i - 6):i + 1].max()}
+                if raid is not None:
+                    raid["low"] = min(raid["low"], L[i])
+                    if i - raid["i"] > p["choch_window"]:
+                        raid = None
+                    elif i > raid["i"] and C[i] > raid["choch"]:
+                        out.append(RawSignal(i, side, side * C[i], side * (raid["low"] - p["stop_buf_atr"] * a[i]),
+                                             "Liquidity raid → CHoCH", features={"pool": raid["level"] * side}))
+                        raid = None
+        return out

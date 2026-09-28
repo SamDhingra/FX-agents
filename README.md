@@ -33,7 +33,9 @@ phone and laptop.
 |---|---|
 | **MarketData** | Stores 1-minute bars. It lets the broker check resting stops first, then sends out 1m and 5m events. |
 | **Strategist** *(never trades)* | Re-backtests every strategy version each hour, per symbol, overall and **by hour of day**. Once a day (and at start-up) it **tunes** parameters and R:R and **creates** new *confluence* strategies (for example SBS entries filtered by the DTFX structure bias). New versions run in **shadow** and are **promoted** only after they beat their parent on forward trades. Losing live versions are demoted. |
-| **Selector** | A few minutes before each hour, Jev rates every live strategy per symbol and gives a confidence. That rating is blended with hour-of-day stats, and the best one is activated. A symbol can also **sit the hour out**. |
+| **Bias** | Tracks the **Daily / 4H / 1H** market-structure bias for each symbol, plus premium/discount, PDH/PDL and the Asia range, and runs the safeguards below. |
+| **News** | Keeps the economic calendar (Forex Factory feed) up to date. It blocks entries around releases, protects open trades just before them, halves size on tier-1 days and sends heads-ups. |
+| **Selector** | A few minutes before each hour, Jev rates every live strategy per symbol and gives a confidence. That rating is blended with hour-of-day stats, and the best **5m** strategy and the best **15m** strategy are activated. A symbol can also **sit the hour out**. |
 | **Trader** | Runs the active strategy on each 5-minute close. Jev grades each setup (A+…D plus a confidence), and weak setups are skipped. TradingView alerts come in here too. |
 | **Risk** | The hard gate: stop required, stop ≤ **10% of trade value**, size = 0.5% of equity at risk, max positions, entry windows, news blackouts, kill switch. |
 | **PositionManager** | At **1R**, it banks 50% and moves the stop to **+0.1R (in profit)**. At each further +1R it trails the stop up one step and **pyramids** (only if Jev rates continuation as likely **and** the worst case after the add is still ≥ $0). All positions are flattened at 15:50 NY. |
@@ -44,6 +46,10 @@ phone and laptop.
 ### Strategies (in `fxagents/strategies/`)
 | id | Model |
 |---|---|
+| `smc_order_block` | SMC order block: the last opposing candle before a displacement leg that breaks structure (optionally with an FVG). Entry on the first return into it |
+| `smc_breaker` | Breaker block: a swing low is swept, then the swing high breaks (MSS). The last up-candle before the sweep becomes the breaker. Entry on the retest |
+| `smc_ifvg` | Inverse FVG: an opposing gap that is closed through by a displacement candle flips polarity. Entry on the retest |
+| `smc_liquidity_sweep` | Liquidity raid of PDH/PDL or the Asia high/low, a close back inside, then a CHoCH on the entry timeframe |
 | `ict_fvg_sweep` | ICT Silver-Bullet style: liquidity sweep → displacement through structure (MSS) → entry on the FVG retrace, inside killzones, with 1H bias |
 | `ict_ote` | ICT Optimal Trade Entry: 62–79% retrace of the impulse leg after an MSS, killzones only |
 | `dtfx_zone` | Dave Teaches FX: the leg that broke structure becomes the zone (30/50/70%). Entry on a confirmed rejection, stop beyond the origin |
@@ -52,6 +58,11 @@ phone and laptop.
 | `rsi_pullback` | RSI recovery from the pullback threshold, with the EMA200 trend |
 | `macd_cross` | MACD signal-line cross on the correct side of zero, aligned with EMA50 |
 | *learner-made* | `primary+filter@vN` confluence strategies and tuned `name@vN` versions |
+
+Every strategy runs on **both 5-minute and 15-minute** bars (`name:5m@v1`, `name:15m@v1`). The two
+versions compete in the hourly selection and are tuned separately by the Strategist.
+
+Mitigation blocks, balanced price ranges, SMT divergence and weekly/monthly opens are **not** included yet.
 
 Each strategy has **one** `scan()` implementation, used for live trading, hourly evaluation and
 learning, so backtests and live signals can't drift apart. A test checks that `scan()` never
@@ -93,10 +104,18 @@ app after each roll: equity index futures roll quarterly (Mar/Jun/Sep/Dec); micr
 * On the Mac it runs at `http://localhost:8088`. From your iPhone over **Tailscale**, use
   `http://<your-mac>.<tailnet>.ts.net:8088/?token=<DASHBOARD_TOKEN>` once. The token is then kept
   in a cookie, and you can use Share → *Add to Home Screen* to get an app icon.
-* The dashboard shows KPIs, open positions (R now, 🔒 when the stop is in profit, adds), this hour's
-  pick per symbol with the Jev/stat blend, the equity curve (hover or touch), the strategy leaderboard
-  (overall, last 36h, this hour), the journal (tap a trade for its full event log, CSV export),
-  Jev decisions, the learner log, alerts and agent health.
+* **Overview:** equity with a sparkline, today's P&L, the news countdown or blackout banner, a
+  bias card per symbol (D/4H/1H, score gauge, premium/discount, accuracy, Jev audit), open
+  positions with an R-progress bar (🔒 when the stop is in profit), this hour's 5m and 15m picks,
+  and the equity curve.
+* **P&L calendar:** month grid. **Green days** are net profitable and **red days** net losing,
+  with deeper tint for bigger days. Dots mark tier-1 and high-impact news. There are monthly
+  totals and a daily P&L bar chart, and you can tap a day to see its trades and events.
+* **Trades:** filter by symbol, result or timeframe, then tap a trade for its full timeline.
+* **Strategies:** leaderboard (filter by symbol or 5m/15m) and the learning log.
+* **News**, and **Agents & Jev** (agent health, every Jev decision, activity).
+* On a phone it has a bottom tab bar and can be installed as an app. It supports light and dark
+  themes, and toasts pop up for new alerts.
 * The **Pause / Resume / Flatten all** buttons need the token.
 * If you ever expose it through your Cloudflare tunnel, put **Cloudflare Access** in front as well.
 
@@ -128,6 +147,38 @@ cannot reach your Mac directly, so the webhook needs a public HTTPS route (your 
 Execution always goes through IBKR.
 
 Backtest on TradingView data: chart → *Export chart data* → `python backtest.py --csv NDQ=export.csv`.
+
+## Higher-timeframe bias: a hard rule, with safeguards
+
+**Rule:** every strategy may only trade in the direction of the composite bias. The score is
+0.40 × Daily + 0.35 × 4H + 0.25 × 1H structure, and the trade needs side × score ≥ 0.25. If the
+timeframes disagree, the bias is NEUTRAL and there are no trades (set `neutral_policy: reduced`
+for half size instead). The Strategist's backtests apply the same rule, so the hourly rankings
+only count trades that could actually be taken.
+
+**When the bias is wrong:**
+1. **Fast invalidation.** 1H structure is part of the score, so a 1H break against the daily cuts
+   conviction the same hour instead of waiting for the daily candle.
+2. **Loss circuit-breaker.** Two bias-aligned losses in a row on a symbol suspend its bias until
+   the 1H structure prints a fresh break.
+3. **Jev audit.** Every hour near a session, Jev is asked whether the bias is still valid. If it
+   says probably not, the bias is IN DOUBT: half size, and only A-grade setups (≥ 0.7).
+4. **Controlled reversal exception.** A counter-bias trade is allowed only after a liquidity pool
+   (PDH/PDL/Asia) was raided, the 1H structure has already flipped the trade's way, **and** Jev
+   rates it a genuine reversal (≥ 0.7). It trades at half size, 1:1, with no pyramiding.
+5. **Accuracy tracking.** How often the bias called the next 4 hours correctly is shown on each
+   symbol's bias card.
+
+## News
+
+* **Tier 1** (FOMC, NFP, CPI, PCE, Fed Chair): no entries from 30 minutes before to 30 after.
+  Five minutes before the release, winners get their stop moved to breakeven+ and everything
+  else is closed. Size is halved for the whole day.
+* **High impact:** no entries 15/15 minutes; open trades are protected 2 minutes before.
+* **Medium impact:** no entries 5/5 minutes.
+* A push notification goes out 30 minutes ahead. Upcoming events are included in every Jev rating,
+  and the dashboard shows a countdown banner.
+* Windows, keywords, currencies and manual events are all set in `config.yaml` → `news`.
 
 ## Risk rules (enforced twice: in the Risk agent and in the broker layer)
 
