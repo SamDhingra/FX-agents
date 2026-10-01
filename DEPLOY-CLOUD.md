@@ -30,14 +30,25 @@ by IBKR.
 
 ## 0. Before you start (IBKR)
 
-1. **Use a dedicated IBKR username for the bot.** IBKR allows one login session per username.
-   If the bot uses the same username you use on TWS or your phone, logging in elsewhere will
-   kick the gateway off. To add one: Client Portal → Settings → **Users & Access Rights** → add
-   a user with trading permission for your account. Each username needs its own market-data
-   subscriptions.
-2. **Paper first.** Get the paper username and password from Client Portal → Settings →
-   **Paper Trading Account**. Enable "share real-time market data with paper account" for the
-   bot's username.
+1. **Paper first, on your own (primary) account. No second user needed.** Your paper
+   account has its **own username**, separate from your live one, so the gateway logged in as
+   the paper user doesn't kick you off TWS or IBKR Mobile. In Client Portal → Settings →
+   **Paper Trading Account**: note the paper username, set/reset its password, and turn on
+   **"Share real-time market data subscriptions with paper trading account"**. Put the
+   *paper* username/password in `.env` (`TWS_USERID`/`TWS_PASSWORD`), with
+   `TRADING_MODE=paper` and `IB_PORT=4004`.
+   - **Reset the paper balance** to roughly what you'd really trade with (same page). Sizing is
+     0.5% of equity per trade, so the default ~US$1M paper balance makes every trade far bigger
+     than you'd ever run live.
+   - **Shared data goes to one session at a time.** If you're watching charts on your live
+     login (TWS/phone) during trading hours, the paper session can lose real-time data. Check
+     `./fx.sh logs fxagents` for stale-data alerts; if it's a problem, log out of the live
+     session while testing, or set `ibkr.market_data_type: 3` (delayed) temporarily.
+   - The paper account uses your live account's trading permissions, so **futures** must be
+     enabled on the live account.
+2. **Later, for live:** a dedicated second username for the bot (Client Portal → Settings →
+   **Users & Access Rights**). IBKR allows one session per username, so the bot on your main
+   username would log you out of TWS/phone. This step is parked for now (see §8).
 3. **Market data:** the CME/COMEX/CBOT real-time data needed for the micro futures
    (MGC, MES, MNQ, MYM).
 4. **2FA (live only):** a live login needs approval in **IBKR Mobile**. The gateway restarts every
@@ -205,7 +216,7 @@ Then run `./fx.sh down && ./fx.sh up`, approve the IBKR Mobile prompt, and watch
 - [ ] `.env` is `chmod 600`, never committed (`.gitignore` covers it), and all secrets are long and random
 - [ ] Lightsail firewall: no HTTP/HTTPS rules; SSH restricted to your IP
 - [ ] Access policy allows only your email; the webhook bypass is limited to TradingView's IPs and path
-- [ ] Dedicated IBKR username for the bot, with 2FA enabled on the live account
+- [ ] Paper: the gateway uses the paper username only. Live: a dedicated IBKR username for the bot, with 2FA enabled
 - [ ] VNC password left empty except while troubleshooting (and VNC is bound to localhost only)
 - [ ] Automatic snapshots on, plus the nightly journal backup
 - [ ] ntfy topic name is unguessable (anyone who knows it can read your alerts)
