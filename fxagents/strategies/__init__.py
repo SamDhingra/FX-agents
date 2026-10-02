@@ -50,6 +50,8 @@ def build_strategy(spec: dict) -> Strategy:
               status=spec.get("status", "live"), origin=spec.get("origin", "builtin"), tf=spec.get("tf", "5min"))
     st = Confluence(spec["params"], **kw) if cls == "confluence" else BUILTIN[cls](spec.get("params"), **kw)
     st.created = spec.get("created")  # type: ignore[attr-defined]
+    st.vetted = bool(spec.get("vetted", False))  # type: ignore[attr-defined]  # approved for LIVE trading
+    st.meta = spec.get("meta") or {}  # type: ignore[attr-defined]       # learner: parent, change, kind
     return st
 
 

@@ -8,7 +8,7 @@ A reference for running, changing, and reusing the FX-Agents multi-agent intrada
   sections 2–7 into `CLAUDE.md`, and the assistant will follow the project's rules.
 
 > **Status (updated 2026-10-02).** The system has run end to end on a *synthetic* market with a
-> paper broker, and 49 unit tests pass. The default broker is now **OANDA** (v20 REST); IBKR stays
+> paper broker, and 56 unit tests pass. The default broker is now **OANDA** (v20 REST); IBKR stays
 > available. Both have only been tested against fakes, not a real practice/paper account yet, and
 > Jev has only been tested against a stubbed response. Sim P&L is meaningless,
 > because the simulated market is a random walk. Treat every result as plumbing verification,
@@ -170,6 +170,7 @@ tests/test_core.py           18 tests: risk guards, pyramid maths, no look-ahead
 tests/test_oanda.py          tests against tests/fake_oanda.py (in-memory v20 API)
 tests/test_setup_first.py    setup-first selection + shadow-book isolation
 tests/test_setup_map.py      setup map aggregation, shrunk priors, grid, compute
+tests/test_learner.py        forward records, real-results veto/demotion, live vetting gate, no duplicates
 deploy/                      launchd + systemd units
 ```
 

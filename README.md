@@ -6,7 +6,7 @@ picks the best-rated strategy for each symbol. Trades start at 1:1 R:R, pyramid 
 and move the stop into profit. There is a trade journal and a live dashboard that works on
 phone and laptop.
 
-> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 49 unit tests
+> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 56 unit tests
 > pass. Two live brokers are supported: **OANDA** (default; v20 REST API) and **IBKR** (`ib_async`).
 > Both are tested against fakes only: neither has yet traded on your real practice/paper account.
 > Run `--mode paper` for at least 2–4 weeks before you consider live.
@@ -78,7 +78,7 @@ cd fx-agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py                        # sim: 3 synthetic days, dashboard on http://localhost:8088
-python -m pytest -q                   # 49 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
+python -m pytest -q                   # 56 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
 python backtest.py --synthetic        # leaderboard + expectancy by hour
 ```
 
@@ -194,6 +194,17 @@ count, filterable by symbol, timeframe and weekday; hatched cells have fewer tha
 shrunk toward the next, to rank the setups on a bar and as context for Jev. It builds in the
 background at first start (a minute or two), rebuilds every Sunday evening before the open, and can be
 rebuilt from the dashboard. Sim/IBKR fall back to whatever history the bar store holds.
+
+**The learner (inside the Strategist).** Once a day (17:05 NY, in the daily break) it tries parameter
+tweaks, higher R:R where price has been travelling that far, and confluence filters. Each idea is fit on
+the first two-thirds of up to 90 days of history and must also win on the last third it never saw;
+Jev then reviews it for overfitting. Survivors go on probation (shadow). Every completed simulated trade
+of every version is stored permanently, so a probation version is promoted once it has 25 forward
+trades beating its parent — unless real trades (paper account + shadow book) say otherwise, which
+holds the promotion. Live versions are demoted on either a losing simulated record or losing real
+trades. On paper, promotion is automatic. **In live mode, learner-made versions only trade after you
+press "Vet for live"** on the Strategies page (`learner.live_requires_vetting`); until then their parent
+keeps trading. It never re-proposes a version it already has or has retired.
 
 To switch the real book to setup-first, set `selector.mode: setup_first` (the shadow book then runs
 hourly-pick automatically) and restart.

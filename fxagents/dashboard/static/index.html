@@ -227,6 +227,7 @@ body.shadow #pause, body.shadow #flatten{display:none}
 .hrs div i{position:absolute;left:0;right:0;bottom:0;background:var(--ghost);border-radius:4px 4px 0 0}
 .hrl{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;font-size:9.5px;color:var(--muted);text-align:center;margin-top:4px}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.btn:disabled{opacity:.4;cursor:not-allowed}
 /* setup map heatmap */
 .smctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .hm{overflow-x:auto;scrollbar-width:thin}
@@ -396,6 +397,10 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
           <div style="margin-top:12px;display:flex;gap:8px;align-items:center"><button class="btn" id="smRebuild">Rebuild now</button><span class="mut" id="smState" style="font-size:12px"></span></div>
         </div>
       </div>
+      <div class="grid" style="margin-bottom:16px">
+        <div class="card c12"><h3>Learner versions <span class="sp"></span><span class="mut" id="lrnNote" style="font-weight:500"></span></h3>
+          <div class="tbl" id="learnerTbl"><div class="empty">Loading…</div></div></div>
+      </div>
       <div class="filters" id="sfilters"></div>
       <div class="grid">
         <div class="card c8"><h3>Leaderboard <span class="sp"></span><span class="mut" style="font-weight:500">rolling backtest with the bias rule applied</span></h3><div class="tbl" id="board"></div></div>
@@ -468,7 +473,7 @@ function go(p){
   if(p === "calendar") loadCalendar();
   if(p === "trades") loadTrades();
   if(p === "compare") loadCompare();
-  if(p === "strategies") loadSetupMap();
+  if(p === "strategies"){ loadSetupMap(); loadLearner(); }
   if(S) render(S);
   window.scrollTo({top:0});
 }
@@ -904,6 +909,41 @@ function renderSetupMap(){
   $("#bestNow").innerHTML = bn.length ? bn.map(x => `<div class="it"><b style="min-width:58px">${x.symbol}</b><span class="tag acc">${esc(x.setup)}</span><span class="sp" style="flex:1"></span>
       <span class="num ${cls(x.shrunk_exp)}" title="shrunk expectancy">${sR(x.shrunk_exp)}</span><span class="mut num" style="font-size:11px">n ${x.hour_n}</span></div>`).join("")
     : `<div class="empty">Nothing with enough history at this hour.</div>`;
+}
+
+/* ── learner versions ── */
+let LRN = null;
+async function loadLearner(){
+  try{ LRN = await (await fetch("api/learner",{credentials:"same-origin"})).json(); }catch(e){ LRN = null; }
+  renderLearner();
+}
+async function vet(id, v){
+  const r = await fetch(`api/strategies/${encodeURIComponent(id)}/vet`,{method:"POST",credentials:"same-origin",
+    headers:{"content-type":"application/json"},body:JSON.stringify({vetted:v})});
+  toast(r.ok ? (v ? `${id} approved for live` : `${id} vetting removed`) : `Failed (${r.status})`); loadLearner();
+}
+function renderLearner(){
+  const el = $("#learnerTbl"); if(!el) return;
+  if(!LRN){ el.innerHTML = `<div class="empty">Couldn't load.</div>`; return; }
+  $("#lrnNote").textContent = `promotes after ${LRN.min_trades_promote} forward trades beating its parent by ${LRN.promote_margin_r}R · `
+    + (LRN.live_requires_vetting ? "live trading uses only versions you vet" : "no vetting required");
+  if(!LRN.rows.length){ el.innerHTML = `<div class="empty">No learner-made versions yet. The learner runs daily at 17:05 NY; anything it creates starts here on probation.</div>`; return; }
+  const ch = c => c ? Object.entries(c).map(([k,v])=>`${k} ${typeof v==="object"?JSON.stringify(v):v}`).join(", ") : "";
+  const st = s => `<span class="tag ${s==="live"?"acc":s==="shadow"?"gh":""}">${s==="shadow"?"probation":s}</span>`;
+  el.innerHTML = `<table><tr><th>Version</th><th class="hide-m">Change</th><th>Status</th><th class="r">Forward</th><th class="r hide-m">Parent</th><th class="r">Real</th><th class="r">Live</th></tr>${
+    LRN.rows.map(r => {
+      const f = r.forward, p = r.parent_forward, re = r.real;
+      const canVet = LRN.mode !== "sim" && r.status !== "retired" && BOOK !== "shadow";
+      const vetBtn = r.status === "retired" ? `<span class="mut">—</span>` : r.vetted
+        ? `<button class="btn" ${canVet?"":"disabled"} onclick="vet('${r.id}', false)">✓ vetted</button>`
+        : `<button class="btn" ${canVet?"":"disabled"} onclick="vet('${r.id}', true)">Vet for live</button>`;
+      return `<tr><td><b>${esc(r.id)}</b><br><small class="mut">from ${esc(r.parent)} · ${md(r.created)}</small></td>
+        <td class="hide-m" style="white-space:normal;max-width:260px"><small>${esc(r.kind||"")}: ${esc(ch(r.change))}${r.jev_robust!=null?` · Jev ${fmt(r.jev_robust,2)}`:""}</small></td>
+        <td>${st(r.status)}</td>
+        <td class="r num"><span class="${cls(f.expectancy)}">${sR(f.expectancy)}</span><br><small class="mut">${f.n}/${LRN.min_trades_promote} trades</small></td>
+        <td class="r num hide-m"><span class="${cls(p.expectancy)}">${sR(p.expectancy)}</span><br><small class="mut">${p.n}</small></td>
+        <td class="r num">${re.n ? `<span class="${cls(re.expectancy)}">${sR(re.expectancy)}</span>` : `<span class="mut">—</span>`}<br><small class="mut">${re.n}</small></td>
+        <td class="r">${vetBtn}</td></tr>`; }).join("")}</table>`;
 }
 
 /* ── render loop ── */

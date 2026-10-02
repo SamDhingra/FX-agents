@@ -41,6 +41,8 @@ async def build(cfg, args):
     store = BarStore(cfg["timezone"], max_days=cfg["timeframes"]["history_days"] + 3)
     jev = JevScorer(cfg, state, bus)
     book = StrategyBook(journal, rr=cfg["management"]["rr_initial"], tfs=tuple(cfg["timeframes"]["entry"]))
+    # live money: learner-made versions need your vetting first (they promote automatically on paper)
+    book.require_vetting = cfg["mode"] == "live" and bool((cfg.get("learner") or {}).get("live_requires_vetting", True))
     news = NewsCalendar(cfg)
     ib = oanda = None
     if cfg["mode"] == "sim":

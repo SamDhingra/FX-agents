@@ -4,10 +4,14 @@ Every `refresh_minutes`  → rolling re-evaluation of every live/shadow version 
                             (stats overall, per hour-of-day, last 36h) → feeds the Selector.
 Every `optimize_every_hours` (and daily at `optimize_at`) → learning cycle:
   1. Tune: random parameter variants + R:R progression (1:1 → 1.25 → 1.5 …, capped at rr_max),
-     chosen in-sample (first 70%), validated out-of-sample (last 30%), reviewed by Jev for overfit.
+     walk-forward on up to `learner.history_days` (90) of history: chosen on the first 2/3,
+     validated on the last 1/3 it never saw, then reviewed by Jev for overfit.
   2. Create: confluence strategies (primary entry model + other strategies' bias as filters).
-  3. New versions start in SHADOW; they are promoted to LIVE only after beating their parent on
-     forward (post-creation) shadow trades. Losing live versions are demoted; stale candidates retired.
+  3. New versions start in SHADOW. Every completed simulated trade of every version is stored
+     permanently (forward_trades), so forward records accumulate over weeks. A shadow version is
+     promoted to LIVE after `min_trades_promote` forward trades beating its parent — unless real
+     results (paper account + shadow book) disagree. Losing versions are demoted on either record.
+  4. In LIVE mode, learner-made versions trade only after you vet them (`learner.live_requires_vetting`).
 """
 from __future__ import annotations
 
@@ -36,6 +40,8 @@ class StrategistAgent(Agent):
         self.trades: dict[str, dict[str, list[dict]]] = {}
         self.busy = False
         self.rng = np.random.default_rng(self.cfg["sim"].get("seed", 7))
+        self.lc = {"history_days": 90, "is_frac": 0.67, "real_block_n": 5, "real_demote_n": 15,
+                   **(self.cfg.get("learner") or {})}
         self.bus.subscribe("clock", self.on_clock)
 
     # ── scheduling ────────────────────────────────────────────────────────
@@ -51,14 +57,37 @@ class StrategistAgent(Agent):
         if due_daily or due_every:
             await self.learn()
 
-    def frames(self) -> dict[tuple[str, str], dict]:
-        """(symbol, tf) → bars + the multi-TF bias score known at each bar close (hard rule in backtests)."""
+    def long_m1(self, sym: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Up to `history_days` of 1m bars: the cached long history (saved by the setup-map build)
+        joined with the live store's recent bars. Falls back to the store alone."""
+        m1, h1 = self.ctx.store.m1(sym), self.ctx.store.h1(sym)
+        try:
+            from ..setup_map import load_history
+            hist = load_history(self.cfg, sym)
+        except Exception:  # noqa: BLE001
+            hist = None
+        if hist is not None:
+            hm1, hh1 = hist
+            m1 = pd.concat([hm1[hm1.index < m1.index[0]] if len(m1) else hm1, m1])
+            h1 = pd.concat([hh1[hh1.index < h1.index[0]] if len(h1) else hh1, h1])
+        cut = m1.index[-1] - pd.Timedelta(days=float(self.lc["history_days"])) if len(m1) else None
+        if cut is not None:
+            m1 = m1[m1.index >= cut]
+        return m1, h1
+
+    def frames(self, long: bool = False) -> dict[tuple[str, str], dict]:
+        """(symbol, tf) → bars + the multi-TF bias score known at each bar close (hard rule in backtests).
+        long=True: up to `learner.history_days` for the learning cycle; otherwise the recent window."""
         out = {}
         for s in self.cfg["instruments"]:
-            h1 = self.ctx.store.h1(s)
+            if long:
+                from ..indicators import resample_ohlc
+                lm1, h1 = self.long_m1(s)
+            else:
+                h1 = self.ctx.store.h1(s)
             for tf in self.cfg["timeframes"]["entry"]:
                 n = int(self.ec["lookback_days"] * 24 * 60 / (pd.Timedelta(tf).total_seconds() / 60))
-                df = self.ctx.store.tf(s, tf).iloc[-n:].copy()
+                df = resample_ohlc(lm1, tf) if long else self.ctx.store.tf(s, tf).iloc[-n:].copy()
                 if len(df) < 120 or len(h1) < 48:
                     continue
                 b = bias_frame(h1, df.index + pd.Timedelta(tf), weights=self.cfg["bias"]["weights"])
@@ -72,11 +101,17 @@ class StrategistAgent(Agent):
         s = self.cfg["sessions"]
         df, bias = item["df"], item["bias"]
         kw = dict(min_align=self.cfg["bias"]["min_align"])
-        split = int(len(df) * 0.7)
+        split = int(len(df) * float(self.lc["is_frac"]))
         if part == "is":
             d = df.iloc[:split]
-            return backtest(st, d, Strategy.context(d), self.mgmt(st), s["entry_windows"], s["flatten_at"],
+            if "ctx_is" not in item:
+                item["ctx_is"] = Strategy.context(d)
+            return backtest(st, d, item["ctx_is"], self.mgmt(st), s["entry_windows"], s["flatten_at"],
                             bias_score=bias[:split], **kw)
+        if ctx is None:
+            if "ctx_full" not in item:
+                item["ctx_full"] = Strategy.context(df)
+            ctx = item["ctx_full"]
         ctx = ctx or Strategy.context(df)
         return backtest(st, df, ctx, self.mgmt(st), s["entry_windows"], s["flatten_at"],
                         start_i=split if part == "oos" else 0, bias_score=bias, **kw)
@@ -102,11 +137,34 @@ class StrategistAgent(Agent):
             self.state.strategy_stats, self.trades = out, trades
             self.state.strategy_registry = self.ctx.book.registry()
             self.last_eval = now
+            self.record_forward(trades, now)
             self.log.info("evaluated %d versions × %d symbols in %.1fs", len(self.ctx.book.evaluated()), len(out),
                           time.perf_counter() - t0)
             await self.bus.publish("stats_updated", {"ts": now.isoformat()})
         finally:
             self.busy = False
+
+    def record_forward(self, trades: dict, now: pd.Timestamp) -> None:
+        """Store every completed simulated trade permanently (a trade is complete once the max hold
+        time has passed since its entry), so forward records outlive the rolling window."""
+        done_before = now - pd.Timedelta(minutes=float(self.cfg["sessions"]["max_hold_minutes"]) + 5)
+        rows = []
+        for sym, per in trades.items():
+            for sid, tr in per.items():
+                rows += [(sid, sym, t["ts"].isoformat(), round(float(t["r"]), 4)) for t in tr if t["ts"] <= done_before]
+        try:
+            self.ctx.journal.add_forward(rows)
+        except Exception as e:  # noqa: BLE001
+            self.log.warning("forward record: %s", e)
+
+    def real_stats(self, sid: str, since: str | None) -> dict:
+        """Actual trades of this version: the account's journal + the shadow book's journal."""
+        n, tot, w = 0, 0.0, 0.0
+        books = [self.ctx.journal] + ([self.ctx.shadow.journal] if getattr(self.ctx, "shadow", None) else [])
+        for j in books:
+            s = j.live_stats(strategy=sid, since=since)
+            n += s["n"]; tot += s["n"] * s["expectancy"]; w += s["n"] * s["win_rate"]
+        return {"n": n, "expectancy": round(tot / n, 3) if n else 0.0, "win_rate": round(w / n, 3) if n else 0.0}
 
     # ── pooled helpers ────────────────────────────────────────────────────
     def _pooled(self, st: Strategy, frames, part: str) -> dict:
@@ -168,10 +226,21 @@ class StrategistAgent(Agent):
         ts = now.isoformat(timespec="seconds")
         try:
             t0 = time.perf_counter()
-            frames = self.frames()
+            frames = self.frames(True)     # reads the live bar store → stays on the event loop
+            span = max((len(v["df"]) for v in frames.values()), default=0)
+            self._note(ts, f"learning on {span} bars per symbol/TF (walk-forward {self.lc['is_frac']:.0%} fit / "
+                           f"{1-float(self.lc['is_frac']):.0%} validate)")
             props = await asyncio.to_thread(self._search, frames, list(self.ctx.book.live()))
             created = 0
+            seen = {self._sig(x.spec()) for x in self.ctx.book.items.values()}
+            for r in self.ctx.journal.strategy_rows():            # retired ones too: never re-propose them
+                try:
+                    seen.add(self._sig(__import__("json").loads(r["spec"])))
+                except Exception:  # noqa: BLE001
+                    pass
             for pr in props:
+                if self._sig(pr["spec"]) in seen:
+                    continue
                 gain = pr["oos"]["expectancy"] - pr["incumbent_oos"]["expectancy"]
                 ok_stats = pr["oos"]["n"] >= 8 and gain >= self.ec["promote_margin_r"] and pr["is"]["expectancy"] > 0
                 if not ok_stats:
@@ -185,11 +254,15 @@ class StrategistAgent(Agent):
                     continue
                 base = pr["spec"]["class"]
                 spec = pr["spec"] | {"version": self.ctx.book.next_version(base), "status": "shadow",
-                                     "origin": f"learner:{pr['parent']}", "created": ts}
+                                     "origin": f"learner:{pr['parent']}", "created": ts,
+                                     "meta": {"kind": pr["kind"], "parent": pr["parent"], "change": pr["change"],
+                                              "oos_gain_r": round(gain, 3), "oos_n": pr["oos"]["n"],
+                                              "jev_robust": round(review["prob"], 2)}}
                 st = build_strategy(spec)
                 if st.id in self.ctx.book.items:
                     continue
                 self.ctx.book.add(st, ts, f"{pr['kind']} {pr['change']} OOS +{gain:.2f}R")
+                seen.add(self._sig(pr["spec"]))
                 created += 1
                 self._note(ts, f"new shadow {st.id} ({pr['kind']} {pr['change']}): OOS {pr['oos']['expectancy']:+.2f}R "
                                f"vs {pr['incumbent_oos']['expectancy']:+.2f}R, Jev robust {review['prob']:.2f}", pr["change"])
@@ -202,11 +275,16 @@ class StrategistAgent(Agent):
             self.busy = False
         await self.evaluate_all()
 
+    @staticmethod
+    def _sig(spec: dict) -> str:
+        """Identity of a version's behaviour (class, timeframe, parameters, R:R) — not its name."""
+        import json
+        return json.dumps([spec.get("class"), spec.get("tf"), spec.get("params"), float(spec.get("rr") or 1.0)],
+                          sort_keys=True, default=str)
+
     def _forward(self, sid: str, since: str | None) -> dict:
-        tr = []
-        for sym in self.trades.values():
-            tr += [t for t in sym.get(sid, []) if since is None or t["ts"].isoformat() >= since]
-        return stats(tr)
+        """Forward record from the permanent store (accumulates across evaluation windows/restarts)."""
+        return self.ctx.journal.forward_stats(sid, since)
 
     async def promote_demote(self, now, ts):
         book, ec = self.ctx.book, self.ec
@@ -216,7 +294,13 @@ class StrategistAgent(Agent):
             since = getattr(st, "created", None)
             fwd = self._forward(st.id, since)
             par = self._forward(parent_id, since)
-            if fwd["n"] >= ec["min_trades_promote"] and fwd["expectancy"] >= par["expectancy"] + ec["promote_margin_r"] and fwd["expectancy"] > 0:
+            real = self.real_stats(st.id, since)
+            real_veto = real["n"] >= int(self.lc["real_block_n"]) and real["expectancy"] < 0
+            if real_veto and fwd["n"] >= ec["min_trades_promote"]:
+                self._note(ts, f"held {st.id}: simulated forward {fwd['expectancy']:+.2f}R but real trades "
+                               f"{real['expectancy']:+.2f}R over {real['n']}")
+            if fwd["n"] >= ec["min_trades_promote"] and fwd["expectancy"] >= par["expectancy"] + ec["promote_margin_r"] \
+                    and fwd["expectancy"] > 0 and not real_veto:
                 book.set_status(st.id, "live", ts, "promoted on forward shadow results")
                 if parent_id in book.items and not isinstance(st, Confluence):
                     book.set_status(parent_id, "shadow", ts, f"superseded by {st.id}")
@@ -228,14 +312,18 @@ class StrategistAgent(Agent):
                 self._note(ts, f"retired {st.id}: forward {fwd['expectancy']:+.2f}R")
         # demote losing live versions (always keep at least 2 live)
         pooled = {sid: self._forward(sid, None) for sid in book.items}
-        live = book.live()
+        live = [s for s in book.items.values() if s.status == "live"]
         for st in sorted(live, key=lambda s: pooled[s.id]["expectancy"]):
             p = pooled[st.id]
-            if len(book.live()) <= 2:
+            if len([s for s in book.items.values() if s.status == "live"]) <= 2:
                 break
+            real = self.real_stats(st.id, None)
             if p["n"] >= 20 and p["expectancy"] < ec["demote_below_r"]:
                 book.set_status(st.id, "shadow", ts, f"demoted: {p['expectancy']:+.2f}R over {p['n']}")
-                self._note(ts, f"demoted {st.id} to shadow ({p['expectancy']:+.2f}R over {p['n']} trades)")
+                self._note(ts, f"demoted {st.id} to shadow ({p['expectancy']:+.2f}R over {p['n']} simulated trades)")
+            elif real["n"] >= int(self.lc["real_demote_n"]) and real["expectancy"] < ec["demote_below_r"]:
+                book.set_status(st.id, "shadow", ts, f"demoted on real trades: {real['expectancy']:+.2f}R over {real['n']}")
+                self._note(ts, f"demoted {st.id} to shadow ({real['expectancy']:+.2f}R over {real['n']} real trades)")
         # re-activate recovered builtin shadows
         for st in [s for s in book.items.values() if s.status == "shadow" and s.origin == "builtin"]:
             p = pooled[st.id]

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS signals(
   entry REAL, stop REAL, action TEXT, why TEXT, quality REAL, confidence REAL);
 CREATE TABLE IF NOT EXISTS strategy_versions(
   id TEXT PRIMARY KEY, spec TEXT, status TEXT, created TEXT, updated TEXT, notes TEXT);
+CREATE TABLE IF NOT EXISTS forward_trades(version TEXT, symbol TEXT, ts TEXT, r REAL, PRIMARY KEY(version, symbol, ts));
 CREATE TABLE IF NOT EXISTS equity(ts TEXT, equity REAL, realized_today REAL);
 CREATE TABLE IF NOT EXISTS learner_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, msg TEXT, data TEXT);
 CREATE INDEX IF NOT EXISTS ix_trades_closed ON trades(closed);
@@ -77,6 +78,26 @@ class Journal:
                         "notes=COALESCE(excluded.notes, strategy_versions.notes)",
                         (spec["id"], json.dumps(spec), spec["status"], ts, ts, notes or None))
         self.db.commit()
+
+    def add_forward(self, rows: list[tuple]) -> int:
+        """Completed simulated trades per version, kept permanently so forward records accumulate
+        over weeks (the rolling evaluation window alone forgets them). rows = (version, symbol, ts, r)."""
+        if not rows:
+            return 0
+        cur = self.db.executemany("INSERT OR IGNORE INTO forward_trades VALUES(?,?,?,?)", rows)
+        self.db.commit()
+        return cur.rowcount
+
+    def forward_stats(self, version: str, since: str | None = None) -> dict:
+        q = "SELECT COUNT(*), AVG(r), SUM(CASE WHEN r>0 THEN 1 ELSE 0 END) FROM forward_trades WHERE version=?"
+        args: list = [version]
+        if since:
+            q += " AND ts>=?"; args.append(since)
+        n, exp, w = self.db.execute(q, args).fetchone()
+        return {"n": n or 0, "expectancy": round(exp or 0.0, 3), "win_rate": round((w or 0) / n, 3) if n else 0.0}
+
+    def strategy_rows(self) -> list[dict]:
+        return [dict(r) for r in self.db.execute("SELECT id, spec, status, created, updated, notes FROM strategy_versions")]
 
     def load_strategies(self) -> list[dict]:
         return [json.loads(r["spec"]) for r in self.db.execute("SELECT spec FROM strategy_versions")]

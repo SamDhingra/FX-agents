@@ -59,8 +59,27 @@ class StrategyBook:
         for st in self.items.values():
             journal.save_strategy(st.spec(), pd.Timestamp.now().isoformat(timespec="seconds"))
 
+    require_vetting = False   # set in LIVE mode: learner-made versions trade only after you vet them on paper
+
     def live(self) -> list[Strategy]:
-        return [s for s in self.items.values() if s.status == "live"]
+        out = [s for s in self.items.values() if s.status == "live"]
+        if not self.require_vetting:
+            return out
+        keep, ids = [], set()
+        for s in out:
+            if s.origin.startswith("learner:") and not getattr(s, "vetted", False):
+                parent = self.items.get(s.origin.split(":", 1)[1])
+                if parent is not None and parent.id not in ids:   # fall back to the version it replaced
+                    keep.append(parent); ids.add(parent.id)
+                continue
+            if s.id not in ids:
+                keep.append(s); ids.add(s.id)
+        return keep
+
+    def set_vetted(self, sid: str, vetted: bool, ts: str) -> None:
+        st = self.items[sid]
+        st.vetted = vetted
+        self.journal.save_strategy(st.spec(), ts, "vetted for live" if vetted else "vetting removed")
 
     def evaluated(self) -> list[Strategy]:
         return [s for s in self.items.values() if s.status in ("live", "shadow", "candidate")]

@@ -193,6 +193,22 @@ def map_path(cfg) -> str:
     return str(Path(cfg["storage"]["db_path"]).with_name("setup_map.json"))
 
 
+def history_dir(cfg) -> Path:
+    return Path(cfg["storage"]["db_path"]).parent / "history"
+
+
+def save_history(cfg, sym: str, m1: pd.DataFrame, h1: pd.DataFrame) -> None:
+    """Cache the long history so the learner can walk-forward on it between weekly rebuilds."""
+    d = history_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    pd.to_pickle((m1, h1), d / f"{sym}.pkl")
+
+
+def load_history(cfg, sym: str):
+    p = history_dir(cfg) / f"{sym}.pkl"
+    return pd.read_pickle(p) if p.exists() else None
+
+
 class SetupMapAgent:
     """Loads the map at start, builds it when missing/stale (in the background, never blocking trading),
     and rebuilds it each Sunday evening before the week opens."""
@@ -234,6 +250,10 @@ class SetupMapAgent:
                 m1 = feed._frame(await feed._paged(name, "M1", now - pd.Timedelta(days=days)))
                 h1 = feed._frame(await feed._paged(name, "H1", now - pd.Timedelta(days=days + 45)), vol=False)
                 out[sym] = (m1, h1)
+                try:
+                    save_history(self.cfg, sym, m1, h1)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("history cache %s: %s", sym, e)
                 await asyncio.sleep(0)
             return out, f"OANDA {days}-day 1-minute history"
         store = self.ctx.store                               # sim / IBKR: whatever the bar store holds

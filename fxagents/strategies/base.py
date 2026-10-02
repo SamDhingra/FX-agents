@@ -56,7 +56,8 @@ class Strategy:
     def spec(self) -> dict:
         return {"id": self.id, "class": self.name, "version": self.version, "params": self.params, "tf": self.tf,
                 "rr": self.rr, "status": self.status, "origin": self.origin, "family": self.family,
-                "created": getattr(self, "created", None)}
+                "created": getattr(self, "created", None), "vetted": bool(getattr(self, "vetted", False)),
+                "meta": getattr(self, "meta", None) or {}}
 
     # ── to implement ──────────────────────────────────────────────────────
     def _scan(self, df: pd.DataFrame, ctx: dict) -> list[RawSignal]:

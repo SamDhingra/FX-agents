@@ -287,6 +287,51 @@ def build_app(ctx) -> FastAPI:
             raise HTTPException(400, "setup map is off")
         return {"started": a.rebuild(), "status": ctx.setup_map.status}
 
+    def _real(sid, since):
+        n, tot = 0, 0.0
+        for j in [ctx.journal] + ([ctx.shadow.journal] if getattr(ctx, "shadow", None) else []):
+            s_ = j.live_stats(strategy=sid, since=since)
+            n += s_["n"]; tot += s_["n"] * s_["expectancy"]
+        return {"n": n, "expectancy": round(tot / n, 3) if n else 0.0}
+
+    @app.get("/api/learner")
+    async def api_learner(request: Request):
+        """Learner-made versions: what changed, forward record vs parent, real trades, live vetting."""
+        need(request)
+        rows = []
+        for r in ctx.journal.strategy_rows():
+            spec = json.loads(r["spec"] or "{}")
+            if not str(spec.get("origin", "")).startswith("learner:"):
+                continue
+            sid, meta = spec.get("id") or r["id"], spec.get("meta") or {}
+            parent = meta.get("parent") or spec["origin"].split(":", 1)[1]
+            since = spec.get("created")
+            rows.append({"id": sid, "status": r["status"], "parent": parent, "kind": meta.get("kind"),
+                         "change": meta.get("change"), "created": since, "updated": r["updated"], "note": r["notes"],
+                         "vetted": bool(spec.get("vetted")), "oos_gain_r": meta.get("oos_gain_r"),
+                         "jev_robust": meta.get("jev_robust"),
+                         "forward": ctx.journal.forward_stats(sid, since),
+                         "parent_forward": ctx.journal.forward_stats(parent, since),
+                         "real": _real(sid, since)})
+        rows.sort(key=lambda x: x["created"] or "", reverse=True)
+        ec = ctx.cfg["evaluator"]
+        return {"rows": rows, "mode": ctx.cfg["mode"], "require_vetting": bool(ctx.book.require_vetting),
+                "live_requires_vetting": bool((ctx.cfg.get("learner") or {}).get("live_requires_vetting", True)),
+                "min_trades_promote": ec["min_trades_promote"], "promote_margin_r": ec["promote_margin_r"]}
+
+    @app.post("/api/strategies/{sid}/vet")
+    async def api_vet(sid: str, request: Request):
+        need(request, always=True)
+        if getattr(ctx, "is_shadow", False) or sid not in ctx.book.items:
+            raise HTTPException(404, "unknown or retired version")
+        st = ctx.book.items[sid]
+        if not st.origin.startswith("learner:"):
+            raise HTTPException(400, "only learner-made versions need vetting")
+        body = await request.json()
+        ctx.book.set_vetted(sid, bool(body.get("vetted", True)), ctx.state.now.isoformat(timespec="seconds"))
+        ctx.state.alert("warn", f"{sid} {'vetted for live' if st.vetted else 'vetting removed'}")
+        return {"ok": True, "vetted": st.vetted}
+
     @app.get("/api/compare")
     async def api_compare(request: Request, range: str = "week"):
         need(request)
