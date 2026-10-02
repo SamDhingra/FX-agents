@@ -49,6 +49,8 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         "dashboard.token": "DASHBOARD_TOKEN",
         "tradingview.webhook_secret": "TV_WEBHOOK_SECRET",
         "mode": "FX_MODE",
+        "broker": "FX_BROKER",
+        "oanda.environment": "OANDA_ENVIRONMENT",
         # cloud / container overrides
         "ibkr.host": "IB_HOST",
         "ibkr.port": "IB_PORT",
@@ -64,4 +66,24 @@ def load_config(path: str | Path = "config.yaml") -> Config:
             for p in parents:
                 node = node.setdefault(p, {})
             node[leaf] = os.environ[env]
+    return cfg
+
+
+def apply_broker(cfg: Config) -> Config:
+    """For paper/live on OANDA, swap each instrument's IBKR futures spec for its `oanda:` block.
+    Sim and backtests keep the top-level values. Idempotent."""
+    cfg.setdefault("broker", "ibkr")
+    if cfg["broker"] not in ("ibkr", "oanda"):
+        raise SystemExit(f"broker must be ibkr or oanda, not {cfg['broker']!r}")
+    if cfg["mode"] == "sim" or cfg["broker"] != "oanda" or cfg.get("_broker_applied"):
+        return cfg
+    for sym, ic in cfg["instruments"].items():
+        o = ic.get("oanda")
+        if not o or not o.get("instrument"):
+            raise SystemExit(f"{sym}: broker is oanda but instruments.{sym}.oanda.instrument is not set")
+        ic["oanda_instrument"] = o["instrument"]
+        for k, v in o.items():
+            if k != "instrument":
+                ic[k] = v
+    cfg["_broker_applied"] = True
     return cfg

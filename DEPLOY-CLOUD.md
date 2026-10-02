@@ -4,65 +4,60 @@ This uses the same setup as the Jev app (`jev.advanceanalytics.net`): **AWS Ligh
 Central (ca-central-1)** running **Docker Compose**, reached only through a **Cloudflare Tunnel**
 with **Cloudflare Access email codes** in front. Nothing is exposed directly to the internet.
 
+The default broker is **OANDA** (practice account for paper, live account later). The bot talks
+to OANDA's REST API with your API token, so there is no gateway to run, no daily restart and no
+weekly phone approval. IBKR remains available (appendix A) once futures are enabled there.
+
 ```
  phone / laptop ──HTTPS──► Cloudflare Access (email one-time PIN)
                                    │
                           Cloudflare Tunnel (outbound only)
                                    │
- ┌──────────── Lightsail · Ubuntu 24.04 · Docker Compose ────────────┐
- │  cloudflared ──► fxagents:8088 (agents + dashboard) ──► ib-gateway │──► IBKR
- │                        │ ./data/journal.sqlite    (IBC, headless)  │
- └────────────────────────────────────────────────────────────────────┘
+ ┌──────────── Lightsail · Ubuntu 24.04 · Docker Compose ─────────┐
+ │  cloudflared ──► fxagents:8088 (agents + dashboard) ───────────│──HTTPS──► OANDA v20 API
+ │                        │ ./data/journal.sqlite                 │          (practice / live)
+ └────────────────────────────────────────────────────────────────┘
  TradingView alerts ──► /webhook/tradingview (Access bypass, TradingView IPs only)
 ```
 
-**Use a separate instance from the Jev app.** This box holds broker credentials and runs a Java
-gateway that needs about 1 GB of memory. The Jev app runs model-written code for several users,
-so keep the two isolated. You can reuse the same Cloudflare account, domain, and one-time-PIN
-login method.
+**Use a separate instance from the Jev app.** This box holds your broker token. The Jev app runs
+model-written code for several users, so keep the two isolated. You can reuse the same Cloudflare
+account, domain and one-time-PIN login.
 
-**Cost:** Lightsail 4 GB / 2 vCPU / 80 GB is **US$24 per month**. The 2 GB plan (US$12) works
-for paper trading, but it's tight once the strategist's hourly backtests run next to IB Gateway.
-Cloudflare Tunnel and Access (up to 50 users) are free. IBKR market data is billed separately
-by IBKR.
+**Cost:** with OANDA the **2 GB / 2 vCPU plan (US$12/month)** is enough; take the 4 GB plan
+(US$24) if `docker stats` shows memory pressure during the strategist's hourly backtests, or if
+you later add IB Gateway. Cloudflare Tunnel and Access (up to 50 users) are free. OANDA's cost is
+in the spread (no commission, no data fees).
 
 ---
 
-## 0. Before you start (IBKR)
+## 0. Before you start (OANDA)
 
-1. **Paper first, on your own (primary) account. No second user needed.** Your paper
-   account has its **own username**, separate from your live one, so the gateway logged in as
-   the paper user doesn't kick you off TWS or IBKR Mobile. In Client Portal → Settings →
-   **Paper Trading Account**: note the paper username, set/reset its password, and turn on
-   **"Share real-time market data subscriptions with paper trading account"**. Put the
-   *paper* username/password in `.env` (`TWS_USERID`/`TWS_PASSWORD`), with
-   `TRADING_MODE=paper` and `IB_PORT=4004`.
-   - **Reset the paper balance** to roughly what you'd really trade with (same page). Sizing is
-     0.5% of equity per trade, so the default ~US$1M paper balance makes every trade far bigger
-     than you'd ever run live.
-   - **Shared data goes to one session at a time.** If you're watching charts on your live
-     login (TWS/phone) during trading hours, the paper session can lose real-time data. Check
-     `./fx.sh logs fxagents` for stale-data alerts; if it's a problem, log out of the live
-     session while testing, or set `ibkr.market_data_type: 3` (delayed) temporarily.
-   - The paper account uses your live account's trading permissions, so **futures** must be
-     enabled on the live account.
-2. **Later, for live:** a dedicated second username for the bot (Client Portal → Settings →
-   **Users & Access Rights**). IBKR allows one session per username, so the bot on your main
-   username would log you out of TWS/phone. This step is parked for now (see §8).
-3. **Market data:** the CME/COMEX/CBOT real-time data needed for the micro futures
-   (MGC, MES, MNQ, MYM).
-4. **2FA (live only):** a live login needs approval in **IBKR Mobile**. The gateway restarts every
-   day at 17:05 NY (`IB_AUTO_RESTART_TIME`, during the CME break when the bot is flat) and does
-   not need 2FA for those restarts. **About once a week (usually Sunday) IBKR forces a full
-   login, and you tap Approve on your phone.** If you miss it, the app alerts you that data is
-   stale, and the stops already resting at IBKR stay in place.
+1. **Practice account + API token.** In the OANDA hub, open your **practice (demo)** account and
+   go to **Manage API Access** → generate a token. Note the **practice account ID** (looks like
+   `101-002-1234567-001`). A practice token only works on the practice server, and a live token
+   only on live.
+2. **Set the practice balance** to roughly what you'd really trade with, if OANDA lets you
+   choose it. Sizing is 0.5% of equity per trade, so a huge demo balance makes every trade far
+   bigger than you'd run live. A CAD account is fine: the bot converts equity to USD for sizing.
+3. **Instruments the bot trades:** `XAU_USD`, `SPX500_USD`, `NAS100_USD`, `US30_USD` (CFDs:
+   1 unit = $1 per index point; gold 1 unit = 1 oz). Tick size, unit step and minimum size are read
+   from your account at start-up. **Small accounts:** if 0.5% of equity is less than one minimum
+   unit × a typical stop, that trade is skipped (logged on the Trades page) rather than
+   oversized.
+4. **Try it from your Mac first (optional, 2 minutes):** in `~/Claude/fx-agents`, put
+   `OANDA_API_TOKEN=…` and `OANDA_ACCOUNT_ID=…` in a file called `.env`, then run
+   `pip install -r requirements.txt && python check_oanda.py`. It's **read-only**: it prints the
+   account, whether each instrument is tradeable, its precision and the latest price.
+   `python main.py --mode paper` then runs the whole bot on the practice account with the
+   dashboard on http://localhost:8088.
 
 ---
 
 ## 1. Create the server (Lightsail console)
 
 1. Lightsail → **Create instance** → Region **Canada (Central) ca-central-1** → **Linux/Unix →
-   OS only → Ubuntu 24.04 LTS** → plan **$24 (4 GB)** → name it `fx-agents`.
+   OS only → Ubuntu 24.04 LTS** → plan **$12 (2 GB)** → name it `fx-agents`.
 2. **Networking tab → attach a static IP.**
 3. **Networking → IPv4 firewall:** delete the HTTP (80) rule. Keep **SSH (22)** but restrict it to
    **your IP** (or keep only the browser SSH). The tunnel needs no inbound ports at all.
@@ -78,7 +73,7 @@ ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem ubuntu@<static-ip>
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu && newgrp docker
 
-# 2 GB swap (a cushion for Java + pandas), NY time, automatic security updates
+# 2 GB swap (a cushion for pandas), NY time, automatic security updates
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 sudo timedatectl set-timezone America/New_York
@@ -96,11 +91,13 @@ git init && git add -A && git commit -m "fx-agents" && gh repo create fx-agents 
 git clone git@github.com:<you>/fx-agents.git ~/fx-agents     # add the server's SSH key as a deploy key first
 ```
 
-**Option B: copy the zip.**
+**Option B: copy the folder.**
 
 ```bash
-scp -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem fx-agents.zip ubuntu@<static-ip>:~
-ssh ... 'sudo apt-get install -y unzip && unzip fx-agents.zip'
+# on your Mac (from ~/Claude)
+tar --exclude=.env --exclude=data --exclude=.git -czf fx-agents.tgz fx-agents
+scp -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem fx-agents.tgz ubuntu@<static-ip>:~
+ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem ubuntu@<static-ip> 'tar -xzf fx-agents.tgz'
 ```
 
 ## 4. Cloudflare Tunnel (Zero Trust dashboard)
@@ -136,15 +133,15 @@ require it.
 ```bash
 cd ~/fx-agents
 cp .env.cloud.example .env && chmod 600 .env
-nano .env        # FX_MODE=paper, TRADING_MODE=paper, IB_PORT=4004, TWS_USERID/TWS_PASSWORD (paper),
+nano .env        # FX_MODE=paper, FX_BROKER=oanda, OANDA_API_TOKEN, OANDA_ACCOUNT_ID (practice),
                  # CF_TUNNEL_TOKEN, TYPESAFE_API_KEY, DASHBOARD_TOKEN (long random), NTFY_TOPIC …
                  # generate secrets with:  openssl rand -hex 24
 
 ./fx.sh test     # builds the image and runs the unit tests inside it
-./fx.sh sim 2    # optional: 2-day simulation in a throwaway container (no IBKR needed)
-./fx.sh up       # starts ib-gateway, fxagents, cloudflared
-./fx.sh logs ib-gateway     # wait for the login to complete (1–2 min)
-./fx.sh logs                # app: "connected to IBKR … accounts […]", history loaded, bias computed
+./fx.sh check    # read-only OANDA check: account, instruments, prices (no orders)
+./fx.sh sim 2    # optional: 2-day simulation in a throwaway container
+./fx.sh up       # starts fxagents + cloudflared
+./fx.sh logs     # expect: "OANDA practice account …", "NDQ: … historical 1m bars", "dashboard → …"
 ./fx.sh status
 ```
 
@@ -154,18 +151,16 @@ an email code the first time, and the token is remembered after that. On iPhone,
 
 **Notifications:** install **ntfy** on your phone and subscribe to the topic you put in `NTFY_TOPIC`
 (make it long and unguessable). You'll get entries, exits, stop moves into profit, adds, news
-heads-ups, kill-switch alerts, and "IBKR disconnected" messages.
+heads-ups and kill-switch alerts.
 
 ## 7. Daily operation
 
 | When | What |
 |---|---|
-| Always | Nothing to do. The app runs 24/5, flattens at 15:50 NY, and the gateway restarts at 17:05 NY |
-| Sunday evening (live only) | Approve the IBKR Mobile 2FA prompt when the weekly re-login happens |
-| After each futures roll | `./fx.sh restart fxagents` so the front-month contract is picked up |
+| Always | Nothing to do. The app runs 24/5 and flattens at 15:50 NY |
 | Weekly | `./fx.sh backup` (or add the cron line below); review the Strategies page |
 | Code changes | `git push` on your Mac → `./fx.sh update` on the server |
-| Emergency | Dashboard **Pause** / **Flatten**, or `./fx.sh pause` / `./fx.sh flatten` over SSH |
+| Emergency | Dashboard **Pause** / **Flatten**, or `./fx.sh pause` / `./fx.sh flatten` over SSH. You can also close trades in the OANDA app; the bot notices within ~15 s and books them |
 
 Nightly journal backup (on the server):
 
@@ -173,40 +168,43 @@ Nightly journal backup (on the server):
 ( crontab -l 2>/dev/null; echo '30 17 * * 1-5 cd ~/fx-agents && ./fx.sh backup >/dev/null 2>&1' ) | crontab -
 ```
 
-**What happens on restarts:** Docker restarts crashed containers automatically. If the gateway
-drops the connection, the app alerts you, exits, and comes back up. On start-up it retries the
-gateway for up to 10 minutes while it logs in. **Stops always rest at IBKR**, so a restart never
-leaves a position unprotected. Because this is a day-trading system, any position the new
-process didn't open itself is detected and closed within about a minute (you get an alert when
-that happens).
+**How protection works at OANDA:** every entry is a market order with the stop attached
+(`stopLossOnFill`), so OANDA creates the stop in the same transaction as the fill. The bot then
+re-reads the trade, and if the stop is somehow missing it closes the trade at once. Each pyramid
+add is its own OANDA trade with its own stop; moving the stop moves it on all of them. **Stops rest
+at OANDA**, so a crash or restart never leaves a position unprotected. On restart, any open
+trade the new process didn't open itself is closed within about a minute (with an alert),
+because this is a day-trading system.
 
 ## 8. Moving to live (only after weeks of paper that you're happy with)
 
-In `.env`, using the **dedicated live username**, set:
+Generate a **live** API token in the OANDA hub (live tokens differ from practice tokens), then in
+`.env`:
 
 ```
 FX_MODE=live
-TRADING_MODE=live
-IB_PORT=4003
 I_UNDERSTAND_LIVE_TRADING=yes
-TWS_USERID=<bot username>
-TWS_PASSWORD=<bot password>
+OANDA_API_TOKEN=<live token>
+OANDA_ACCOUNT_ID=<live account id>
 ```
 
-Then run `./fx.sh down && ./fx.sh up`, approve the IBKR Mobile prompt, and watch
-`./fx.sh logs ib-gateway`. Consider temporarily lowering `risk.risk_per_trade_pct` in
-`config.yaml` for the first live weeks.
+Run `./fx.sh check --live` (read-only), then `./fx.sh restart fxagents`. Consider temporarily
+lowering `risk.risk_per_trade_pct` in `config.yaml` for the first live weeks. The app refuses to
+start live without `I_UNDERSTAND_LIVE_TRADING=yes`, and paper mode can never point at the live
+server.
 
 ## 9. Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | Tunnel "Down" in Cloudflare | `./fx.sh logs cloudflared`. Usually a wrong or missing `CF_TUNNEL_TOKEN` |
-| 502 from trade.advanceanalytics.net | App still starting (it waits for the gateway). `./fx.sh logs`, then `./fx.sh status` |
-| App logs repeat "IBKR … not ready" | Gateway not logged in: `./fx.sh logs ib-gateway`. Wrong credentials, a pending 2FA, or the username is logged in elsewhere |
-| Need to see the gateway's login screen | Set `VNC_SERVER_PASSWORD`, `./fx.sh restart ib-gateway`, then `./fx.sh vnc` shows the SSH-tunnel command |
-| "competing live session" / kicked off | The same username is logged in on TWS or mobile. Use the dedicated bot username |
-| No market data / stale-data alerts | Missing CME subscription, or data not shared with the paper account. Temporarily set `ibkr.market_data_type: 3` |
+| 502 from trade.advanceanalytics.net | App still starting. `./fx.sh logs`, then `./fx.sh status` |
+| "OANDA rejected the token/account" | Practice token used with a live account ID (or the reverse), or a typo. `./fx.sh check` shows which accounts the token can see |
+| "instrument … not tradeable on this OANDA account" | Your account/region doesn't offer that CFD. Remove the symbol from `instruments` in `config.yaml` or change its `oanda.instrument` |
+| Trades skipped with "unit(s) risk $… > budget" | Account too small for the minimum size at 0.5% risk. Raise `risk.risk_per_trade_pct` slightly or accept fewer trades |
+| Orders rejected "INSUFFICIENT_MARGIN" | Lower `max_units` for that symbol in `config.yaml`, or fewer simultaneous positions (`risk.max_open_positions`) |
+| Orders rejected mentioning client extensions | Account linked to MT4: set `oanda.client_extensions: false` |
+| Stale-data alerts | Weekend or the daily 17:00 NY break are expected. Otherwise check `./fx.sh logs` for OANDA errors |
 | Webhook 403 | The Access bypass app for `/webhook/tradingview` is missing, or TradingView's IPs changed (check their docs) |
 | Server slow / out of memory | `docker stats`. Move to the 4 GB plan, and confirm swap is on (`swapon --show`) |
 | Wrong day boundaries | The server and containers use America/New_York. Check `timedatectl` |
@@ -216,25 +214,45 @@ Then run `./fx.sh down && ./fx.sh up`, approve the IBKR Mobile prompt, and watch
 - [ ] `.env` is `chmod 600`, never committed (`.gitignore` covers it), and all secrets are long and random
 - [ ] Lightsail firewall: no HTTP/HTTPS rules; SSH restricted to your IP
 - [ ] Access policy allows only your email; the webhook bypass is limited to TradingView's IPs and path
-- [ ] Paper: the gateway uses the paper username only. Live: a dedicated IBKR username for the bot, with 2FA enabled
-- [ ] VNC password left empty except while troubleshooting (and VNC is bound to localhost only)
+- [ ] OANDA: the practice token for paper; generate the live token only when you go live, and revoke tokens you no longer use (hub → Manage API Access)
 - [ ] Automatic snapshots on, plus the nightly journal backup
 - [ ] ntfy topic name is unguessable (anyone who knows it can read your alerts)
 
 ---
 
-### Files added for the cloud deployment
+## Appendix A — IBKR instead of OANDA
+
+Needs **futures trading permission** on the IBKR account (Client Portal → Settings → Account
+Settings → Trading Permissions; margin account required) and the CME/COMEX/CBOT real-time data
+subscriptions for MGC, MES, MNQ, MYM.
+
+1. **Paper first, on your own account.** The paper account has its **own username**, so the
+   gateway doesn't kick you off TWS or IBKR Mobile. Client Portal → Settings → **Paper Trading
+   Account**: note the paper username, set its password, turn on **"Share real-time market data
+   subscriptions with paper trading account"**, and reset the paper balance to a realistic amount.
+   Shared data goes to one session at a time, so watching charts on your live login can starve
+   the bot of real-time data; set `ibkr.market_data_type: 3` (delayed) temporarily if needed.
+2. In `.env`: `FX_BROKER=ibkr`, `COMPOSE_PROFILES=ibkr`, `TRADING_MODE=paper`, `IB_PORT=4004`,
+   `TWS_USERID` / `TWS_PASSWORD` = the paper login. `./fx.sh up` then also starts the
+   `ib-gateway` container (IBC, headless); watch it log in with `./fx.sh logs ib-gateway`.
+   Use the 4 GB server plan (the gateway is Java and needs about 1 GB).
+3. **Live:** a dedicated second username for the bot (one session per username), `TRADING_MODE=live`,
+   `IB_PORT=4003`. Live logins need **IBKR Mobile 2FA**: the gateway restarts daily at 17:05 NY
+   without 2FA, but about once a week (usually Sunday) you approve a full re-login on your phone.
+4. After each futures roll: `./fx.sh restart fxagents` so the front-month contract is picked up.
+5. Troubleshooting: "IBKR … not ready" = gateway not logged in (credentials, pending 2FA, or the
+   username is logged in elsewhere). See the gateway's login screen with `VNC_SERVER_PASSWORD` set,
+   `./fx.sh restart ib-gateway`, then `./fx.sh vnc`.
+
+---
+
+### Files for the cloud deployment
 
 | File | Purpose |
 |---|---|
 | `Dockerfile` | App image: Python 3.11-slim, non-root user, health check on `/healthz` |
-| `docker-compose.yml` | `ib-gateway` (ghcr.io/gnzsnz/ib-gateway, IBC), `fxagents`, `cloudflared`; no public ports |
+| `docker-compose.yml` | `fxagents`, `cloudflared`, and `ib-gateway` only with `COMPOSE_PROFILES=ibkr`; no public ports |
 | `.env.cloud.example` | Every setting and secret the stack needs |
-| `fx.sh` | `up`, `down`, `logs`, `status`, `update`, `test`, `sim`, `backup`, `pause`, `resume`, `flatten`, `vnc` |
+| `fx.sh` | `up`, `down`, `logs`, `status`, `update`, `test`, `check`, `sim`, `backup`, `pause`, `resume`, `flatten`, `vnc` |
+| `check_oanda.py` | Read-only OANDA connection check (account, instruments, precision, prices) |
 | `.dockerignore` | Keeps `.env`, `data/` and `.git` out of the image |
-
-App changes for running in containers: environment overrides for `IB_HOST`, `IB_PORT`,
-`IB_CLIENT_ID`, `IB_ACCOUNT`, `DASHBOARD_PORT` and `FX_DB_PATH`; up to 10 minutes of connection
-retries while the gateway logs in; exit-and-restart when IBKR disconnects; closing of broker
-positions the app isn't managing; an immediate response to TradingView webhooks; and
-`I_UNDERSTAND_LIVE_TRADING=yes` as the environment-variable version of the live-trading flag.

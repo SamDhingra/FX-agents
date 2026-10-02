@@ -1,10 +1,12 @@
 # ───────────────────────────────────────────────────────────────────────────
 #  FX-Agents configuration
 #  mode: sim   → synthetic market + paper broker (no accounts needed)
-#        paper → IBKR market data + IBKR PAPER account (port 4002 / 7497)
-#        live  → IBKR market data + LIVE account (port 4001 / 7496)
+#        paper → broker's PAPER/practice account (OANDA practice, or IBKR paper port 4002)
+#        live  → broker's LIVE account
+#  broker: oanda | ibkr   (paper/live only; sim always uses the built-in paper broker)
 # ───────────────────────────────────────────────────────────────────────────
 mode: sim
+broker: oanda                       # env FX_BROKER overrides
 timezone: America/New_York          # all session logic runs on NY time (ICT convention)
 base_currency: USD
 starting_equity: 100000             # only used in sim mode
@@ -16,8 +18,16 @@ ibkr:
   account: ""                       # leave blank to use the default account
   market_data_type: 1               # 1 live, 3 delayed (useful if you lack a CME data subscription)
 
-# Instruments. Default = CME micro futures (tight spreads, nearly 24h, available to IBKR Canada).
-# Alternatives are listed per symbol; swap `contract` if you prefer spot gold / index CFDs.
+oanda:
+  # practice for mode=paper, live for mode=live (paper can never point at live)
+  # token + account id come from .env: OANDA_API_TOKEN, OANDA_ACCOUNT_ID (e.g. 001-002-1234567-001)
+  position_fill: DEFAULT            # an entry is also refused if it would offset the opposite side
+  client_extensions: true           # set false if the account is linked to MT4
+  poll_seconds: 5
+
+# Instruments. Top-level values = IBKR CME micro futures (also used by sim/backtests).
+# The `oanda:` block per symbol replaces them when broker = oanda (CFDs, 1 unit = $1 per point,
+# gold 1 unit = 1 oz). Tick size, unit step and minimum size are read from the account at start.
 instruments:
   XAUUSD:
     contract: {secType: CONTFUT, symbol: MGC, exchange: COMEX}   # alt: {secType: CMDTY, symbol: XAUUSD, exchange: SMART}
@@ -27,6 +37,7 @@ instruments:
     max_units: 10
     sim_start_price: 3650
     sim_daily_vol: 0.012
+    oanda: {instrument: XAU_USD, multiplier: 1, commission_per_unit: 0, max_units: 200}
   SPX:
     contract: {secType: CONTFUT, symbol: MES, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUS500, exchange: SMART}
     multiplier: 5
@@ -35,6 +46,7 @@ instruments:
     max_units: 20
     sim_start_price: 6600
     sim_daily_vol: 0.010
+    oanda: {instrument: SPX500_USD, multiplier: 1, commission_per_unit: 0, max_units: 50}
   NDQ:
     contract: {secType: CONTFUT, symbol: MNQ, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUST100, exchange: SMART}
     multiplier: 2
@@ -43,6 +55,7 @@ instruments:
     max_units: 20
     sim_start_price: 24500
     sim_daily_vol: 0.013
+    oanda: {instrument: NAS100_USD, multiplier: 1, commission_per_unit: 0, max_units: 30}
   US30:
     contract: {secType: CONTFUT, symbol: MYM, exchange: CBOT}    # alt CFD: {secType: CFD, symbol: IBUS30, exchange: SMART}
     multiplier: 0.5
@@ -51,6 +64,7 @@ instruments:
     max_units: 20
     sim_start_price: 46500
     sim_daily_vol: 0.009
+    oanda: {instrument: US30_USD, multiplier: 1, commission_per_unit: 0, max_units: 20}
 
 timeframes:
   entry: [5min, 15min]    # every strategy runs on both; the 5m and 15m versions compete each hour

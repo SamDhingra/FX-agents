@@ -6,9 +6,10 @@ picks the best-rated strategy for each symbol. Trades start at 1:1 R:R, pyramid 
 and move the stop into profit. There is a trade journal and a live dashboard that works on
 phone and laptop.
 
-> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 10 unit tests
-> pass. The IBKR execution path is written against `ib_async`, but it has **not** been run
-> against your IB Gateway yet. Run `--mode paper` for at least 2–4 weeks before you consider live.
+> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 34 unit tests
+> pass. Two live brokers are supported: **OANDA** (default; v20 REST API) and **IBKR** (`ib_async`).
+> Both are tested against fakes only: neither has yet traded on your real practice/paper account.
+> Run `--mode paper` for at least 2–4 weeks before you consider live.
 > The P&L numbers from sim mode are meaningless, because the market in sim mode is a random walk.
 
 ---
@@ -17,7 +18,7 @@ phone and laptop.
 
 ```
              ┌──────────── bus (asyncio pub/sub) ─────────────┐
- IBKR / Sim ─► MarketData ─► bar_1m ─► PositionManager ─► Broker (IBKR / Paper)
+ OANDA/IBKR/Sim ─► MarketData ─► bar_1m ─► PositionManager ─► Broker (OANDA / IBKR / Paper)
                     │                        ▲   ▲
                     └─► bar_5m ─► Trader ─► Risk ┘   │
                                     ▲                 │
@@ -77,11 +78,24 @@ cd fx-agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py                        # sim: 3 synthetic days, dashboard on http://localhost:8088
-python -m pytest -q                   # 10 tests: risk guards, pyramiding math, no look-ahead, Jev parsing
+python -m pytest -q                   # 34 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA adapter
 python backtest.py --synthetic        # leaderboard + expectancy by hour
 ```
 
-## Going to IBKR paper
+## Going to OANDA practice (default broker)
+
+1. In the OANDA hub, open your **practice** account → **Manage API Access** → generate a token.
+2. Copy `.env.example` to `.env` and set `OANDA_API_TOKEN`, `OANDA_ACCOUNT_ID` (the practice
+   account ID), plus `TYPESAFE_API_KEY`, `DASHBOARD_TOKEN` and your ntfy or Telegram details.
+3. `python check_oanda.py` is a **read-only** check: account, instruments, precision, prices.
+4. `python main.py --mode paper` trades the practice account. Instruments are the CFDs `XAU_USD`,
+   `SPX500_USD`, `NAS100_USD`, `US30_USD` (set per symbol under `oanda:` in `config.yaml`).
+
+Every entry carries its stop (`stopLossOnFill`), each pyramid add is its own OANDA trade with the
+same stop, and stop fills are picked up by polling open trades every ~15 s. Live: a live token
+and account ID, then `python main.py --mode live --i-understand-live-trading`.
+
+## Going to IBKR paper (`--broker ibkr`, needs futures permission)
 
 1. **IB Gateway** (or TWS): log in to the **paper** account. Go to Configure → API → Settings:
    enable socket clients, set port **4002**, *uncheck* read-only API, and add 127.0.0.1 as a trusted IP.
@@ -92,9 +106,9 @@ python backtest.py --synthetic        # leaderboard + expectancy by hour
    Canada whether your account can trade them.
 3. Copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY`, `DASHBOARD_TOKEN`, and your ntfy or Telegram details.
 4. `python backtest.py --ibkr --days 20` checks each strategy on real history first.
-5. `python main.py --mode paper`
+5. `python main.py --mode paper --broker ibkr` (or `broker: ibkr` in `config.yaml`)
 
-Live needs `python main.py --mode live --i-understand-live-trading` and port 4001.
+Live needs `python main.py --mode live --broker ibkr --i-understand-live-trading` and port 4001.
 
 **Futures roll:** the continuous contract resolves to the front month at start-up. Restart the
 app after each roll: equity index futures roll quarterly (Mar/Jun/Sep/Dec); micro gold rolls bimonthly.
@@ -151,7 +165,7 @@ Alert webhook URL: `https://<your-host>/webhook/tradingview`. The message looks 
 Alerts are treated as one more strategy. They are graded by Jev and sized and checked by Risk. If an
 alert has no stop, a 1-ATR stop is attached, because no trade goes out without one. TradingView
 cannot reach your Mac directly, so the webhook needs a public HTTPS route (your Cloudflare tunnel).
-Execution always goes through IBKR.
+Execution goes through the configured broker (OANDA or IBKR).
 
 Backtest on TradingView data: chart → *Export chart data* → `python backtest.py --csv NDQ=export.csv`.
 
@@ -190,8 +204,9 @@ only count trades that could actually be taken.
 ## Risk rules (enforced twice: in the Risk agent and in the broker layer)
 
 * No stop means no order. A stop on the wrong side means no order. A stop wider than **10% of trade value** means no order.
-* Stops only ever move toward profit. At IBKR the stop is a real resting **GTC STP** child order,
-  so the position stays protected if the app or the laptop goes down.
+* Stops only ever move toward profit. The stop always rests at the broker (OANDA: a GTC stop-loss
+  created with the fill; IBKR: a GTC STP child order), so the position stays protected if the app or
+  the server goes down.
 * **Also added:** size so that a full stop-out costs ≤ **0.5% of equity**. On leveraged futures a 10%
   price stop alone could be many times your account, so the 10% rule is the outer bound and the
   0.5% rule is the one that actually binds.
@@ -202,13 +217,15 @@ only count trades that could actually be taken.
 
 ```
 config.yaml            all settings (instruments, risk, sessions, management, Jev, notifications)
-main.py                runs every agent (sim | paper | live)
+main.py                runs every agent (sim | paper | live) on OANDA or IBKR
+check_oanda.py         read-only OANDA connection check
 backtest.py            leaderboard + expectancy by hour (synthetic | TradingView CSV | IBKR)
 fxagents/strategies/   smc.py (ICT, DTFX, SBS) · classic.py (S/R, RSI, MACD) · confluence builder
 fxagents/agents/       trading.py · strategist.py · ops.py
 fxagents/sim.py        management-accurate trade simulator + stats + synthetic market
 fxagents/jev.py        Jev scorer with heuristic fallback
 fxagents/broker.py     PaperBroker, IBKRBroker (bracket entry + resting GTC stop)
+fxagents/oanda.py      OandaFeed + OandaBroker (v20 REST, stopLossOnFill, per-trade stops)
 fxagents/journal.py    SQLite journal
 fxagents/dashboard/    FastAPI server + single-page responsive UI
 deploy/                launchd plist (Mac, always-on) · systemd unit (Linux / Lightsail)
@@ -216,7 +233,7 @@ deploy/                launchd plist (Mac, always-on) · systemd unit (Linux / L
 
 ## Honest notes
 
-* This is **intraday algorithmic** trading on 1–5 minute bars, not HFT. Python plus the IBKR API
+* This is **intraday algorithmic** trading on 1–15 minute bars, not HFT. Python plus a broker API
   adds latency in the tens to hundreds of milliseconds. That is fine for these setups; it would not work for tick scalping.
 * The ICT / DTFX / SBS rules are mechanical interpretations of discretionary methods. Check a
   sample of signals on TradingView against how you read them, then adjust the parameters.

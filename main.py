@@ -1,7 +1,8 @@
 """FX-Agents entry point.
 
     python main.py                       # sim mode: synthetic market, paper broker, dashboard on :8088
-    python main.py --mode paper          # IBKR paper account (IB Gateway/TWS must be running)
+    python main.py --mode paper          # paper on the configured broker (OANDA practice by default)
+    python main.py --mode paper --broker ibkr   # IBKR paper (IB Gateway/TWS must be running)
     python main.py --mode live --i-understand-live-trading
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ from fxagents.agents.trading import (MarketDataAgent, PositionManagerAgent, Risk
                                      TraderAgent)
 from fxagents.broker import IBKRBroker, PaperBroker
 from fxagents.bus import Bus
-from fxagents.config import load_config
+from fxagents.config import apply_broker, load_config
 from fxagents.data import BarStore, IBKRFeed, SimFeed
 from fxagents.jev import JevScorer
 from fxagents.journal import Journal
@@ -41,10 +42,30 @@ async def build(cfg, args):
     jev = JevScorer(cfg, state, bus)
     book = StrategyBook(journal, rr=cfg["management"]["rr_initial"], tfs=tuple(cfg["timeframes"]["entry"]))
     news = NewsCalendar(cfg)
-    ib = None
+    ib = oanda = None
     if cfg["mode"] == "sim":
         feed = SimFeed(cfg, bus, state)
         broker = PaperBroker(cfg, state, bus)
+    elif cfg["broker"] == "oanda":
+        from fxagents.oanda import OandaBroker, OandaFeed, oanda_from_cfg
+        oanda = oanda_from_cfg(cfg)
+        for attempt in range(1, 31):   # network blips at boot → retry for ~5 minutes
+            try:
+                feed = OandaFeed(cfg, bus, state, oanda)
+                await feed.qualify()
+                broker = OandaBroker(cfg, state, bus, oanda, feed)
+                await broker.connect()
+                break
+            except SystemExit:
+                raise
+            except Exception as e:  # noqa: BLE001
+                if getattr(e, "status", None) in (401, 403):
+                    sys.exit(f"OANDA rejected the token/account ({e}). Check OANDA_API_TOKEN and OANDA_ACCOUNT_ID.")
+                log.warning("OANDA not reachable (attempt %d/30): %s", attempt, e)
+                await asyncio.sleep(10)
+        else:
+            sys.exit("Could not reach OANDA after 5 minutes")
+        await feed.start()
     else:
         from ib_async import IB
         ib = IB()
@@ -81,6 +102,7 @@ async def build(cfg, args):
               MonitorAgent(ctx)]
     for a in agents:
         a.start()
+    ctx.oanda = oanda
     return ctx, feed, agents, ib
 
 
@@ -96,12 +118,16 @@ async def main(args):
         cfg["dashboard"]["port"] = args.port
     if args.speed is not None:
         cfg["sim"]["speed"] = args.speed
+    if args.broker:
+        cfg["broker"] = args.broker
+    apply_broker(cfg)
     live_ok = args.i_understand_live_trading or os.environ.get("I_UNDERSTAND_LIVE_TRADING", "").lower() == "yes"
     if cfg["mode"] == "live" and not live_ok:
         sys.exit("Refusing to start LIVE trading without --i-understand-live-trading. Run paper first.")
     ctx, feed, agents, ib = await build(cfg, args)
     strategist = next(a for a in agents if a.name == "strategist")
-    log.info("mode=%s  strategies=%s  jev=%s", cfg["mode"], [s.id for s in ctx.book.live()], ctx.jev.source)
+    log.info("mode=%s  broker=%s  strategies=%s  jev=%s", cfg["mode"],
+             "paper-sim" if cfg["mode"] == "sim" else cfg["broker"], [s.id for s in ctx.book.live()], ctx.jev.source)
 
     bias_agent = next(a for a in agents if a.name == "bias")
     await bias_agent.update_all(ctx.state.now)   # HTF bias before anything can trade
@@ -161,6 +187,8 @@ async def main(args):
     await ctx.jev.aclose()
     if ib is not None:
         ib.disconnect()
+    if getattr(ctx, "oanda", None) is not None:
+        await ctx.oanda.aclose()
     return exit_code
 
 
@@ -168,6 +196,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="FX-Agents multi-agent intraday trader")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--mode", choices=["sim", "paper", "live"])
+    ap.add_argument("--broker", choices=["oanda", "ibkr"], help="paper/live broker (default: config.yaml)")
     ap.add_argument("--days", type=int, help="sim: trading days to replay")
     ap.add_argument("--db", help="override journal path")
     ap.add_argument("--port", type=int, help="dashboard port")

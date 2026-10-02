@@ -20,7 +20,9 @@ case "${1:-help}" in
              [[ -d .git ]] && git pull --ff-only || true
              $DC build fxagents && $DC up -d fxagents ;;
   test)      $DC run --rm --no-deps fxagents python -m pytest -q ;;
-  sim)       # quick end-to-end check without IBKR (separate throwaway container)
+  check)     # read-only broker connection check (OANDA): account, instruments, prices. No orders.
+             need_env; $DC run --rm --no-deps fxagents python check_oanda.py "${@:2}" ;;
+  sim)       # quick end-to-end check without a broker (separate throwaway container)
              $DC run --rm --no-deps -e FX_MODE=sim -e FX_DB_PATH=/tmp/sim.sqlite fxagents \
                python main.py --no-dashboard --exit-after-sim --days "${2:-2}" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
@@ -33,9 +35,9 @@ case "${1:-help}" in
   vnc)       echo "On your Mac:  ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem -L 5900:localhost:5900 ubuntu@<server-ip>"
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
-./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | sim [days]
+./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days]
         backup | pause | resume | flatten | vnc
-services: fxagents, ib-gateway, cloudflared
+services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
 esac

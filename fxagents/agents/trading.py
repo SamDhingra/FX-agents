@@ -19,6 +19,20 @@ def _hm(s: str) -> int:
     return h * 60 + m
 
 
+def qty_rules(ic: dict) -> tuple[float, float]:
+    """(unit step, minimum units). Futures: whole contracts. OANDA fills these from the account."""
+    step = float(ic.get("qty_step", 1) or 1)
+    return step, max(float(ic.get("min_units", step) or step), step)
+
+
+def floor_step(x: float, step: float) -> float:
+    return round(math.floor(x / step + 1e-9) * step, 9)
+
+
+def round_step(x: float, step: float) -> float:
+    return round(round(x / step) * step, 9)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 class MarketDataAgent(Agent):
     """Stores bars, lets the broker check resting stops, then fans out 1m and entry-TF (5m, 15m) events."""
@@ -302,10 +316,10 @@ class RiskAgent(Agent):
             return self._reject(rec, f"stop {dist/price:.2%} of trade value > {r['max_stop_pct_of_trade_value']:.0%}")
         equity = self.state.equity or await self.ctx.broker.equity()
         risk_ccy = equity * r["risk_per_trade_pct"] * risk_mult
-        qty = math.floor(risk_ccy / (dist * mult))
-        qty = min(qty, int(ic["max_units"]))
-        if qty < 1:
-            return self._reject(rec, f"1 unit risks ${dist*mult:,.0f} > budget ${risk_ccy:,.0f}")
+        step, min_u = qty_rules(ic)
+        qty = min(floor_step(risk_ccy / (dist * mult), step), float(ic["max_units"]))
+        if qty < min_u:
+            return self._reject(rec, f"{min_u:g} unit(s) risk ${min_u*dist*mult:,.0f} > budget ${risk_ccy:,.0f}")
 
         pos = Position(sig.symbol, sig.side, sig.strategy, stop, stop, dist, sig.rr, now,
                        jev_quality=req["grade"]["quality"], jev_confidence=req["grade"]["confidence"],
@@ -422,8 +436,9 @@ class PositionManagerAgent(Agent):
             if pos.stage == 1:
                 if not self.m["pyramid"]["enabled"]:
                     return await self.close(pos, level, "target", limit=True)
-                part = math.floor(pos.initial_qty * self.m["partial_at_target"])
-                if part >= 1 and not pos.partial_done:
+                step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
+                part = floor_step(pos.initial_qty * self.m["partial_at_target"], step)
+                if part >= min_u and not pos.partial_done:
                     px = await broker.reduce(pos, part, bar.close, limit=level)
                     pos.partial_done = True
                     pos.log(now, "partial", price=px, qty=part, r=pos.rr)
@@ -443,7 +458,8 @@ class PositionManagerAgent(Agent):
             return
         if self.ctx.news and self.ctx.news.blocked(self.now()):
             return  # never add into a news release
-        add_qty = max(1, round(pos.initial_qty * pc["add_size_frac"]))
+        step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
+        add_qty = max(min_u, round_step(pos.initial_qty * pc["add_size_frac"], step))
         # hard ceiling on units
         if pos.open_qty + add_qty > float(self.cfg["instruments"][pos.symbol]["max_units"]):
             return

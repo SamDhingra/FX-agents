@@ -7,9 +7,10 @@ A reference for running, changing, and reusing the FX-Agents multi-agent intrada
 * **An AI coding assistant** (Claude Code etc.). Drop this file in the repo root, or paste
   sections 2–7 into `CLAUDE.md`, and the assistant will follow the project's rules.
 
-> **Status when this was written (2026-09-28).** The system has run end to end on a *synthetic*
-> market with a paper broker, and 16 unit tests pass. It has **not** been run against a real
-> IB Gateway, and Jev has only been tested against a stubbed response. Sim P&L is meaningless,
+> **Status (updated 2026-10-02).** The system has run end to end on a *synthetic* market with a
+> paper broker, and 34 unit tests pass. The default broker is now **OANDA** (v20 REST); IBKR stays
+> available. Both have only been tested against fakes, not a real practice/paper account yet, and
+> Jev has only been tested against a stubbed response. Sim P&L is meaningless,
 > because the simulated market is a random walk. Treat every result as plumbing verification,
 > not evidence of edge, until paper trading on real data says otherwise.
 
@@ -25,7 +26,7 @@ profit → pyramid logic. Journal, Notifier and Monitor record, alert and guard.
 dashboard shows all of it on phone and laptop.
 
 ```
-IBKR / Sim ─► MarketData ─► bar_1m ─► PositionManager ─► Broker (IBKR | Paper)
+OANDA/IBKR/Sim ─► MarketData ─► bar_1m ─► PositionManager ─► Broker (OANDA | IBKR | Paper)
                   │                         ▲   ▲
                   └─► bar_signal (5m/15m) ─► Trader ─► Risk ┘
                                              ▲
@@ -99,7 +100,18 @@ simulated days) so the news logic is exercised too.
 
 ---
 
-## 4. Going from sim → IBKR paper → live
+## 4. Going from sim → paper → live
+
+**OANDA (default, `broker: oanda`).** Practice account → *Manage API Access* → token. Put
+`OANDA_API_TOKEN` and `OANDA_ACCOUNT_ID` in `.env`, run `python check_oanda.py` (read-only), then
+`python main.py --mode paper`. Instruments are the CFDs set per symbol under `oanda:` in
+`config.yaml` (multiplier 1; tick size, unit step and minimum size come from the account at
+start-up, and sizing supports fractional units). Every entry carries `stopLossOnFill`; each
+pyramid add is a separate OANDA trade with the same stop; stop fills are found by polling open
+trades every ~15 s. Live = a live token/account + `--mode live --i-understand-live-trading`.
+No contract rolls, no gateway, no 2FA.
+
+**IBKR (`--broker ibkr`; needs futures permission):**
 
 1. **IB Gateway (paper account).** Configure → API → Settings: enable socket clients, port
    **4002**, *uncheck* read-only, add `127.0.0.1` to trusted IPs.
@@ -120,10 +132,10 @@ simulated days) so the news logic is exercised too.
 
 Keep it running on a Mac with `deploy/com.sam.fxagents.plist` (launchd), and prevent the Mac from
 sleeping on power. **In the cloud (recommended):** follow `DEPLOY-CLOUD.md`. That's Lightsail in
-ca-central-1 running Docker Compose with `ib-gateway` (IBC), `fxagents` and `cloudflared`, behind
-Cloudflare Access at `trade.advanceanalytics.net`. Operate it with `./fx.sh up | logs | status |
-update | backup | pause | flatten`. Use a dedicated IBKR username for the bot; for live, approve
-the weekly 2FA re-login on IBKR Mobile.
+ca-central-1 running Docker Compose with `fxagents` and `cloudflared` (plus `ib-gateway` only when
+`COMPOSE_PROFILES=ibkr`), behind Cloudflare Access at `trade.advanceanalytics.net`. Operate it with
+`./fx.sh up | logs | status | check | update | backup | pause | flatten`. With IBKR: a dedicated
+username for the bot, and approve the weekly 2FA re-login on IBKR Mobile for live.
 
 ---
 
@@ -131,7 +143,8 @@ the weekly 2FA re-login on IBKR Mobile.
 
 ```
 config.yaml                  every tunable (instruments, risk, sessions, management, bias, news, jev…)
-main.py                      wiring: builds ctx, starts agents, dashboard, feed
+main.py                      wiring: builds ctx, picks the broker (sim | oanda | ibkr), starts agents
+check_oanda.py               read-only OANDA connection check
 backtest.py                  CLI leaderboard (synthetic | TradingView CSV | IBKR)
 fxagents/
   bus.py  state.py  models.py  config.py       plumbing (pub/sub, live state, Position/Signal/Bar)
@@ -141,12 +154,14 @@ fxagents/
   news.py                    calendar: feed, tiers, windows, pre-news actions, event-day risk
   jev.py                     Jev (TypeSafe) questions + heuristic fallback + decision logging
   sim.py                     trade simulator (mirrors live management), stats, synthetic market
-  broker.py                  PaperBroker, IBKRBroker (bracket entry + resting GTC stop)
+  broker.py                  Broker interface + guards, PaperBroker, IBKRBroker (bracket + GTC stop)
+  oanda.py                   OandaClient, OandaFeed (M1/H1 candles), OandaBroker (stopLossOnFill)
   journal.py                 SQLite: trades, decisions, signals, strategy versions, equity, learner log
   strategies/                base.py · smc.py · classic.py · __init__.py (registry, Confluence)
   agents/                    trading.py · context.py · strategist.py · ops.py · core.py
   dashboard/                 server.py (FastAPI + WebSocket) · static/index.html (single-page app)
-tests/test_core.py           16 tests: risk guards, pyramid maths, no look-ahead, news, bias, Jev parsing
+tests/test_core.py           18 tests: risk guards, pyramid maths, no look-ahead, news, bias, Jev parsing
+tests/test_oanda.py          16 tests against tests/fake_oanda.py (in-memory v20 API)
 deploy/                      launchd + systemd units
 ```
 
@@ -243,7 +258,7 @@ tunnel, add an access layer in front. Endpoints: `/api/state`, `/api/calendar`, 
 ### TradingView
 
 Alerts POST JSON to `/webhook/tradingview` (needs `secret`). They are treated as one more strategy:
-graded by Jev, sized/gated by Risk (a missing stop gets a 1-ATR stop). Execution is always IBKR.
+graded by Jev, sized/gated by Risk (a missing stop gets a 1-ATR stop). Execution goes through the configured broker.
 Exports (Export chart data) feed `backtest.py --csv SYMBOL=file.csv`.
 
 ---
@@ -310,12 +325,12 @@ things more conservative or select among allowed options.
 * Compare live expectancy (journal) with the backtest for the same strategies. A large gap means slippage,
   a bug, or overfitting.
 
-**Monthly:** review `config.yaml` changes, roll futures if needed, update the news tier keywords, back up
+**Monthly:** review `config.yaml` changes, roll futures if on IBKR, update the news tier keywords, back up
 `data/journal.sqlite`.
 
 **If something looks wrong:** hit **Pause** (stops new entries), then **Flatten** if needed. Check
 `Agents & Jev` for a silent agent, and the alert feed for "unprotected position" or "data stale".
-Resting stops at IBKR stay in place even if the app dies.
+Resting stops at the broker stay in place even if the app dies.
 
 ---
 

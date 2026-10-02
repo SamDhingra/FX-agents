@@ -1,15 +1,19 @@
-# FX-Agents in the cloud: IB Gateway (headless, IBC) + the agents + a Cloudflare tunnel.
+# FX-Agents in the cloud: the agents + a Cloudflare tunnel (+ IB Gateway only when broker = ibkr).
 # Nothing is published to the internet. The dashboard is reached only through the tunnel
 # (trade.<your-domain>, protected by Cloudflare Access). Start with:  ./fx.sh up
+#
+# OANDA (default): no gateway needed — the app talks to OANDA's REST API with your token.
+# IBKR: set FX_BROKER=ibkr and COMPOSE_PROFILES=ibkr in .env to also run IB Gateway.
 name: fx-agents
 
 services:
   ib-gateway:
     image: ghcr.io/gnzsnz/ib-gateway:stable
+    profiles: [ibkr]                                 # only started when COMPOSE_PROFILES=ibkr
     restart: unless-stopped
     environment:
-      TWS_USERID: ${TWS_USERID:?set TWS_USERID in .env}
-      TWS_PASSWORD: ${TWS_PASSWORD:?set TWS_PASSWORD in .env}
+      TWS_USERID: ${TWS_USERID:-}
+      TWS_PASSWORD: ${TWS_PASSWORD:-}
       TRADING_MODE: ${TRADING_MODE:-paper}          # paper | live
       READ_ONLY_API: "no"
       TIME_ZONE: America/New_York
@@ -28,8 +32,7 @@ services:
   fxagents:
     build: .
     image: fx-agents:latest
-    restart: unless-stopped
-    depends_on: [ib-gateway]
+    restart: unless-stopped                          # (with IBKR the app retries until the gateway is up)
     env_file: .env
     environment:
       IB_HOST: ib-gateway
