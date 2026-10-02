@@ -19,7 +19,7 @@ case "${1:-help}" in
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              [[ -d .git ]] && git pull --ff-only || true
              $DC build fxagents && $DC up -d fxagents ;;
-  test)      $DC run --rm --no-deps fxagents python -m pytest -q ;;
+  test)      $DC run --rm --no-deps fxagents python -m pytest -q -p no:cacheprovider ;;
   check)     # read-only broker connection check (OANDA): account, instruments, prices. No orders.
              need_env; $DC run --rm --no-deps fxagents python check_oanda.py "${@:2}" ;;
   sim)       # quick end-to-end check without a broker (separate throwaway container)

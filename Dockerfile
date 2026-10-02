@@ -8,7 +8,8 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY . .
-RUN useradd --create-home --uid 1000 fx && mkdir -p /app/data && chown -R fx:fx /app/data
+# files copied from a Mac/zip can be owner-only (mode 600); the app runs as a non-root user, so make them readable
+RUN chmod -R a+rX /app && useradd --create-home --uid 1000 fx && mkdir -p /app/data && chown -R fx:fx /app/data
 USER fx
 
 EXPOSE 8088
