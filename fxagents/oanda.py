@@ -35,6 +35,7 @@ from .models import Bar, Leg, Position
 log = logging.getLogger("oanda")
 
 HOSTS = {"practice": "https://api-fxpractice.oanda.com", "live": "https://api-fxtrade.oanda.com"}
+LIVE_WINDOW = pd.Timedelta("10min")   # bars older than this are back-filled, never treated as live
 
 
 class OandaError(Exception):
@@ -132,6 +133,7 @@ class OandaFeed:
         self._h1: dict[str, pd.DataFrame] = {}
         self.last_ts: dict[str, pd.Timestamp] = {}
         self.poll_seconds = float((cfg.get("oanda") or {}).get("poll_seconds", 5))
+        self.clock = lambda: pd.Timestamp.now(tz=self.tz)     # injectable for tests
 
     async def qualify(self) -> None:
         """Read precision/min size per instrument and write them into the instrument config so
@@ -175,15 +177,18 @@ class OandaFeed:
         return df[~df.index.duplicated(keep="last")].sort_index()
 
     async def _paged(self, name: str, gran: str, start: pd.Timestamp) -> list[dict]:
+        """All candles from `start` to now. Pages until the newest candle reaches the present: OANDA
+        may return fewer than `count` candles per page, so a short page does NOT mean "done"."""
         out: list[dict] = []
         cur = start
-        for _ in range(60):  # 60 × 5000 bars is far more than we ever ask for
+        step = pd.Timedelta("1h" if gran == "H1" else "1min")
+        for _ in range(200):
             cs = await self.candles(name, gran, start=cur, count=5000)
             if not cs:
                 break
             out += cs
             nxt = pd.Timestamp(cs[-1]["time"])
-            if len(cs) < 5000 or nxt <= cur:
+            if nxt <= cur or nxt >= pd.Timestamp.now(tz="UTC") - 2 * step:
                 break
             cur = nxt
         return out
@@ -198,7 +203,8 @@ class OandaFeed:
             self._hist[sym], self._h1[sym] = m1, h1
             if len(m1):
                 self.last_ts[sym] = m1.index[-1]
-            log.info("%s: %d historical 1m bars, %d hourly bars", sym, len(m1), len(h1))
+            age = (pd.Timestamp.now(tz=self.tz) - m1.index[-1]).total_seconds() / 60 if len(m1) else float("nan")
+            log.info("%s: %d historical 1m bars, %d hourly bars, newest 1m bar %.0f min old", sym, len(m1), len(h1), age)
 
     def history(self, symbol: str) -> pd.DataFrame:
         return self._hist[symbol]
@@ -219,11 +225,20 @@ class OandaFeed:
             df = self._frame(cs)
             if since is not None:
                 df = df[df.index > since]
-            for ts, r in df.iterrows():
+            if not len(df):
+                continue
+            now = self.clock()
+            old = df[df.index < now - LIVE_WINDOW]
+            if len(old):
+                # gap after an outage/restart: store these bars, but don't trade or manage on them
+                await self.bus.publish("backfill", [Bar(sym, ts, r.open, r.high, r.low, r.close, float(r.volume))
+                                                    for ts, r in old.iterrows()])
+                log.info("%s: back-filled %d bars (%s → %s)", sym, len(old), old.index[0], old.index[-1])
+            for ts, r in df[df.index >= now - LIVE_WINDOW].iterrows():
                 self.state.now = pd.Timestamp.now(tz=self.tz)
                 await self.bus.publish("bar", Bar(sym, ts, r.open, r.high, r.low, r.close, float(r.volume)))
-                self.last_ts[sym] = ts
-                n += 1
+            self.last_ts[sym] = df.index[-1]
+            n += len(df)
         return n
 
     async def run(self) -> None:

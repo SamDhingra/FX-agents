@@ -54,7 +54,16 @@ class MarketDataAgent(Agent):
     def start(self):
         super().start()
         self.bus.subscribe("bar", self.on_bar)
+        self.bus.subscribe("backfill", self.on_backfill)
         self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in self.cfg["timeframes"]["entry"]]
+
+    async def on_backfill(self, bars: list[Bar]):
+        """Missed bars after an outage: into the store for indicators/bias only. No stop checks,
+        no management, no entry signals — those only ever run on live bars."""
+        for bar in bars:
+            self.ctx.store.append(bar)
+            self.state.last_prices[bar.symbol] = bar.close
+            self.state.last_bar_ts[bar.symbol] = bar.ts.isoformat()
 
     async def on_bar(self, bar: Bar):
         self.beat()
@@ -190,6 +199,8 @@ class TraderAgent(Agent):
     async def on_signal_bar(self, ev):
         self.beat()
         sym, tf = ev["symbol"], ev["tf"]
+        if self.cfg["mode"] != "sim" and self.now() is not None and self.now() - ev["ts"] > pd.Timedelta("5min"):
+            return   # safety net: never trade a setup from an old bar (catch-up after an outage)
         picks = [r["id"] for r in self.state.selections.get(sym, []) if r.get("selected")]
         picks = [p for p in picks if self.ctx.book.get(p) is not None and self.ctx.book.get(p).tf == tf]
         if not picks:

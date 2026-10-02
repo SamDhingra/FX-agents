@@ -38,6 +38,7 @@ class FakeOanda:
         self.cancel_next: str | None = None     # make the next order be cancelled with this reason
         self.drop_stop_next = False              # make the next fill come back without its stop
         self.now = pd.Timestamp.now(tz="UTC").floor("min")
+        self.page_cap = 5000                     # real OANDA can return fewer candles than `count`
 
     # ── helpers for tests ──
     def hit_stop(self, tid: str) -> None:
@@ -127,7 +128,7 @@ class FakeOanda:
             start = pd.Timestamp(q["from"]).tz_convert("UTC").ceil(step)
             if q.get("includeFirst") == "false" and start == pd.Timestamp(q["from"]):
                 start += pd.Timedelta(step)
-            idx = pd.date_range(start, cur, freq=step)[:count]
+            idx = pd.date_range(start, cur, freq=step)[:min(count, self.page_cap)]
         else:
             idx = pd.date_range(end=cur, periods=count, freq=step)
         base = SPECS[name]["px"]

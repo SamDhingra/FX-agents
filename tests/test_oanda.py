@@ -288,3 +288,36 @@ def test_margin_helpers_and_budget_math():
     equity = 73000.0
     room = min(0.25 * equity, 0.60 * equity - margin_in_use(cfg, st))
     assert floor_step(room / margin_per_unit(ic, 30000), 0.01) == pytest.approx(5.06)   # 25% of equity ÷ margin per unit; not the 12 units the stop distance alone would give
+
+
+def test_history_reaches_now_even_when_pages_come_back_short():
+    """Regression: real OANDA returned < count candles per page; the loader stopped after page 1
+    and the app then replayed a week of old bars as if they were live."""
+    cfg, fake, c, st, bus, feed, b = setup()
+    fake.page_cap = 4999
+
+    async def go():
+        await feed.qualify()
+        await feed.start()
+    run(go())
+    newest = feed.history("NDQ").index[-1]
+    assert fake.now.tz_convert("America/New_York") - newest <= pd.Timedelta("2min")
+    assert len(feed.history("NDQ")) > 12000
+
+
+def test_catch_up_bars_are_backfilled_not_published_as_live():
+    cfg, fake, c, st, bus, feed, b = setup()
+    live, back = [], []
+    bus.subscribe("bar", lambda x: live.append(x))
+    bus.subscribe("backfill", lambda xs: back.extend(xs))
+
+    async def go():
+        await feed.qualify()
+        await feed.start()
+        fake.now += pd.Timedelta("90min")          # e.g. the network was down for 90 minutes
+        feed.clock = lambda: fake.now.tz_convert("America/New_York")
+        await feed.poll_once()
+    run(go())
+    assert back and all((fake.now.tz_convert("America/New_York") - x.ts) > pd.Timedelta("10min") for x in back)
+    assert live and all((fake.now.tz_convert("America/New_York") - x.ts) <= pd.Timedelta("10min") for x in live)
+    assert len(live) <= 10 * 4
