@@ -11,6 +11,12 @@ import pandas as pd
 from .core import Agent
 
 
+def header_title(title: str) -> str:
+    """HTTP header-safe title: emoji are dropped (ASCII only) and the result may not start or end
+    with whitespace — a leading space (left behind when a title starts with an emoji) is an illegal header."""
+    return " ".join(title.encode("ascii", "ignore").decode().split()) or "fx-agents"
+
+
 class JournalAgent(Agent):
     """Writes every trade, management event, Jev decision and equity point to the SQLite journal."""
     name = "journal"
@@ -87,7 +93,7 @@ class NotifierAgent(Agent):
             async with httpx.AsyncClient(timeout=8) as c:
                 if self.ntfy:
                     await c.post(f"{self.ntfy_server}/{self.ntfy}", content=body.encode(),
-                                 headers={"Title": title.encode("ascii", "ignore").decode() or "fx-agents",
+                                 headers={"Title": header_title(title),
                                           "Priority": "high" if priority != "default" else "default",
                                           "Tags": event})
                 if self.tg_token and self.tg_chat:
@@ -117,6 +123,12 @@ class NotifierAgent(Agent):
         await self.send(a.get("event", "kill_switch"), a.get("title", "⚠ Alert"), a["msg"], priority="high", record=False)
 
 
+# These agents only act when there is something to do (a request, a signal, a notification), so a quiet
+# heartbeat is normal and not a sign they are down. Feed health is covered by the stale-data check.
+EVENT_DRIVEN = {"selector", "risk", "trader", "notifier"}
+ALERT_COOLDOWN = 1800.0
+
+
 class MonitorAgent(Agent):
     """Watches everything: kill switch (daily loss / drawdown), unprotected broker positions,
     stale data, silent agents, day rollover and the daily summary."""
@@ -129,6 +141,7 @@ class MonitorAgent(Agent):
         self.summary_sent = None
         self._last_check = 0.0
         self._orphan_seen: dict[str, int] = {}
+        self._alerted: dict[str, float] = {}
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
@@ -180,14 +193,21 @@ class MonitorAgent(Agent):
             await self.bus.publish("flatten_symbol", {"symbol": sym, "why": "unprotected"})
         if self.cfg["mode"] != "sim":
             for name, t in st.heartbeats.items():
-                if time.time() - t > 300 and name not in ("selector",):
-                    await self.alert(f"agent {name} silent for {int(time.time()-t)}s", event="agent_down")
+                if time.time() - t > 300 and name not in EVENT_DRIVEN:
+                    await self.alert(f"agent {name} silent for {int(time.time()-t)}s", event="agent_down",
+                                     key=f"silent:{name}")
             for sym, ts in st.last_bar_ts.items():
                 age = (now - pd.Timestamp(ts)).total_seconds()
                 if age > 600 and now.dayofweek < 5 and now.hour != 17:
-                    await self.alert(f"{sym} data stale ({int(age)}s)", event="agent_down")
+                    await self.alert(f"{sym} data stale ({int(age)}s)", event="agent_down", key=f"stale:{sym}")
 
-    async def alert(self, msg: str, event: str = "kill_switch"):
+    async def alert(self, msg: str, event: str = "kill_switch", key: str | None = None):
+        """`key` de-duplicates a condition that stays true (re-alerts at most every 30 minutes)."""
+        if key is not None:
+            last = self._alerted.get(key)
+            if last is not None and time.time() - last < ALERT_COOLDOWN:
+                return
+            self._alerted[key] = time.time()
         self.state.alert("error", msg)
         await self.bus.publish("alert", {"msg": msg, "event": event, "title": "⚠ FX-Agents"})
 

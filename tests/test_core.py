@@ -222,3 +222,41 @@ def test_monitor_flattens_orphan_broker_positions():
     m._last_check = time.time() - 31
     asyncio.run(m.on_clock(st.now))          # second sighting → flatten
     assert fb.flattened == [("NDQ", 2.0)]
+
+
+def test_notification_title_is_a_legal_http_header():
+    from fxagents.agents.ops import header_title
+    assert header_title("⚠ FX-Agents") == "FX-Agents"
+    assert header_title("▶ LONG NDQ") == "LONG NDQ"
+    assert header_title("✅ NDQ closed") == "NDQ closed"
+    assert header_title("🔒 NDQ") == "NDQ" and header_title("🧠") == "fx-agents"
+    import httpx
+    httpx.Headers({"Title": header_title("⚠ FX-Agents")}).raw       # would raise on a leading space
+
+
+def test_monitor_ignores_event_driven_agents_and_does_not_repeat_alerts():
+    import time
+    from fxagents.agents.core import Ctx
+    from fxagents.agents.ops import MonitorAgent
+
+    class FakeBroker:
+        async def broker_positions(self): return {}
+        async def unprotected(self): return []
+
+    cfg = dict(CFG); cfg["mode"] = "paper"
+    st = LiveState(); st.now = pd.Timestamp("2026-09-30 10:00", tz=TZ)          # a Wednesday
+    st.equity = st.day_start_equity = st.equity_peak = 100000
+    ctx = Ctx(cfg, Bus(), st, None, FakeBroker(), None, None, None)
+    m = MonitorAgent(ctx); m.start()
+    sent = []
+    ctx.bus.subscribe("alert", lambda a: sent.append(a["msg"]))
+    old = time.time() - 900
+    for name in ("risk", "trader", "notifier", "selector"):
+        st.heartbeats[name] = old                    # quiet on purpose → no alert
+    st.heartbeats["bias"] = old                      # clock-driven agent that went quiet → alert
+    for _ in range(3):                               # three checks 30 s apart: only one alert
+        m._last_check = time.time() - 31
+        asyncio.run(m.on_clock(st.now))
+    assert [x for x in sent if "silent" in x] == [x for x in sent if "agent bias silent" in x]
+    assert len([x for x in sent if "agent bias silent" in x]) == 1
+    assert not [x for x in sent if any(n in x for n in ("risk", "trader", "notifier", "selector"))]
