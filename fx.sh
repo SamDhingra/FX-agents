@@ -19,11 +19,11 @@ case "${1:-help}" in
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              [[ -d .git ]] && git pull --ff-only || true
              $DC build fxagents && $DC up -d fxagents ;;
-  test)      $DC run --rm --no-deps fxagents python -m pytest -q -p no:cacheprovider ;;
+  test)      $DC build fxagents && $DC run --rm --no-deps fxagents python -m pytest -q -p no:cacheprovider ;;
   check)     # read-only broker connection check (OANDA): account, instruments, prices. No orders.
-             need_env; $DC run --rm --no-deps fxagents python check_oanda.py "${@:2}" ;;
+             need_env; $DC build fxagents && $DC run --rm --no-deps fxagents python check_oanda.py "${@:2}" ;;
   sim)       # quick end-to-end check without a broker (separate throwaway container)
-             $DC run --rm --no-deps -e FX_MODE=sim -e FX_DB_PATH=/tmp/sim.sqlite fxagents \
+             $DC build fxagents && $DC run --rm --no-deps -e FX_MODE=sim -e FX_DB_PATH=/tmp/sim.sqlite fxagents \
                python main.py --no-dashboard --exit-after-sim --days "${2:-2}" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
              $DC exec -T fxagents python -c "import sqlite3; s=sqlite3.connect('/app/data/journal.sqlite'); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
