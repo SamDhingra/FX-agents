@@ -271,3 +271,20 @@ def test_bad_token_is_reported():
     with pytest.raises(OandaError) as e:
         run(c.req("GET", "/v3/accounts"))
     assert e.value.status == 401
+
+
+def test_margin_helpers_and_budget_math():
+    from fxagents.agents.trading import floor_step, margin_in_use, margin_per_unit
+    cfg, fake, c, st, bus, feed, b = setup()
+    ic = cfg["instruments"]["NDQ"]
+    assert margin_per_unit(ic, 30000) == 0                       # unknown margin rate (before qualify) → no cap
+    ic["margin_rate"] = 0.12
+    assert margin_per_unit(ic, 30000) == pytest.approx(3600)     # 1 unit = $30,000 notional × 12%
+    p = pos()
+    p.legs.append(__import__("fxagents.models", fromlist=["Leg"]).Leg(2.0, 30000, st.now, "initial"))
+    p.last_price = 30000
+    st.positions[p.id] = p
+    assert margin_in_use(cfg, st) == pytest.approx(7200)
+    equity = 73000.0
+    room = min(0.25 * equity, 0.60 * equity - margin_in_use(cfg, st))
+    assert floor_step(room / margin_per_unit(ic, 30000), 0.01) == pytest.approx(5.06)   # 25% of equity ÷ margin per unit; not the 12 units the stop distance alone would give

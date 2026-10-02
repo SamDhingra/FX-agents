@@ -112,6 +112,8 @@ risk:
   max_stop_pct_of_trade_value: 0.10  # your rule: stop distance ≤ 10% of trade value
   risk_per_trade_pct: 0.005          # size so a full stop-out costs ≤ 0.5% of equity
   max_open_positions: 3
+  max_margin_pct_per_position: 0.25  # margin-funded brokers (OANDA): one position ties up at most 25% of equity
+  max_margin_pct_total: 0.60         # …and all positions together at most 60%
   max_positions_per_symbol: 1
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak

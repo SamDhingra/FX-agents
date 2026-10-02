@@ -25,6 +25,19 @@ def qty_rules(ic: dict) -> tuple[float, float]:
     return step, max(float(ic.get("min_units", step) or step), step)
 
 
+def margin_per_unit(ic: dict, price: float) -> float:
+    """Margin (USD) one unit ties up. 0 when the broker's margin rate is unknown (futures/sim)."""
+    return price * float(ic.get("multiplier", 1)) * float(ic.get("margin_rate") or 0)
+
+
+def margin_in_use(cfg, state) -> float:
+    used = 0.0
+    for p in state.positions.values():
+        if p.status == "open":
+            used += p.open_qty * margin_per_unit(cfg["instruments"][p.symbol], p.last_price or p.entry)
+    return used
+
+
 def floor_step(x: float, step: float) -> float:
     return round(math.floor(x / step + 1e-9) * step, 9)
 
@@ -318,6 +331,14 @@ class RiskAgent(Agent):
         risk_ccy = equity * r["risk_per_trade_pct"] * risk_mult
         step, min_u = qty_rules(ic)
         qty = min(floor_step(risk_ccy / (dist * mult), step), float(ic["max_units"]))
+        mpu = margin_per_unit(ic, price)
+        if mpu:   # margin-funded brokers (OANDA CFDs): never size past what the account can fund
+            room = min(r.get("max_margin_pct_per_position", 0.25) * equity,
+                       r.get("max_margin_pct_total", 0.60) * equity - margin_in_use(self.cfg, self.state))
+            if floor_step(room / mpu, step) < qty:
+                qty = max(0.0, floor_step(room / mpu, step))
+                if qty < min_u:
+                    return self._reject(rec, f"margin: {min_u:g} unit(s) need ${min_u*mpu:,.0f}, only ${max(room,0):,.0f} of margin budget left")
         if qty < min_u:
             return self._reject(rec, f"{min_u:g} unit(s) risk ${min_u*dist*mult:,.0f} > budget ${risk_ccy:,.0f}")
 
@@ -486,7 +507,17 @@ class PositionManagerAgent(Agent):
             if res["prob"] < pc["min_continuation_prob"]:
                 pos.log(self.now(), "pyramid_skipped", why=f"continuation {res['prob']:.2f}")
                 return
-        px = await self.ctx.broker.add(pos, add_qty, bar.close)
+        mpu = margin_per_unit(self.cfg["instruments"][pos.symbol], bar.close)
+        if mpu:
+            eq = self.state.equity or 0.0
+            if margin_in_use(self.cfg, self.state) + add_qty * mpu > self.cfg["risk"].get("max_margin_pct_total", 0.60) * eq:
+                pos.log(self.now(), "pyramid_skipped", why="margin budget")
+                return
+        try:
+            px = await self.ctx.broker.add(pos, add_qty, bar.close)
+        except OrderRejected as e:
+            pos.log(self.now(), "pyramid_skipped", why=f"broker: {e}")
+            return
         pos.adds += 1
         pos.log(self.now(), "pyramid", price=px, qty=add_qty, stop=pos.stop, worst_case=round(worst, 2))
         await self.bus.publish("position_updated", {"position": pos, "event": "pyramid",
