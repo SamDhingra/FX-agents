@@ -6,7 +6,7 @@ picks the best-rated strategy for each symbol. Trades start at 1:1 R:R, pyramid 
 and move the stop into profit. There is a trade journal and a live dashboard that works on
 phone and laptop.
 
-> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 45 unit tests
+> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 49 unit tests
 > pass. Two live brokers are supported: **OANDA** (default; v20 REST API) and **IBKR** (`ib_async`).
 > Both are tested against fakes only: neither has yet traded on your real practice/paper account.
 > Run `--mode paper` for at least 2–4 weeks before you consider live.
@@ -78,7 +78,7 @@ cd fx-agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py                        # sim: 3 synthetic days, dashboard on http://localhost:8088
-python -m pytest -q                   # 45 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
+python -m pytest -q                   # 49 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
 python backtest.py --synthetic        # leaderboard + expectancy by hour
 ```
 
@@ -185,6 +185,16 @@ Backtest on TradingView data: chart → *Export chart data* → `python backtest
   head (trades, win rate, R, P&L, best/worst day, cumulative R, a funnel of every setup seen and why it
   was passed, setups by hour, a per-day table). The daily phone summary has a shadow line.
 
+**90-day setup map.** About 90 days of OANDA 1-minute history is pulled and every live strategy
+version is backtested on 5m and 15m bars with the live rules (hard bias rule, entry windows, 1:1 →
+partial → stop-to-profit → pyramids). Each simulated trade is bucketed by symbol × setup × hour ×
+weekday (`data/setup_map.json`). The Strategies page shows it as a heatmap (avg R / win rate / trade
+count, filterable by symbol, timeframe and weekday; hatched cells have fewer than 5 trades) with a
+"historically best right now" list. Setup-first uses it as a prior: cell → hour → overall, each level
+shrunk toward the next, to rank the setups on a bar and as context for Jev. It builds in the
+background at first start (a minute or two), rebuilds every Sunday evening before the open, and can be
+rebuilt from the dashboard. Sim/IBKR fall back to whatever history the bar store holds.
+
 To switch the real book to setup-first, set `selector.mode: setup_first` (the shadow book then runs
 hourly-pick automatically) and restart.
 
@@ -246,6 +256,7 @@ fxagents/jev.py        Jev scorer with heuristic fallback
 fxagents/broker.py     PaperBroker, IBKRBroker (bracket entry + resting GTC stop)
 fxagents/oanda.py      OandaFeed + OandaBroker (v20 REST, stopLossOnFill, per-trade stops)
 fxagents/agents/setup_first.py  SetupFirstTrader + the shadow book (own bus/state/journal, virtual fills)
+fxagents/setup_map.py  90-day setup map: builder, shrunk priors, heatmap grid, weekly rebuild agent
 fxagents/journal.py    SQLite journal
 fxagents/dashboard/    FastAPI server + single-page responsive UI
 deploy/                launchd plist (Mac, always-on) · systemd unit (Linux / Lightsail)

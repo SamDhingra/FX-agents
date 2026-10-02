@@ -167,6 +167,10 @@ live bars with virtual fills; it never sends orders. Compare the two on the dash
 page, or flip the **Live / Shadow** switch at the top to see the shadow book's positions, calendar and
 trades. `./fx.sh backup` copies the main journal; the shadow journal is `data/journal_shadow.sqlite`.
 
+**Setup map:** on first start the app pulls ~90 days of 1-minute history from OANDA and backtests
+every setup on it in the background (a minute or two; trading is not blocked). The heatmap is on the
+Strategies page. It rebuilds every Sunday evening; **Rebuild now** on that page forces it.
+
 Nightly journal backup (on the server):
 
 ```bash

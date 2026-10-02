@@ -107,6 +107,11 @@ async def build(cfg, args):
               MonitorAgent(ctx)]
     for a in agents:
         a.start()
+    # 90-day setup map (heatmap + setup-first prior): loaded now, built/rebuilt in the background
+    from fxagents.setup_map import SetupMapAgent, SetupMapHolder, map_path
+    ctx.setup_map = SetupMapHolder(map_path(cfg))
+    ctx.setup_map_agent = SetupMapAgent(ctx, ctx.setup_map, feed if cfg["mode"] != "sim" else None)
+    ctx.setup_map_agent.start()
     # shadow book: same live bars, the other selection mode, virtual fills only (never sends orders)
     ctx.shadow = None
     ctx.shadow_info = {"enabled": False}
@@ -118,6 +123,7 @@ async def build(cfg, args):
             a.start()
         sfeed.start()                      # after MarketData, so each bar is already stored
         ctx.shadow = sctx
+        sctx.setup_map = ctx.setup_map
         sctx.is_shadow = True
         sctx.shadow = None
         info = {"enabled": True, "mode": sc["mode"], "live_mode": sel_mode}

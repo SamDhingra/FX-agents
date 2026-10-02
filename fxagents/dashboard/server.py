@@ -14,6 +14,8 @@ import io
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
@@ -244,6 +246,46 @@ def build_app(ctx) -> FastAPI:
                 await asyncio.sleep(1.0)
         except (WebSocketDisconnect, RuntimeError):
             return
+
+    @app.get("/api/setup_map")
+    async def api_setup_map(request: Request, symbol: str = "ALL", tf: str = "all", weekday: str = "all"):
+        need(request)
+        h = getattr(ctx, "setup_map", None)
+        if h is None:
+            return {"status": {"state": "off"}}
+        now = ctx.state.now
+        out = {"status": h.status, "symbols": list(ctx.cfg["instruments"]),
+               "tfs": [str(t).replace("min", "m") for t in ctx.cfg["timeframes"]["entry"]],
+               "hour": now.hour if now is not None else None, "weekday": now.dayofweek if now is not None else None}
+        if h.map is not None:
+            tfl = {"5m": "5m", "15m": "15m"}.get(tf, "all")
+            out["grid"] = h.map.grid(symbol if symbol in ctx.cfg["instruments"] else "ALL", tfl, weekday)
+            # columns = hours that can trade (entry windows) plus any hour with history
+            win = set()
+            for w in ctx.cfg["sessions"]["entry_windows"]:
+                a_, b_ = (int(x.split(":")[0]) for x in (w[0], w[1])) if isinstance(w, (list, tuple)) else (None, None)
+                if a_ is not None:
+                    win.update(range(a_, b_ + (0 if w[1].endswith(":00") else 1)))
+            out["grid"]["hours"] = sorted(set(out["grid"]["hours"]) | win)
+            if now is not None:
+                syms = [symbol] if symbol in ctx.cfg["instruments"] else list(ctx.cfg["instruments"])
+                # this hour if it can trade, otherwise the next hour that can (weekdays only)
+                t, nxt = now.floor("h"), False
+                for _ in range(24 * 4):
+                    if t.dayofweek < 5 and t.hour in win:
+                        break
+                    t, nxt = t + pd.Timedelta(hours=1), True
+                out["best_for"] = {"hour": t.hour, "weekday": t.dayofweek, "next": nxt}
+                out["best_now"] = h.map.best_now([x.id for x in ctx.book.live()], syms, t.hour, t.dayofweek)
+        return out
+
+    @app.post("/api/setup_map/rebuild")
+    async def api_setup_map_rebuild(request: Request):
+        need(request, always=True)
+        a = getattr(ctx, "setup_map_agent", None)
+        if a is None:
+            raise HTTPException(400, "setup map is off")
+        return {"started": a.rebuild(), "status": ctx.setup_map.status}
 
     @app.get("/api/compare")
     async def api_compare(request: Request, range: str = "week"):

@@ -75,6 +75,12 @@ class SetupFirstTrader(TraderAgent):
         return {"n": h["n"], "exp": round(h["exp"], 3), "win": round(h.get("win", 0.0), 3),
                 "overall_n": s["n"], "overall_exp": round(s["expectancy"], 3), "shrunk_exp": round(shrunk, 3)}
 
+    def history_prior(self, sym: str, sid: str, hour: int) -> dict | None:
+        h = getattr(self.ctx, "setup_map", None)
+        if h is None or h.map is None:
+            return None
+        return h.map.prior(sym, sid, hour, int(self.now().dayofweek))
+
     def today_form(self, st: Strategy, df: pd.DataFrame, ctx: dict, tf_min: int) -> dict:
         """How this setup has played out on today's bars so far (backtest of today only)."""
         try:
@@ -127,19 +133,23 @@ class SetupFirstTrader(TraderAgent):
                     self.ctx.journal.add_signal(self._rec(sig) | {"action": "filtered", "why": why})
                     continue
                 prior = self.hour_prior(sym, st.id, hour)
-                cands.append((prior["shrunk_exp"], st, sig, prior))
+                hist = self.history_prior(sym, st.id, hour)
+                key = hist["shrunk_exp"] if hist and hist.get("level") != "none" else prior["shrunk_exp"]
+                cands.append((key, st, sig, prior, hist))
         if not cands:
             return
         cands.sort(key=lambda c: -c[0])
         graded = []
-        for _, st, sig, prior in cands[: self.max_graded]:
-            extra = {"setup_this_hour": prior, "hourly_rank": ranking.get(st.id),
+        for _, st, sig, prior, hist in cands[: self.max_graded]:
+            extra = {"setup_this_hour_12d": prior, "hourly_rank": ranking.get(st.id),
                      "candidates_on_this_bar": len(cands)}
+            if hist and hist.get("level") != "none":
+                extra["setup_history_90d"] = hist   # same setup, same hour & weekday, last ~90 days (shrunk)
             if self.today_ctx:
                 extra["setup_today"] = self.today_form(st, df, ctx, tf_min)
             g = await self.grade(sig, ctx, df, extra)
             graded.append((g, sig))
-        for _, st, sig, _ in cands[self.max_graded:]:
+        for _, st, sig, _, _ in cands[self.max_graded:]:
             self.ctx.journal.add_signal(self._rec(sig) | {"action": "skipped",
                                                           "why": f"not in top {self.max_graded} setups on this bar"})
         jc = self.cfg["jev"]

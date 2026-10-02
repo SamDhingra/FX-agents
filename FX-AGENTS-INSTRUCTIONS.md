@@ -8,7 +8,7 @@ A reference for running, changing, and reusing the FX-Agents multi-agent intrada
   sections 2–7 into `CLAUDE.md`, and the assistant will follow the project's rules.
 
 > **Status (updated 2026-10-02).** The system has run end to end on a *synthetic* market with a
-> paper broker, and 45 unit tests pass. The default broker is now **OANDA** (v20 REST); IBKR stays
+> paper broker, and 49 unit tests pass. The default broker is now **OANDA** (v20 REST); IBKR stays
 > available. Both have only been tested against fakes, not a real practice/paper account yet, and
 > Jev has only been tested against a stubbed response. Sim P&L is meaningless,
 > because the simulated market is a random walk. Treat every result as plumbing verification,
@@ -159,6 +159,9 @@ fxagents/
   agents/setup_first.py      SetupFirstTrader (scan every strategy each bar, gates, Jev picks best)
                              + shadow book: ShadowState (shares market context, owns positions),
                              ShadowBroker (virtual fills ± half-spread), ShadowFeedAgent, build_shadow()
+  setup_map.py               90-day setup map: compute() backtests every version with live rules,
+                             SetupMap.prior() (cell→hour→overall shrinkage, family fallback), grid(),
+                             best_now(); SetupMapAgent builds in a thread, rebuilds Sundays
   journal.py                 SQLite: trades, decisions, signals, strategy versions, equity, learner log
   strategies/                base.py · smc.py · classic.py · __init__.py (registry, Confluence)
   agents/                    trading.py · context.py · strategist.py · ops.py · core.py
@@ -166,6 +169,7 @@ fxagents/
 tests/test_core.py           18 tests: risk guards, pyramid maths, no look-ahead, news, bias, Jev parsing
 tests/test_oanda.py          tests against tests/fake_oanda.py (in-memory v20 API)
 tests/test_setup_first.py    setup-first selection + shadow-book isolation
+tests/test_setup_map.py      setup map aggregation, shrunk priors, grid, compute
 deploy/                      launchd + systemd units
 ```
 

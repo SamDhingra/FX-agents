@@ -99,7 +99,7 @@ def test_scans_every_strategy_and_takes_only_the_best_graded(tmp_path):
     assert [r["signal"].strategy for r in req] == ["ict_ote:5m@v1"]   # only the best one traded
     why = {r["strategy"]: r["why"] for r in ctx.journal.signals(10)}
     assert why["smc_ifvg:5m@v1"] == why["sr_rejection:5m@v1"] == "a better setup was taken on this bar"
-    assert "setup_this_hour" in ctx.jev.asked[0] and "setup_today" in ctx.jev.asked[0]
+    assert "setup_this_hour_12d" in ctx.jev.asked[0] and "setup_today" in ctx.jev.asked[0]
 
 
 def test_hard_bias_rule_filters_before_any_jev_call(tmp_path):

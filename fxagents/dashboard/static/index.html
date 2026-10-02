@@ -227,6 +227,25 @@ body.shadow #pause, body.shadow #flatten{display:none}
 .hrs div i{position:absolute;left:0;right:0;bottom:0;background:var(--ghost);border-radius:4px 4px 0 0}
 .hrl{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;font-size:9.5px;color:var(--muted);text-align:center;margin-top:4px}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
+/* setup map heatmap */
+.smctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.hm{overflow-x:auto;scrollbar-width:thin}
+.hm table{border-collapse:separate;border-spacing:2px;width:100%;min-width:420px}
+.hm th{font-size:10.5px;padding:0 0 4px;text-align:center;border:0;letter-spacing:0;text-transform:none}
+.hm th.now{color:var(--text)}
+.hm td{padding:0;border:0;height:26px;min-width:22px;border-radius:5px;background:transparent;position:relative}
+.hm td.lab{width:1%;position:sticky;left:0;z-index:1;background:var(--card);padding-right:8px;white-space:nowrap;font-size:12px;color:var(--text-2);text-align:left;border-radius:0}
+.hm td.lab small{color:var(--muted);margin-left:4px}
+.hm td.c{cursor:default}
+.hm td.thin{opacity:.55;background-image:repeating-linear-gradient(45deg,transparent 0 3px,rgb(127 127 127 / .28) 3px 4px)}
+.hm td.emp{box-shadow:inset 0 0 0 1px var(--line)}
+.hm td.nowc{outline:2px solid var(--text-2);outline-offset:-1px}
+.hmleg{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.hmleg .grad{width:160px;height:10px;border-radius:5px}
+.hmleg .thin{display:inline-block;width:16px;height:12px;border-radius:3px;opacity:.55;background:var(--card-2);background-image:repeating-linear-gradient(45deg,transparent 0 3px,rgb(127 127 127 / .35) 3px 4px)}
+.hmtip{position:fixed;z-index:60;pointer-events:none;background:var(--card);border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:var(--shadow);display:none;max-width:240px}
+.bn{display:grid;gap:8px}
+.bn .it{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);font-size:13px}
 .seg button{white-space:nowrap}
 @media (max-width:760px){ a.btn.hide-m{display:none} .top{flex-wrap:wrap} #bookSeg{order:9;width:100%;display:flex} #bookSeg[hidden]{display:none} #bookSeg button{flex:1;padding:7px 0}
   .vs td,.vs th{padding:9px 6px;font-size:12.5px} .fun .row{grid-template-columns:86px 1fr} .hrl span:nth-child(odd){visibility:hidden} .verdict b{font-size:17px} }
@@ -360,6 +379,23 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
     <!-- STRATEGIES -->
     <section class="page" id="p-strategies">
+      <div class="grid" style="margin-bottom:16px">
+        <div class="card c8"><h3>Setup map · how each setup has done by hour <span class="sp"></span><span class="mut" id="smMeta" style="font-weight:500"></span></h3>
+          <div class="smctl">
+            <div class="filters" id="smSym" style="margin:0"></div>
+            <div class="seg" id="smTf"><button data-v="all" class="on">5m+15m</button><button data-v="5m">5m</button><button data-v="15m">15m</button></div>
+            <div class="seg" id="smWd"><button data-v="all" class="on">All days</button><button data-v="0">Mon</button><button data-v="1">Tue</button><button data-v="2">Wed</button><button data-v="3">Thu</button><button data-v="4">Fri</button></div>
+            <div class="seg" id="smMetric"><button data-v="r" class="on">Avg R</button><button data-v="w">Win rate</button><button data-v="n">Trades</button></div>
+          </div>
+          <div class="hm" id="hm"><div class="empty">Loading…</div></div>
+          <div class="hmleg" id="hmleg"></div>
+        </div>
+        <div class="card c4"><h3>Historically best right now <span class="sp"></span><span class="mut" id="bnWhen" style="font-weight:500"></span></h3>
+          <div class="bn" id="bestNow"><div class="empty">—</div></div>
+          <div class="mut" style="font-size:12px;margin-top:12px;line-height:1.5">From the setup map: each setup at this hour (5m and 15m pooled, all weekdays), shrunk toward its overall record so a few lucky trades can't dominate. Setup-first ranks live setups with the finer version (exact strategy, hour and weekday) and passes it to Jev.</div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center"><button class="btn" id="smRebuild">Rebuild now</button><span class="mut" id="smState" style="font-size:12px"></span></div>
+        </div>
+      </div>
       <div class="filters" id="sfilters"></div>
       <div class="grid">
         <div class="card c8"><h3>Leaderboard <span class="sp"></span><span class="mut" style="font-weight:500">rolling backtest with the bias rule applied</span></h3><div class="tbl" id="board"></div></div>
@@ -403,6 +439,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 <div class="scrim" id="scrim"></div>
 <div class="drawer" id="drawer"></div>
 <div class="toasts" id="toasts"></div>
+<div class="hmtip" id="hmtip"></div>
 
 <script>
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -420,7 +457,7 @@ const q = path => BOOK === "shadow" ? path + (path.includes("?") ? "&" : "?") + 
 /* ── navigation ── */
 const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
 const MORE = ["strategies","news","agents"];
-const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare"};
+const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy"};
 function go(p){
   if(p === "more") p = MORE[(MORE.indexOf(page) + 1) % MORE.length];
   page = p;
@@ -431,6 +468,7 @@ function go(p){
   if(p === "calendar") loadCalendar();
   if(p === "trades") loadTrades();
   if(p === "compare") loadCompare();
+  if(p === "strategies") loadSetupMap();
   if(S) render(S);
   window.scrollTo({top:0});
 }
@@ -806,6 +844,68 @@ function cmpChart(svg, pts){
     + `<path d="${path("shadow")}" fill="none" stroke="var(--ghost)" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="1 0"/>` + dots("live") + dots("shadow");
 }
 
+/* ── setup map (90-day heatmap) ── */
+const WD = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+let SM = null, sm = {sym:"ALL", tf:"all", wd:"all", metric:"r"}, smTimer = null;
+async function loadSetupMap(){
+  const qs = `symbol=${sm.sym}&tf=${sm.tf}&weekday=${sm.wd}`;
+  try{ SM = await (await fetch("api/setup_map?"+qs,{credentials:"same-origin"})).json(); }catch(e){ SM = null; }
+  renderSetupMap();
+  clearTimeout(smTimer);
+  if(SM && SM.status && SM.status.state === "building" && page === "strategies") smTimer = setTimeout(loadSetupMap, 8000);
+}
+function segWire(id, key){ $$(`#${id} button`).forEach(b => b.onclick = () => { sm[key] = b.dataset.v;
+  $$(`#${id} button`).forEach(x => x.classList.toggle("on", x === b)); loadSetupMap(); }); }
+segWire("smTf","tf"); segWire("smWd","wd"); segWire("smMetric","metric");
+$("#smRebuild").onclick = async () => {
+  const r = await fetch("api/setup_map/rebuild",{method:"POST",credentials:"same-origin"});
+  toast(r.ok ? "Rebuilding the setup map — this takes a few minutes" : `Rebuild failed (${r.status})`); loadSetupMap(); };
+function cellColor(c, metric, maxN){
+  // diverging: down ← neutral surface → up ; sequential (trades): neutral → accent
+  if(metric === "n"){ const t = Math.min(1, c.n / maxN); return `color-mix(in srgb, var(--accent) ${Math.round(12 + t*70)}%, var(--card-2))`; }
+  const v = metric === "r" ? c.r / 0.5 : (c.w - 0.5) / 0.25, t = Math.min(1, Math.abs(v));
+  if(t < 0.04) return "var(--card-2)";
+  return `color-mix(in srgb, var(${v > 0 ? "--up" : "--down"}) ${Math.round(14 + t*66)}%, var(--card-2))`;
+}
+function renderSetupMap(){
+  const syms = SM && SM.symbols ? SM.symbols : [];
+  $("#smSym").innerHTML = ["ALL", ...syms].map(x => `<button class="fchip ${sm.sym===x?"on":""}" data-v="${x}">${x==="ALL"?"All":x}</button>`).join("");
+  $$("#smSym .fchip").forEach(b => b.onclick = () => { sm.sym = b.dataset.v; loadSetupMap(); });
+  const st = SM && SM.status ? SM.status : {state:"missing"};
+  $("#smState").textContent = st.state === "building" ? `building… started ${hm(st.started)}` : st.state === "error" ? `last build failed: ${st.error||""}` : "";
+  $("#smRebuild").disabled = st.state === "building" || BOOK === "shadow";
+  $("#smMeta").textContent = st.built_at ? `${Math.round(st.days)} days · ${fmt(st.trades,0)} backtested trades · built ${md(st.built_at)}` : "";
+  if(!SM || !SM.grid){
+    $("#hm").innerHTML = `<div class="empty">${st.state === "building" ? "Building the setup map from 90 days of history… this takes a few minutes. Trading carries on meanwhile." : st.state === "error" ? "The last build failed — try Rebuild." : "No setup map yet. It builds automatically in the background."}</div>`;
+    $("#hmleg").innerHTML = ""; $("#bestNow").innerHTML = `<div class="empty">Available once the map is built.</div>`; return;
+  }
+  const g = SM.grid, nowH = SM.hour, metric = sm.metric;
+  const maxN = Math.max(1, ...g.rows.flatMap(r => Object.values(r.cells).map(c => c.n)));
+  const HRS = g.hours && g.hours.length ? g.hours : Array.from({length:24},(_,h)=>h);
+  const hdr = `<tr><th></th>${HRS.map(h=>`<th class="${h===nowH?"now":""}">${h}</th>`).join("")}</tr>`;
+  const body = g.rows.map(r => `<tr><td class="lab">${esc(r.setup)}<small>${r.n}</small></td>${HRS.map(h=>{
+      const c = r.cells[String(h)];
+      if(!c) return `<td class="emp ${h===nowH?"nowc":""}"></td>`;
+      return `<td class="c ${c.n < g.min_n ? "thin" : ""} ${h===nowH?"nowc":""}" style="background-color:${cellColor(c, metric, maxN)}"
+        data-t="${esc(r.setup)} · ${String(h).padStart(2,"0")}:00 NY${sm.wd!=="all"?" · "+WD[+sm.wd]:""}" data-n="${c.n}" data-w="${c.w}" data-r="${c.r}"></td>`;}).join("")}</tr>`).join("");
+  $("#hm").innerHTML = g.rows.length ? `<table>${hdr}${body}</table>` : `<div class="empty">No trades for this filter.</div>`;
+  const tip = $("#hmtip");
+  $$("#hm td.c").forEach(td => {
+    const show = e => { const p = e.touches ? e.touches[0] : e;
+      tip.innerHTML = `<b>${td.dataset.t}</b><br>${td.dataset.n} trades · ${Math.round(td.dataset.w*100)}% win · <b class="${cls(+td.dataset.r)}">${sR(+td.dataset.r)}</b> avg${+td.dataset.n < g.min_n ? `<br><span class="mut">thin — under ${g.min_n} trades</span>` : ""}`;
+      tip.style.display = "block"; tip.style.left = Math.min(innerWidth - 250, p.clientX + 12) + "px"; tip.style.top = (p.clientY + 14) + "px"; };
+    td.onmousemove = show; td.ontouchstart = show; td.onmouseleave = () => tip.style.display = "none"; td.ontouchend = () => setTimeout(()=>tip.style.display="none", 1500);
+  });
+  const leg = metric === "n" ? `<span>fewer</span><span class="grad" style="background:linear-gradient(90deg,var(--card-2),var(--accent))"></span><span>more trades</span>`
+    : `<span>${metric==="r"?"−0.5R":"25%"}</span><span class="grad" style="background:linear-gradient(90deg,var(--down),var(--card-2),var(--up))"></span><span>${metric==="r"?"+0.5R avg":"75% win"}</span>`;
+  $("#hmleg").innerHTML = leg + `<span style="margin-left:8px"><i class="thin"></i> under ${g.min_n} trades</span><span>· hours (NY) with entry windows · outlined = now</span>`;
+  $("#bnWhen").textContent = SM.best_for ? `${WD[SM.best_for.weekday]} ${String(SM.best_for.hour).padStart(2,"0")}:00 NY${SM.best_for.next ? " · next window" : ""}` : "";
+  const bn = SM.best_now || [];
+  $("#bestNow").innerHTML = bn.length ? bn.map(x => `<div class="it"><b style="min-width:58px">${x.symbol}</b><span class="tag acc">${esc(x.setup)}</span><span class="sp" style="flex:1"></span>
+      <span class="num ${cls(x.shrunk_exp)}" title="shrunk expectancy">${sR(x.shrunk_exp)}</span><span class="mut num" style="font-size:11px">n ${x.hour_n}</span></div>`).join("")
+    : `<div class="empty">Nothing with enough history at this hour.</div>`;
+}
+
 /* ── render loop ── */
 let lastAlert = null;
 function render(s){
@@ -869,7 +969,8 @@ try{ const b = localStorage.getItem("fx-book"); if(b === "shadow"){ BOOK = "shad
 fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
 connect();
 setInterval(()=>{ if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades(); if(page==="compare") loadCompare(); }, 15000);
-window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); if(page==="compare") renderCompare(); });
+setInterval(()=>{ if(page==="strategies") loadSetupMap(); }, 120000);
+window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); if(page==="compare") renderCompare(); if(page==="strategies") renderSetupMap(); });
 const hashP = location.hash.slice(1); if(titles[hashP]) go(hashP);
 </script>
 </body>
