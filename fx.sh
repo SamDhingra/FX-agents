@@ -11,7 +11,10 @@ need_env() {
 }
 
 case "${1:-help}" in
-  up)        need_env; mkdir -p data backups; $DC up -d --build; $DC ps ;;
+  up)        need_env; mkdir -p data backups
+             # the app runs as uid 1000 inside the container; a root-owned ./data (Docker creates it that way) breaks the journal
+             [[ -w data ]] || sudo chown -R 1000:1000 data
+             $DC up -d --build; $DC ps ;;
   down)      $DC down ;;
   restart)   $DC restart "${2:-fxagents}" ;;
   logs)      $DC logs -f --tail=200 "${2:-fxagents}" ;;
