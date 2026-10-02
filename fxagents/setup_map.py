@@ -194,7 +194,7 @@ def map_path(cfg) -> str:
 
 
 def history_dir(cfg) -> Path:
-    return Path(cfg["storage"]["db_path"]).parent / "history"
+    return Path(cfg["history_dir"]) if cfg.get("history_dir") else Path(cfg["storage"]["db_path"]).parent / "history"
 
 
 def save_history(cfg, sym: str, m1: pd.DataFrame, h1: pd.DataFrame) -> None:
@@ -207,6 +207,23 @@ def save_history(cfg, sym: str, m1: pd.DataFrame, h1: pd.DataFrame) -> None:
 def load_history(cfg, sym: str):
     p = history_dir(cfg) / f"{sym}.pkl"
     return pd.read_pickle(p) if p.exists() else None
+
+
+SPEC_KEYS = ("oanda_instrument", "tick_size", "qty_step", "min_units", "margin_rate", "multiplier",
+             "commission_per_unit", "max_units")
+
+
+def save_specs(cfg) -> None:
+    """Instrument precision/size/margin as read from the OANDA account — replays need them offline."""
+    d = history_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "instruments.json").write_text(json.dumps(
+        {s: {k: ic[k] for k in SPEC_KEYS if k in ic} for s, ic in cfg["instruments"].items()}, indent=1))
+
+
+def load_specs(cfg) -> dict | None:
+    p = history_dir(cfg) / "instruments.json"
+    return json.loads(p.read_text()) if p.exists() else None
 
 
 class SetupMapAgent:
@@ -246,6 +263,10 @@ class SetupMapAgent:
         if feed is not None and hasattr(feed, "_paged"):      # OANDA: pull real history
             now = pd.Timestamp.now(tz="UTC")
             out = {}
+            try:
+                save_specs(self.cfg)
+            except Exception as e:  # noqa: BLE001
+                log.warning("instrument specs: %s", e)
             for sym, name in feed.syms.items():
                 m1 = feed._frame(await feed._paged(name, "M1", now - pd.Timedelta(days=days)))
                 h1 = feed._frame(await feed._paged(name, "H1", now - pd.Timedelta(days=days + 45)), vol=False)

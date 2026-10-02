@@ -52,10 +52,17 @@ class StrategistAgent(Agent):
         if self.last_eval is None or now - self.last_eval >= pd.Timedelta(minutes=self.ec["refresh_minutes"]):
             await self.evaluate_all()
         hh, mm = map(int, self.ec["optimize_at"].split(":"))
-        due_daily = now.hour == hh and now.minute >= mm and (self.last_learn is None or self.last_learn.date() != now.date())
+        if not self.ec.get("learn_enabled", True):
+            return
+        due_daily = self.ec.get("optimize_daily", True) and now.hour == hh and now.minute >= mm \
+            and (self.last_learn is None or self.last_learn.date() != now.date())
         due_every = self.last_learn is None or now - self.last_learn >= pd.Timedelta(hours=self.ec["optimize_every_hours"])
         if due_daily or due_every:
-            await self.learn()
+            if self.cfg["mode"] == "sim":
+                await self.learn()                     # replays/sims: the clock waits for the learner
+            else:
+                self.busy = True                       # live/paper: never hold up market data for minutes
+                asyncio.create_task(self.learn())
 
     def long_m1(self, sym: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Up to `history_days` of 1m bars: the cached long history (saved by the setup-map build)
@@ -70,6 +77,8 @@ class StrategistAgent(Agent):
             hm1, hh1 = hist
             m1 = pd.concat([hm1[hm1.index < m1.index[0]] if len(m1) else hm1, m1])
             h1 = pd.concat([hh1[hh1.index < h1.index[0]] if len(h1) else hh1, h1])
+        now = self.now()                      # never look past "now" (a replay's history file holds the future)
+        m1, h1 = m1[m1.index < now], h1[h1.index < now.floor("h")]
         cut = m1.index[-1] - pd.Timedelta(days=float(self.lc["history_days"])) if len(m1) else None
         if cut is not None:
             m1 = m1[m1.index >= cut]

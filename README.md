@@ -6,7 +6,7 @@ picks the best-rated strategy for each symbol. Trades start at 1:1 R:R, pyramid 
 and move the stop into profit. There is a trade journal and a live dashboard that works on
 phone and laptop.
 
-> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 56 unit tests
+> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 59 unit tests
 > pass. Two live brokers are supported: **OANDA** (default; v20 REST API) and **IBKR** (`ib_async`).
 > Both are tested against fakes only: neither has yet traded on your real practice/paper account.
 > Run `--mode paper` for at least 2–4 weeks before you consider live.
@@ -78,7 +78,7 @@ cd fx-agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py                        # sim: 3 synthetic days, dashboard on http://localhost:8088
-python -m pytest -q                   # 56 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
+python -m pytest -q                   # 59 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
 python backtest.py --synthetic        # leaderboard + expectancy by hour
 ```
 
@@ -209,6 +209,22 @@ keeps trading. It never re-proposes a version it already has or has retired.
 To switch the real book to setup-first, set `selector.mode: setup_first` (the shadow book then runs
 hourly-pick automatically) and restart.
 
+## Backtesting the whole system (replay)
+
+`./fx.sh backtest 60` (server) or `python run_backtest.py --days 60` replays real OANDA 1-minute
+history — the cache the setup-map build downloads — bar by bar through **the same agents the live bot
+runs**: hourly selection with Jev, the hard bias rule and its safeguards, risk sizing with margin caps,
+position management (partials, stop-to-profit, pyramids, 15:50 flatten), the kill switch, the learner
+(weekly during a replay) and the shadow book running setup-first next to the real book's hourly pick.
+Options: `--no-learner` (compare learning on/off), `--jev live` (real Jev API instead of the local
+heuristic), `--equity 73000`, `--name label`. On the server it runs in its own low-priority container.
+Results — head-to-head metrics (R, win rate, profit factor, P&L, return, max drawdown, Sharpe, streaks),
+equity curves, monthly/instrument/setup/hour/exit breakdowns, learner activity and the trade list — are
+on the dashboard's **Backtests** page, and in `data/backtests/<run>/report.json`.
+Not replayed: news blackouts (no historical calendar). Fills are simulated (bar price ± half-spread).
+For speed each strategy scans the period once instead of rescanning a window every bar (they agree on
+99.9% of bars). A day takes ~45 s plus the learner's weekly cycle, so 60 days ≈ 45–60 minutes.
+
 ## Higher-timeframe bias: a hard rule, with safeguards
 
 **Rule:** every strategy may only trade in the direction of the composite bias. The score is
@@ -259,6 +275,7 @@ only count trades that could actually be taken.
 config.yaml            all settings (instruments, risk, sessions, management, Jev, notifications)
 main.py                runs every agent (sim | paper | live) on OANDA or IBKR
 check_oanda.py         read-only OANDA connection check
+run_backtest.py        full-system replay backtest (fxagents/replay.py + backtest_report.py)
 backtest.py            leaderboard + expectancy by hour (synthetic | TradingView CSV | IBKR)
 fxagents/strategies/   smc.py (ICT, DTFX, SBS) · classic.py (S/R, RSI, MACD) · confluence builder
 fxagents/agents/       trading.py · strategist.py · ops.py

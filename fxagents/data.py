@@ -57,13 +57,31 @@ class BarStore:
             self._buf[symbol] = []
         return self.frames.get(symbol, pd.DataFrame(columns=["open", "high", "low", "close", "volume"]))
 
+    def _resampled(self, symbol: str, rule: str, m1: pd.DataFrame) -> pd.DataFrame:
+        """All bars of `rule` incl. the forming one. Incremental: only the tail since the last cached
+        bar is re-aggregated (a full resample of ~17k 1m rows on every new bar was the replay hot spot)."""
+        key = ("full", symbol, rule)
+        prev = self._cache.get(key)
+        if prev is not None and len(m1) and len(prev[1]):
+            p_first, full = prev[0], prev[1]
+            last_start = full.index[-1]
+            if m1.index[-1] >= last_start and m1.index[0] <= p_first + pd.Timedelta(rule):
+                tail = resample_ohlc(m1[m1.index >= last_start], rule)
+                full = pd.concat([full.iloc[:-1], tail])
+                full = full[full.index >= m1.index[0].floor(rule)]
+                self._cache[key] = (m1.index[0], full)
+                return full
+        full = resample_ohlc(m1, rule)
+        self._cache[key] = (m1.index[0] if len(m1) else None, full)
+        return full
+
     def tf(self, symbol: str, rule: str, complete_only: bool = True) -> pd.DataFrame:
         m1 = self.m1(symbol)
-        key = (symbol, rule)
+        key = (symbol, rule, complete_only)
         stamp = (len(m1), m1.index[-1] if len(m1) else None)   # length alone goes stale once the store is full
         if key in self._cache and self._cache[key][0] == stamp:
             return self._cache[key][1]
-        df = resample_ohlc(m1, rule)
+        df = self._resampled(symbol, rule, m1)
         if complete_only and len(df) and len(m1):
             # drop the still-forming bar
             last_close = df.index[-1] + pd.Timedelta(rule)

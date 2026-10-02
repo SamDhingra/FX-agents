@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import itertools
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -19,6 +21,17 @@ class RawSignal:
     reason: str
     structural_target: float | None = None
     features: dict = field(default_factory=dict)
+
+
+_LOCK = threading.Lock()
+_CTX: "OrderedDict[tuple, dict]" = OrderedDict()
+
+
+def frame_key(df: pd.DataFrame) -> tuple:
+    """Identity of a bar frame: same first/last bar, length and last close → same indicators/signals."""
+    if not len(df):
+        return (0, 0, 0, 0.0)
+    return (df.index[0].value, df.index[-1].value, len(df), float(df["close"].iloc[-1]), float(df["low"].iloc[-1]))
 
 
 class Strategy:
@@ -70,7 +83,23 @@ class Strategy:
     # ── shared plumbing ───────────────────────────────────────────────────
     @staticmethod
     def context(df: pd.DataFrame) -> dict:
-        """Indicators computed once per frame and shared by every strategy scanning it."""
+        """Indicators computed once per frame and shared by every strategy scanning it — and by every
+        agent looking at the same bars (trader, setup-first, today's-form check), via a small cache."""
+        key = frame_key(df)
+        with _LOCK:
+            hit = _CTX.get(key)
+            if hit is not None:
+                _CTX.move_to_end(key)
+                return hit
+        ctx = Strategy._context(df)
+        with _LOCK:
+            _CTX[key] = ctx
+            while len(_CTX) > 48:
+                _CTX.popitem(last=False)
+        return ctx
+
+    @staticmethod
+    def _context(df: pd.DataFrame) -> dict:
         c = df["close"]
         bar_delta = pd.Series(df.index).diff().median() if len(df) > 2 else pd.Timedelta("5min")
         line, sig, hist = ind.macd(c)
@@ -94,6 +123,19 @@ class Strategy:
         return ctx["_pivots"][key]
 
     def scan(self, df: pd.DataFrame, ctx: dict | None = None) -> list[RawSignal]:
+        key = frame_key(df)
+        cache = self.__dict__.setdefault("_scan_cache", OrderedDict())
+        with _LOCK:
+            if key in cache:
+                return cache[key]
+        out = self._scan_full(df, ctx)
+        with _LOCK:
+            cache[key] = out
+            while len(cache) > 12:
+                cache.popitem(last=False)
+        return out
+
+    def _scan_full(self, df: pd.DataFrame, ctx: dict | None = None) -> list[RawSignal]:
         ctx = ctx or self.context(df)
         out = []
         a = ctx["atr"]

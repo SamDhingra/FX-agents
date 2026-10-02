@@ -332,6 +332,40 @@ def build_app(ctx) -> FastAPI:
         ctx.state.alert("warn", f"{sid} {'vetted for live' if st.vetted else 'vetting removed'}")
         return {"ok": True, "vetted": st.vetted}
 
+    def _bt_dir():
+        from ..replay import backtests_dir
+        return backtests_dir(ctx.cfg)
+
+    @app.get("/api/backtests")
+    async def api_backtests(request: Request):
+        need(request)
+        d, runs = _bt_dir(), []
+        if d.exists():
+            for r in sorted(d.iterdir(), reverse=True):
+                mp = r / "meta.json"
+                if not mp.exists():
+                    continue
+                try:
+                    m = json.loads(mp.read_text())
+                    pp = r / "progress.json"
+                    if pp.exists():
+                        m["progress"] = json.loads(pp.read_text())
+                    m["has_report"] = (r / "report.json").exists()
+                    runs.append(m)
+                except (OSError, ValueError):
+                    continue
+        return {"runs": runs[:50], "history_ready": (Path(ctx.cfg["storage"]["db_path"]).parent / "history").exists()}
+
+    @app.get("/api/backtests/{rid}")
+    async def api_backtest(rid: str, request: Request):
+        need(request)
+        if not rid.replace("-", "").replace("_", "").isalnum():
+            raise HTTPException(400, "bad id")
+        p = _bt_dir() / rid / "report.json"
+        if not p.exists():
+            raise HTTPException(404, "no report yet")
+        return JSONResponse(json.loads(p.read_text()))
+
     @app.get("/api/compare")
     async def api_compare(request: Request, range: str = "week"):
         need(request)

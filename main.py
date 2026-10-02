@@ -45,7 +45,14 @@ async def build(cfg, args):
     book.require_vetting = cfg["mode"] == "live" and bool((cfg.get("learner") or {}).get("live_requires_vetting", True))
     news = NewsCalendar(cfg)
     ib = oanda = None
-    if cfg["mode"] == "sim":
+    if cfg.get("replay"):
+        # full-system backtest on cached real history, virtual fills with the configured spread
+        from fxagents.agents.setup_first import ShadowBroker
+        from fxagents.replay import ReplayFeed
+        rp = cfg["replay"]
+        feed = ReplayFeed(cfg, bus, state, rp["dir"], rp["days"], journal)
+        broker = ShadowBroker(cfg, state, bus, {k: float(v) for k, v in ((cfg.get("shadow") or {}).get("spread") or {}).items()})
+    elif cfg["mode"] == "sim":
         feed = SimFeed(cfg, bus, state)
         broker = PaperBroker(cfg, state, bus)
     elif cfg["broker"] == "oanda":
@@ -94,11 +101,14 @@ async def build(cfg, args):
     first = store.m1(next(iter(cfg["instruments"])))
     state.now = (first.index[-1] + pd.Timedelta("1min")) if len(first) else pd.Timestamp.now(tz=cfg["timezone"])
     state.equity = state.equity_peak = state.day_start_equity = await broker.equity()
-    if cfg["mode"] == "sim":
+    if cfg.get("replay"):
+        news.source = "none (replay — no historical calendar)"
+    elif cfg["mode"] == "sim":
         news.load_sim(feed.split, cfg["sim"]["days"] + 2)
     else:
         await news.refresh(state.now)
     ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book, news)
+    ctx.oracle = getattr(feed, "oracle", None)          # replays: precomputed per-bar signals
     from fxagents.agents.setup_first import SetupFirstTrader, build_shadow
     sel_mode = cfg["selector"].get("mode", "hourly_pick")
     trader = SetupFirstTrader(ctx) if sel_mode == "setup_first" else TraderAgent(ctx)
@@ -112,8 +122,12 @@ async def build(cfg, args):
     # 90-day setup map (heatmap + setup-first prior): loaded now, built/rebuilt in the background
     from fxagents.setup_map import SetupMapAgent, SetupMapHolder, map_path
     ctx.setup_map = SetupMapHolder(map_path(cfg))
-    ctx.setup_map_agent = SetupMapAgent(ctx, ctx.setup_map, feed if cfg["mode"] != "sim" else None)
-    ctx.setup_map_agent.start()
+    if cfg.get("replay"):
+        ctx.setup_map.status = {"state": "off", "why": "replay"}     # map overlaps the replayed period → off
+        ctx.setup_map_agent = None
+    else:
+        ctx.setup_map_agent = SetupMapAgent(ctx, ctx.setup_map, feed if cfg["mode"] != "sim" else None)
+        ctx.setup_map_agent.start()
     # shadow book: same live bars, the other selection mode, virtual fills only (never sends orders)
     ctx.shadow = None
     ctx.shadow_info = {"enabled": False}
@@ -121,6 +135,7 @@ async def build(cfg, args):
     if sc.get("enabled"):
         sc.setdefault("mode", "hourly_pick" if sel_mode == "setup_first" else "setup_first")
         sctx, sagents, sfeed = build_shadow(ctx, state.equity)
+        sctx.oracle = ctx.oracle
         for a in sagents:
             a.start()
         sfeed.start()                      # after MarketData, so each bar is already stored
@@ -145,8 +160,8 @@ async def build(cfg, args):
     return ctx, feed, agents, ib
 
 
-async def main(args):
-    cfg = load_config(args.config)
+async def main(args, cfg=None):
+    cfg = cfg if cfg is not None else load_config(args.config)
     if args.mode:
         cfg["mode"] = args.mode
     if args.days:

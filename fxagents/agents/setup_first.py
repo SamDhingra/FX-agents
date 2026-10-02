@@ -91,7 +91,7 @@ class SetupFirstTrader(TraderAgent):
             if start_i >= len(df) - 1:
                 return {"n": 0}
             s = self.cfg["sessions"]
-            tr = backtest(st, df, ctx, Mgmt.from_cfg(self.cfg, rr=st.rr, bar_minutes=tf_min),
+            tr = backtest(st, df, Strategy.context(df), Mgmt.from_cfg(self.cfg, rr=st.rr, bar_minutes=tf_min),
                           s["entry_windows"], s["flatten_at"], start_i=start_i)
             tr = [t for t in tr if t["ts"] < idx[-1]]
             if not tr:
@@ -116,16 +116,13 @@ class SetupFirstTrader(TraderAgent):
         df = self.ctx.store.tf(sym, tf).iloc[-self.window:]
         if len(df) < 120:
             return
-        ctx = Strategy.context(df)
-        last = len(df) - 1
+        ctx = self.bar_context(sym, tf, df)
         tf_min = int(pd.Timedelta(tf).total_seconds() // 60)
         hour = self.now().hour
         ranking = {r["id"]: i + 1 for i, r in enumerate(self.state.selections.get(sym, []))}
         cands = []
         for st in strategies:
-            for rs in st.scan(df, ctx):
-                if rs.i != last:
-                    continue
+            for rs in self.last_bar_signals(st, sym, tf, df, ctx):
                 sig = Signal(sym, st.id, rs.side, rs.entry, rs.stop, ev["ts"], rs.reason,
                              rs.features, rs.structural_target, rr=st.rr)
                 why = self.precheck(sig)

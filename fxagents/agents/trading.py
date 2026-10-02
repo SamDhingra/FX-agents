@@ -208,18 +208,36 @@ class TraderAgent(Agent):
         df = self.ctx.store.tf(sym, tf).iloc[-self.window:]
         if len(df) < 120:
             return
-        ctx = Strategy.context(df)
-        last = len(df) - 1
+        ctx = self.bar_context(sym, tf, df)
         for sid in picks:
             st = self.ctx.book.get(sid)
             if st is None:
                 continue
-            for rs in st.scan(df, ctx):
-                if rs.i != last:
-                    continue
+            for rs in self.last_bar_signals(st, sym, tf, df, ctx):
                 sig = Signal(sym, st.id, rs.side, rs.entry, rs.stop, ev["ts"], rs.reason,
                              rs.features, rs.structural_target, rr=st.rr)
                 await self.evaluate(sig, ctx, df)
+
+    def bar_context(self, sym: str, tf: str, df: pd.DataFrame) -> dict:
+        """Indicators for the newest bar. Replays read them from the precomputed oracle."""
+        oracle = getattr(self.ctx, "oracle", None)
+        if oracle is not None:
+            c = oracle.ctx_at(sym, tf, df.index[-1])
+            if c is not None:
+                return c
+        return Strategy.context(df)
+
+    def last_bar_signals(self, st, sym: str, tf: str, df: pd.DataFrame, ctx: dict) -> list:
+        """Signals a strategy fires on the newest bar. Live: scan the window. Replay: look them up in
+        the oracle, which scanned the whole period once (strategies are causal, so it's the same thing
+        minus the per-bar rescans)."""
+        oracle = getattr(self.ctx, "oracle", None)
+        if oracle is not None:
+            hit = oracle.at(st, sym, tf, df.index[-1])
+            if hit is not None:
+                return hit
+        last = len(df) - 1
+        return [rs for rs in st.scan(df, ctx) if rs.i == last]
 
     def bias_precheck(self, sig: Signal) -> str | None:
         """Cheap hard-rule check BEFORE spending a Jev call (Risk re-checks everything)."""

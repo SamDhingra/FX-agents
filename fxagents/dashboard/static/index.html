@@ -295,6 +295,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-cmp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="M14 8l3-3 3 3" /></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></symbol>
 </svg>
@@ -307,6 +308,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <button class="nav" data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
     <button class="nav" data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
     <button class="nav" data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
+    <button class="nav" data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
     <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
     <div class="side-foot">
@@ -376,6 +378,21 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
         <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
       </div>
       <div id="cmpBody"><div class="card"><div class="empty">Loading…</div></div></div>
+    </section>
+
+    <!-- BACKTESTS -->
+    <section class="page" id="p-backtests">
+      <div class="grid">
+        <div class="card c8"><h3>Runs <span class="sp"></span><span class="mut" style="font-weight:500">full-system replays on real OANDA history</span></h3><div class="tbl" id="btRuns"><div class="empty">Loading…</div></div></div>
+        <div class="card c4"><h3>Start a run</h3><div class="t2" style="font-size:13px;line-height:1.6">
+          On the server:<pre>cd ~/fx-agents
+./fx.sh backtest 60                # 60 days
+./fx.sh backtest 60 --no-learner   # learner off
+./fx.sh backtest 30 --jev live     # real Jev API</pre>
+          It runs in its own low-priority container, so the live bot isn't affected. Progress shows here; a 60-day run takes roughly 30–60 minutes.
+          <div class="mut" style="margin-top:8px">Every run replays the same agents as the live bot: the hourly pick (real book) and setup-first (shadow book) side by side.</div></div></div>
+      </div>
+      <div id="btReport" style="margin-top:16px"></div>
     </section>
 
     <!-- STRATEGIES -->
@@ -460,9 +477,9 @@ let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = n
 const q = path => BOOK === "shadow" ? path + (path.includes("?") ? "&" : "?") + "book=shadow" : path;
 
 /* ── navigation ── */
-const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
-const MORE = ["strategies","news","agents"];
-const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy"};
+const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const MORE = ["strategies","backtests","news","agents"];
+const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy", backtests:"Backtest"};
 function go(p){
   if(p === "more") p = MORE[(MORE.indexOf(page) + 1) % MORE.length];
   page = p;
@@ -474,6 +491,7 @@ function go(p){
   if(p === "trades") loadTrades();
   if(p === "compare") loadCompare();
   if(p === "strategies"){ loadSetupMap(); loadLearner(); }
+  if(p === "backtests") loadBacktests();
   if(S) render(S);
   window.scrollTo({top:0});
 }
@@ -834,15 +852,16 @@ function renderCompare(){
     </div>`;
   cmpChart($("#cmpChart"), CMP.curve);
 }
-function cmpChart(svg, pts){
-  const W = svg.clientWidth || svg.parentNode.clientWidth || 600, H = 230, pl = 44, pr = 10, pt = 10, pb = 24;
+function cmpChart(svg, pts, opt){
+  const unit = (opt && opt.unit) || "R";
+  const W = svg.clientWidth || svg.parentNode.clientWidth || 600, H = +(svg.getAttribute("height")||230), pl = unit==="$"?62:44, pr = 10, pt = 10, pb = 24;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", "100%");
   if(!pts.length){ svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--muted)" font-size="12">No closed trades yet</text>`; return; }
-  const all = [0, ...pts.flatMap(p => [p.live, p.shadow])], lo = Math.min(...all), hi = Math.max(...all), span = (hi - lo) || 1;
+  const all = [...(unit==="R"?[0]:[]), ...pts.flatMap(p => [p.live, p.shadow]).filter(v => v!=null)], lo = Math.min(...all), hi = Math.max(...all), span = (hi - lo) || 1;
   const n = pts.length, x = i => pl + (n === 1 ? (W-pl-pr)/2 : i/(n-1)*(W-pl-pr)), y = v => pt + (hi - v)/span*(H-pt-pb);
-  const path = k => pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join("");
-  const ticks = [lo, (lo+hi)/2, hi].map(v => `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" fill="var(--muted)" font-size="11">${v>0?"+":""}${v.toFixed(1)}R</text>`).join("");
-  const zero = `<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
+  const path = k => pts.some(p => p[k]==null) ? "" : pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join("");
+  const ticks = [lo, (lo+hi)/2, hi].map(v => `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" fill="var(--muted)" font-size="11">${unit==="$" ? "$"+Math.round(v).toLocaleString() : (v>0?"+":"")+v.toFixed(1)+"R"}</text>`).join("");
+  const zero = unit==="R" ? `<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-dasharray="3 4"/>` : "";
   const xl = pts.map((p,i)=> (n<=8 || i%Math.ceil(n/8)===0 || i===n-1) ? `<text x="${x(i)}" y="${H-6}" text-anchor="${n>1&&i===n-1?"end":n>1&&i===0?"start":"middle"}" fill="var(--muted)" font-size="11">${md(p.date)}</text>` : "").join("");
   const dots = k => n === 1 ? `<circle cx="${x(0)}" cy="${y(pts[0][k])}" r="4" fill="var(--${k==="live"?"accent":"ghost"})"/>` : "";
   svg.innerHTML = ticks + zero + xl + `<path d="${path("live")}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`
@@ -946,6 +965,83 @@ function renderLearner(){
         <td class="r">${vetBtn}</td></tr>`; }).join("")}</table>`;
 }
 
+/* ── backtests ── */
+let BT = null, BTR = null, btSel = null, btBook = "main", btTimer = null;
+async function loadBacktests(){
+  try{ BT = await (await fetch("api/backtests",{credentials:"same-origin"})).json(); }catch(e){ BT = null; }
+  if(BT && BT.runs.length && !btSel){ const d = BT.runs.find(r => r.has_report); if(d) btSel = d.id; }
+  renderRuns();
+  if(btSel && (!BTR || BTR.meta.id !== btSel)) await loadReport(btSel);
+  clearTimeout(btTimer);
+  if(BT && BT.runs.some(r => r.status === "running") && page === "backtests") btTimer = setTimeout(loadBacktests, 10000);
+}
+async function loadReport(id){
+  btSel = id;
+  try{ BTR = await (await fetch("api/backtests/"+encodeURIComponent(id),{credentials:"same-origin"})).json(); }catch(e){ BTR = null; }
+  renderRuns(); renderReport();
+}
+const dur = s => s==null ? "—" : s >= 3600 ? `${Math.floor(s/3600)}h ${Math.round(s%3600/60)}m` : `${Math.round(s/60)} min`;
+function renderRuns(){
+  const el = $("#btRuns");
+  if(!BT){ el.innerHTML = `<div class="empty">Couldn't load runs.</div>`; return; }
+  if(!BT.runs.length){ el.innerHTML = `<div class="empty">No backtests yet.${BT.history_ready ? " Start one from the server (right)." : " The history cache isn't there yet — it downloads with the setup map a few minutes after the app starts."}</div>`; return; }
+  el.innerHTML = `<table><tr><th>Run</th><th class="hide-m">Options</th><th>Status</th><th class="r">Real book</th><th class="r">Shadow</th></tr>${BT.runs.map(r => {
+    const p = r.progress || {}, h = r.headline || {}, m = h.main || {}, g = h.shadow || {};
+    const st = r.status === "running" ? `<div style="min-width:110px"><div class="stack" style="height:8px"><i style="width:${Math.round((p.fraction||0)*100)}%;background:var(--accent)"></i></div><small class="mut">${Math.round((p.fraction||0)*100)}% · ${p.eta_s!=null?dur(p.eta_s)+" left":"warming up"}</small></div>`
+      : r.status === "failed" ? `<span class="tag" style="color:var(--down-text)" title="${esc(r.error||"")}">failed</span>` : `<span class="tag acc">done</span><br><small class="mut">${dur(r.seconds)}</small>`;
+    const per = r.period ? `${md(r.period.from)} → ${md(r.period.to)}` : `${r.days} days`;
+    return `<tr class="row ${r.id===btSel?"sel":""}" data-id="${r.id}" style="${r.id===btSel?"background:var(--accent-soft)":""}">
+      <td><b>${esc(r.name || r.id.slice(0,13))}</b><br><small class="mut">${per}</small></td>
+      <td class="hide-m"><small>Jev ${r.jev} · learner ${r.learner?"on":"off"}</small></td><td>${st}</td>
+      <td class="r num">${m.trades!=null?`<b class="${cls(m.sum_r)}">${sR(m.sum_r)}</b><br><small class="mut">${m.trades} trades · ${smoney(m.pnl)}</small>`:"—"}</td>
+      <td class="r num">${g.trades!=null?`<b class="${cls(g.sum_r)}">${sR(g.sum_r)}</b><br><small class="mut">${g.trades} trades · ${smoney(g.pnl)}</small>`:"—"}</td></tr>`; }).join("")}</table>`;
+  $$("#btRuns tr.row").forEach(tr => tr.onclick = () => { const r = BT.runs.find(x => x.id === tr.dataset.id); if(r && r.has_report) loadReport(r.id); });
+}
+function renderReport(){
+  const el = $("#btReport");
+  if(!BTR || !BTR.books || !BTR.books.main){ el.innerHTML = ""; return; }
+  const M = BTR.books.main.summary, G = BTR.books.shadow ? BTR.books.shadow.summary : null, meta = BTR.meta;
+  const nm = meta.main_mode === "setup_first" ? "Setup-first" : "Hourly pick", ng = meta.shadow_mode === "setup_first" ? "Setup-first" : "Hourly pick";
+  const pct = v => v==null ? "—" : (v*100).toFixed(1) + "%";
+  const rows = [["Trades","trades",v=>fmt(v,0),0],["Win rate","win_rate",v=>Math.round(v*100)+"%",1],["Total R","sum_r",v=>sR(v),1],["Avg R / trade","avg_r",v=>sR(v),1],
+    ["Profit factor","profit_factor",v=>v==null?"—":fmt(v,2),1],["P&L","pnl",v=>smoney(v),1],["Return","return_pct",pct,1],["Max drawdown","max_dd",v=>smoney(v),1],
+    ["Max drawdown %","max_dd_pct",pct,1],["Sharpe (rough)","sharpe",v=>v==null?"—":fmt(v,2),1],["Green / red days","green_days",(v,b)=>`${b.green_days} / ${b.red_days}`,0],
+    ["Worst day","worst_day",v=>smoney(v),1],["Longest losing streak","max_losing_streak",v=>fmt(v,0),-1],["Avg hold","avg_hold_min",v=>v==null?"—":v+" min",0],["Trades pyramided","pyramided",v=>fmt(v,0),0]];
+  const vs = rows.map(([lab,k,f,b]) => { const a = M[k], c = G ? G[k] : null;
+    const ba = G && b && a!=null && c!=null && (b>0 ? a>c : a<c), bc = G && b && a!=null && c!=null && (b>0 ? c>a : c<a);
+    return `<tr><td>${lab}</td><td class="r num l ${ba?"best":""}">${f(a,M)}</td>${G?`<td class="r num g ${bc?"best":""}">${f(c,G)}</td>`:""}</tr>`; }).join("");
+  const B = BTR.books[btBook] || BTR.books.main;
+  const grp = (list, keyf, title) => list.length ? `<div class="tbl"><table><tr><th>${title}</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r hide-m">P&amp;L</th></tr>${
+    list.map(x=>`<tr><td>${keyf(x.key)}</td><td class="r num">${x.n}</td><td class="r num">${Math.round(x.win_rate*100)}%</td><td class="r num ${cls(x.sum_r)}">${sR(x.sum_r)}</td><td class="r num hide-m ${cls(x.avg_r)}">${sR(x.avg_r)}</td><td class="r num hide-m ${cls(x.pnl)}">${smoney(x.pnl)}</td></tr>`).join("")}</table></div>` : `<div class="empty">No trades.</div>`;
+  const ym = k => { const [y,m] = String(k).split("-"); return new Date(+y, +m-1, 1).toLocaleDateString(undefined,{month:"short",year:"numeric"}); };
+  const curve = []; const ed = {}; (BTR.books.main.equity_daily||[]).forEach(x=>ed[x.date]={date:x.date,live:x.equity});
+  (BTR.books.shadow ? BTR.books.shadow.equity_daily : []).forEach(x=>{ ed[x.date] = Object.assign(ed[x.date]||{date:x.date}, {shadow:x.equity}); });
+  Object.keys(ed).sort().forEach(d => { const x = ed[d]; const prev = curve[curve.length-1] || {};
+    curve.push({date:d, live: x.live ?? prev.live ?? meta.equity, shadow: x.shadow ?? prev.shadow ?? meta.equity}); });
+  const learner = (B.learner||[]).map(x=>`<div class="fi"><span class="when">${md(x.ts)}</span><span>${esc(x.msg)}</span></div>`).join("") || `<div class="empty">${meta.learner ? "The learner made no changes in this period." : "Learner was off for this run."}</div>`;
+  const trades = (B.trades||[]).slice(0,150).map(t=>`<tr><td>${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td class="hide-m"><span class="tag acc">${esc((t.strategy||"").split("@")[0])}</span></td><td>${t.side}</td><td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}">${smoney(t.realized)}</td><td class="hide-m"><small class="mut">${esc(t.exit_reason||"")}${t.adds?` · +${t.adds} adds`:""}</small></td></tr>`).join("");
+  const hrs = B.by_hour || [], mx = Math.max(1, ...hrs.map(h=>Math.abs(h.sum_r)));
+  el.innerHTML = `
+    <div class="grid">
+      <div class="card c12"><div class="verdict"><b>${esc(meta.name || meta.id)}</b>
+        <span class="mut">${meta.period?`${md(meta.period.from)} → ${md(meta.period.to)} · ${meta.period.days} trading-calendar days`:""} · start equity ${money(meta.equity,0)} · Jev ${meta.jev} · learner ${meta.learner?"on":"off"}</span></div>
+        <details style="margin-top:8px"><summary>What this backtest does and doesn't include</summary><ul class="t2" style="font-size:13px;margin:8px 0 0;padding-left:18px">${BTR.caveats.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></details></div>
+      <div class="card c5"><h3>Results</h3><table class="vs"><tr><th></th><th class="r l">${nm}<br><small class="mut">real book</small></th>${G?`<th class="r g">${ng}<br><small class="mut">shadow book</small></th>`:""}</tr>${vs}</table></div>
+      <div class="card c7"><h3>Equity <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>${nm} ${G?`<i class="dot" style="background:var(--ghost);margin-left:8px"></i>${ng}`:""}</span></h3><div class="chart"><svg id="btChart" height="260"></svg></div></div>
+      <div class="card c12" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><b style="font-size:13px">Breakdown for</b>
+        <div class="seg" id="btBook"><button data-b="main" class="${btBook==="main"?"on":""}">${nm}</button>${G?`<button data-b="shadow" class="ghost ${btBook==="shadow"?"on":""}">${ng}</button>`:""}</div></div>
+      <div class="card c6"><h3>By month</h3>${grp(B.months, ym, "Month")}</div>
+      <div class="card c6"><h3>By instrument</h3>${grp(B.by_symbol, k=>`<b>${k}</b>`, "Instrument")}</div>
+      <div class="card c7"><h3>By setup</h3>${grp(B.by_setup, k=>`<span class="tag acc">${esc(k)}</span>`, "Setup")}</div>
+      <div class="card c5"><h3>By hour (NY) · total R</h3>${hrs.length?`<div style="display:grid;gap:6px">${hrs.map(h=>`<div style="display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:8px;font-size:12px;white-space:nowrap"><span class="mut num">${String(h.key).padStart(2,"0")}:00</span><div style="position:relative;height:14px;background:var(--card-2);border-radius:4px"><i style="position:absolute;${h.sum_r>=0?"left:50%":"right:50%"};width:${Math.abs(h.sum_r)/mx*50}%;top:0;bottom:0;border-radius:4px;background:var(${h.sum_r>=0?"--up":"--down"})"></i></div><span class="num r ${cls(h.sum_r)}">${sR(h.sum_r)} <small class="mut">(${h.n})</small></span></div>`).join("")}</div>`:`<div class="empty">No trades.</div>`}</div>
+      <div class="card c6"><h3>How trades ended</h3>${grp(B.by_exit, k=>esc(k||"—"), "Exit")}</div>
+      <div class="card c6"><h3>Learner activity during the run</h3><div class="feed" style="max-height:320px">${learner}</div></div>
+      <div class="card c12"><h3>Trades <span class="sp"></span><span class="mut" style="font-weight:500">latest ${Math.min(150,(B.trades||[]).length)}</span></h3><div class="tbl" style="max-height:520px;overflow:auto">${trades?`<table><tr><th>Closed</th><th>Symbol</th><th class="hide-m">Setup</th><th>Side</th><th class="r">R</th><th class="r">P&amp;L</th><th class="hide-m">Exit</th></tr>${trades}</table>`:`<div class="empty">No trades.</div>`}</div></div>
+    </div>`;
+  $$("#btBook button").forEach(b => b.onclick = () => { btBook = b.dataset.b; renderReport(); });
+  cmpChart($("#btChart"), curve, {unit:"$"});
+}
+
 /* ── render loop ── */
 let lastAlert = null;
 function render(s){
@@ -1010,7 +1106,7 @@ fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render)
 connect();
 setInterval(()=>{ if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades(); if(page==="compare") loadCompare(); }, 15000);
 setInterval(()=>{ if(page==="strategies") loadSetupMap(); }, 120000);
-window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); if(page==="compare") renderCompare(); if(page==="strategies") renderSetupMap(); });
+window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); if(page==="compare") renderCompare(); if(page==="strategies") renderSetupMap(); if(page==="backtests") renderReport(); });
 const hashP = location.hash.slice(1); if(titles[hashP]) go(hashP);
 </script>
 </body>

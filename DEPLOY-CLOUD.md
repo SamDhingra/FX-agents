@@ -171,6 +171,12 @@ trades. `./fx.sh backup` copies the main journal; the shadow journal is `data/jo
 every setup on it in the background (a minute or two; trading is not blocked). The heatmap is on the
 Strategies page. It rebuilds every Sunday evening; **Rebuild now** on that page forces it.
 
+**Backtests:** `./fx.sh backtest 60` replays the last 60 days of real history through all the
+agents in a separate low-priority container (the live bot keeps running). Add `--no-learner` for a
+learner-off comparison or `--jev live` for the real Jev API. Progress and results: dashboard →
+Backtests. Needs the history cache, which the setup-map build downloads a few minutes after the app
+first starts.
+
 Nightly journal backup (on the server):
 
 ```bash
@@ -262,6 +268,6 @@ subscriptions for MGC, MES, MNQ, MYM.
 | `Dockerfile` | App image: Python 3.11-slim, non-root user, health check on `/healthz` |
 | `docker-compose.yml` | `fxagents`, `cloudflared`, and `ib-gateway` only with `COMPOSE_PROFILES=ibkr`; no public ports |
 | `.env.cloud.example` | Every setting and secret the stack needs |
-| `fx.sh` | `up`, `down`, `logs`, `status`, `update`, `test`, `check`, `sim`, `backup`, `pause`, `resume`, `flatten`, `vnc` |
+| `fx.sh` | `up`, `down`, `logs`, `status`, `update`, `test`, `check`, `sim`, `backtest`, `backup`, `pause`, `resume`, `flatten`, `vnc` |
 | `check_oanda.py` | Read-only OANDA connection check (account, instruments, precision, prices) |
 | `.dockerignore` | Keeps `.env`, `data/` and `.git` out of the image |

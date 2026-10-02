@@ -28,6 +28,13 @@ case "${1:-help}" in
   sim)       # quick end-to-end check without a broker (separate throwaway container)
              $DC build fxagents && $DC run --rm --no-deps -e FX_MODE=sim -e FX_DB_PATH=/tmp/sim.sqlite fxagents \
                python main.py --no-dashboard --exit-after-sim --days "${2:-2}" ;;
+  backtest)  # full-system replay on cached OANDA history, in its own low-priority container (live bot unaffected)
+             #   ./fx.sh backtest 60 [--no-learner] [--jev live] [--name label]
+             need_env; days="${2:-60}"; shift 2 2>/dev/null || shift $#
+             $DC build fxagents >/dev/null
+             cid=$($DC run -d --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@")
+             echo "Backtest started (container $cid). Progress and results: dashboard → Backtests."
+             echo "Follow the log with: docker logs -f $cid" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
              for j in journal journal_shadow; do
                $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
@@ -40,7 +47,7 @@ case "${1:-help}" in
   vnc)       echo "On your Mac:  ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem -L 5900:localhost:5900 ubuntu@<server-ip>"
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
-./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days]
+./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days] | backtest [days] [opts]
         backup | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
