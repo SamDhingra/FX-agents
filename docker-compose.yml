@@ -33,6 +33,7 @@ services:
     build: .
     image: fx-agents:latest
     restart: unless-stopped                          # (with IBKR the app retries until the gateway is up)
+    mem_limit: ${FX_MEM_LIMIT:-1100m}                # on a shared server, a runaway bot is restarted instead of starving its neighbours
     env_file: .env
     environment:
       IB_HOST: ib-gateway
