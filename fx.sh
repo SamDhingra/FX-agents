@@ -29,8 +29,10 @@ case "${1:-help}" in
              $DC build fxagents && $DC run --rm --no-deps -e FX_MODE=sim -e FX_DB_PATH=/tmp/sim.sqlite fxagents \
                python main.py --no-dashboard --exit-after-sim --days "${2:-2}" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
-             $DC exec -T fxagents python -c "import sqlite3; s=sqlite3.connect('/app/data/journal.sqlite'); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
-             mv data/backup.sqlite "backups/journal-$ts.sqlite"; ls -lh backups | tail -5 ;;
+             for j in journal journal_shadow; do
+               $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
+               [[ -f data/backup.sqlite ]] && mv data/backup.sqlite "backups/$j-$ts.sqlite"
+             done; ls -lh backups | tail -6 ;;
   pause)     curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/pause; echo ;;
   resume)    curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/resume; echo ;;
   flatten)   read -rp "Flatten ALL positions and halt trading? [y/N] " a; [[ "$a" == y ]] || exit 0

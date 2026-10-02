@@ -32,6 +32,7 @@ CREATE INDEX IF NOT EXISTS ix_dec_ts ON decisions(ts);
 
 class Journal:
     def __init__(self, path: str) -> None:
+        self.path = path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
@@ -150,6 +151,32 @@ class Journal:
 
     def decisions(self, limit: int = 100) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM decisions ORDER BY id DESC LIMIT ?", (limit,))]
+
+    def signal_funnel(self, since: str | None = None) -> dict:
+        """What happened to every setup seen: per setup type, per hour, and per action (taken / filtered /
+        skipped / rejected), with the most common reasons."""
+        q = "SELECT ts, strategy, action, why FROM signals" + (" WHERE ts>=?" if since else "")
+        rows = list(self.db.execute(q, (since,) if since else ()))
+        by_setup: dict[str, dict] = {}
+        by_hour: dict[int, dict] = {}
+        reasons: dict[str, int] = {}
+        for ts, strat, action, why in rows:
+            setup = (strat or "").split(":")[0].split("@")[0]
+            d = by_setup.setdefault(setup, {"seen": 0, "taken": 0, "filtered": 0, "skipped": 0, "rejected": 0})
+            d["seen"] += 1
+            d[action if action in d else "skipped"] += 1
+            try:
+                h = int(ts[11:13])
+            except (TypeError, ValueError):
+                continue
+            hh = by_hour.setdefault(h, {"seen": 0, "taken": 0})
+            hh["seen"] += 1
+            hh["taken"] += action == "taken"
+            if action != "taken" and why:
+                key = why.split("(")[0].split(":")[0].strip()[:60]
+                reasons[key] = reasons.get(key, 0) + 1
+        return {"by_setup": by_setup, "by_hour": {str(k): v for k, v in sorted(by_hour.items())},
+                "reasons": sorted(reasons.items(), key=lambda x: -x[1])[:10], "total": len(rows)}
 
     def signals(self, limit: int = 100) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,))]

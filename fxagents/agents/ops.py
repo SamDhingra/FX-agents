@@ -164,8 +164,13 @@ class MonitorAgent(Agent):
         if now.hour == 16 and now.minute >= 5 and self.summary_sent != now.date():
             self.summary_sent = now.date()
             s = self.ctx.journal.summary(since=now.normalize().isoformat())
-            await self.bus.publish("daily_summary", {"msg": f"{s['trades']} trades, P&L ${s['pnl']:,.2f}, "
-                                                            f"win {s['win_rate']:.0%}, {s['sum_r']:+.2f}R"})
+            msg = f"{s['trades']} trades, P&L ${s['pnl']:,.2f}, win {s['win_rate']:.0%}, {s['sum_r']:+.2f}R"
+            sh = getattr(self.ctx, "shadow", None)
+            if sh is not None:
+                t = sh.journal.summary(since=now.normalize().isoformat())
+                msg += (f"\nShadow ({sh.selection_mode}): {t['trades']} trades, {t['sum_r']:+.2f}R, "
+                        f"P&L ${t['pnl']:,.2f}")
+            await self.bus.publish("daily_summary", {"msg": msg})
         # expensive checks at most every 30 s of wall time
         if time.time() - self._last_check < 30:
             return

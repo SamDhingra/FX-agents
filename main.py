@@ -97,11 +97,42 @@ async def build(cfg, args):
     else:
         await news.refresh(state.now)
     ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book, news)
+    from fxagents.agents.setup_first import SetupFirstTrader, build_shadow
+    sel_mode = cfg["selector"].get("mode", "hourly_pick")
+    trader = SetupFirstTrader(ctx) if sel_mode == "setup_first" else TraderAgent(ctx)
+    ctx.selection_mode = sel_mode
+    notifier = NotifierAgent(ctx)
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
-              TraderAgent(ctx), RiskAgent(ctx), PositionManagerAgent(ctx), JournalAgent(ctx), NotifierAgent(ctx),
+              trader, RiskAgent(ctx), PositionManagerAgent(ctx), JournalAgent(ctx), notifier,
               MonitorAgent(ctx)]
     for a in agents:
         a.start()
+    # shadow book: same live bars, the other selection mode, virtual fills only (never sends orders)
+    ctx.shadow = None
+    ctx.shadow_info = {"enabled": False}
+    sc = cfg.get("shadow", {}) or {}
+    if sc.get("enabled"):
+        sc.setdefault("mode", "hourly_pick" if sel_mode == "setup_first" else "setup_first")
+        sctx, sagents, sfeed = build_shadow(ctx, state.equity)
+        for a in sagents:
+            a.start()
+        sfeed.start()                      # after MarketData, so each bar is already stored
+        ctx.shadow = sctx
+        sctx.is_shadow = True
+        sctx.shadow = None
+        info = {"enabled": True, "mode": sc["mode"], "live_mode": sel_mode}
+        ctx.shadow_info = sctx.shadow_info = info
+        if sc.get("notify_trades"):
+            async def _sh_open(p):
+                await notifier.send("entry", f"Shadow {'LONG' if p.side > 0 else 'SHORT'} {p.symbol}",
+                                    f"{p.strategy}: {p.initial_qty:g} @ {p.entry} SL {p.stop}", record=False)
+            async def _sh_close(ev):
+                p = ev["position"]
+                await notifier.send("exit", f"Shadow {p.symbol} closed",
+                                    f"{p.strategy} {p.exit_reason}: ${p.realized:,.2f}", record=False)
+            sctx.bus.subscribe("position_opened", _sh_open)
+            sctx.bus.subscribe("position_closed", _sh_close)
+        log.info("shadow book: %s (virtual fills, journal %s)", sc["mode"], sctx.journal.path if hasattr(sctx.journal, "path") else "")
     ctx.oanda = oanda
     return ctx, feed, agents, ib
 
@@ -126,8 +157,9 @@ async def main(args):
         sys.exit("Refusing to start LIVE trading without --i-understand-live-trading. Run paper first.")
     ctx, feed, agents, ib = await build(cfg, args)
     strategist = next(a for a in agents if a.name == "strategist")
-    log.info("mode=%s  broker=%s  strategies=%s  jev=%s", cfg["mode"],
-             "paper-sim" if cfg["mode"] == "sim" else cfg["broker"], [s.id for s in ctx.book.live()], ctx.jev.source)
+    log.info("mode=%s  broker=%s  selection=%s  shadow=%s  strategies=%d  jev=%s", cfg["mode"],
+             "paper-sim" if cfg["mode"] == "sim" else cfg["broker"], ctx.selection_mode,
+             ctx.shadow.selection_mode if ctx.shadow else "off", len(ctx.book.live()), ctx.jev.source)
 
     bias_agent = next(a for a in agents if a.name == "bias")
     await bias_agent.update_all(ctx.state.now)   # HTF bias before anything can trade
@@ -171,6 +203,10 @@ async def main(args):
         await ctx.bus.publish("flatten_all", "end of simulation")
         s = ctx.journal.summary()
         log.info("SIM DONE: %s | equity $%.2f", s, await ctx.broker.equity())
+        if ctx.shadow:
+            await ctx.shadow.bus.publish("flatten_all", "end of simulation")
+            log.info("SHADOW (%s): %s | equity $%.2f", ctx.shadow.selection_mode, ctx.shadow.journal.summary(),
+                     await ctx.shadow.broker.equity())
         if server is not None and not args.exit_after_sim:
             log.info("replay finished — dashboard still serving (Ctrl-C to exit)")
             stop = asyncio.Event()

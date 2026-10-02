@@ -162,6 +162,11 @@ heads-ups and kill-switch alerts.
 | Code changes | `git push` on your Mac → `./fx.sh update` on the server |
 | Emergency | Dashboard **Pause** / **Flatten**, or `./fx.sh pause` / `./fx.sh flatten` over SSH. You can also close trades in the OANDA app; the bot notices within ~15 s and books them |
 
+**Live vs Shadow:** the bot also runs a shadow book (by default the setup-first mode) on the same
+live bars with virtual fills; it never sends orders. Compare the two on the dashboard's **Compare**
+page, or flip the **Live / Shadow** switch at the top to see the shadow book's positions, calendar and
+trades. `./fx.sh backup` copies the main journal; the shadow journal is `data/journal_shadow.sqlite`.
+
 Nightly journal backup (on the server):
 
 ```bash

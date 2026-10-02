@@ -18,6 +18,7 @@
   --up:#22c55e; --up-text:#4ade80; --up-soft:rgb(34 197 94 / .14);
   --down:#ef4444; --down-text:#f87171; --down-soft:rgb(239 68 68 / .14);
   --warn:#f5a524; --warn-soft:rgb(245 165 36 / .14);
+  --ghost:#a78bfa; --ghost-soft:rgb(167 139 250 / .16);
   --radius:16px; --shadow:0 10px 30px rgb(0 0 0 / .35);
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
@@ -29,6 +30,7 @@
   --up:#16a34a; --up-text:#15803d; --up-soft:rgb(22 163 74 / .12);
   --down:#dc2626; --down-text:#b91c1c; --down-soft:rgb(220 38 38 / .10);
   --warn:#d97706; --warn-soft:rgb(217 119 6 / .12); --shadow:0 8px 24px rgb(15 20 32 / .08);
+  --ghost:#7c3aed; --ghost-soft:rgb(124 58 237 / .10);
 }
 @media (prefers-color-scheme: light){
   :root:where(:not([data-theme="dark"])){
@@ -39,6 +41,7 @@
     --up:#16a34a; --up-text:#15803d; --up-soft:rgb(22 163 74 / .12);
     --down:#dc2626; --down-text:#b91c1c; --down-soft:rgb(220 38 38 / .10);
     --warn:#d97706; --warn-soft:rgb(217 119 6 / .12); --shadow:0 8px 24px rgb(15 20 32 / .08);
+    --ghost:#7c3aed; --ghost-soft:rgb(124 58 237 / .10);
   }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -202,6 +205,32 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
 @keyframes tin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .tabbar{display:none}
 
+/* shadow book + compare */
+.seg button.ghost.on{background:var(--ghost-soft);color:var(--ghost);box-shadow:none}
+.shbar{display:none;align-items:center;gap:10px;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--ghost-soft);color:var(--ghost);font-size:13px;font-weight:600}
+body.shadow .shbar{display:flex}
+body.shadow .kpi.main{background:radial-gradient(120% 140% at 0% 0%,var(--ghost-soft),transparent 60%),var(--card)}
+body.shadow #pause, body.shadow #flatten{display:none}
+.tag.gh{background:var(--ghost-soft);border-color:transparent;color:var(--ghost)}
+.verdict{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.verdict b{font-size:20px;letter-spacing:-.2px}
+.vs td,.vs th{padding:10px 12px} .vs td:first-child{color:var(--text-2)}
+.vs th.l,.vs td.l{color:var(--accent-2)} .vs th.g,.vs td.g{color:var(--ghost)}
+.vs td.best{font-weight:700} .vs td.best::after{content:" ●";font-size:9px;vertical-align:2px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.fun{display:grid;gap:10px}
+.fun .row{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px;font-size:12.5px}
+.stack{display:flex;height:22px;border-radius:7px;overflow:hidden;background:var(--card-2);border:1px solid var(--line)}
+.stack i{display:block;height:100%} .stack i+i{border-left:1px solid var(--card)}
+.hrs{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;align-items:end;height:110px}
+.hrs div{position:relative;background:var(--card-2);border-radius:4px 4px 0 0;min-height:2px}
+.hrs div i{position:absolute;left:0;right:0;bottom:0;background:var(--ghost);border-radius:4px 4px 0 0}
+.hrl{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;font-size:9.5px;color:var(--muted);text-align:center;margin-top:4px}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.seg button{white-space:nowrap}
+@media (max-width:760px){ a.btn.hide-m{display:none} .top{flex-wrap:wrap} #bookSeg{order:9;width:100%;display:flex} #bookSeg[hidden]{display:none} #bookSeg button{flex:1;padding:7px 0}
+  .vs td,.vs th{padding:9px 6px;font-size:12.5px} .fun .row{grid-template-columns:86px 1fr} .hrl span:nth-child(odd){visibility:hidden} .verdict b{font-size:17px} }
+
 /* ── responsive ── */
 @media (max-width:1180px){.hero{grid-template-columns:1fr 1fr 1fr}.hero .kpi.main{grid-column:span 3}.bias-row{grid-template-columns:repeat(2,1fr)}.c8,.c7,.c6,.c5,.c4{grid-column:span 12}.c3{grid-column:span 6}}
 @media (max-width:760px){
@@ -245,6 +274,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
   <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5v14M15 5v14"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-cmp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="M14 8l3-3 3 3" /></symbol>
   <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></symbol>
 </svg>
@@ -255,6 +285,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
     <button class="nav on" data-p="home"><svg><use href="#i-home"/></svg>Overview</button>
     <button class="nav" data-p="calendar"><svg><use href="#i-cal"/></svg>P&amp;L calendar</button>
     <button class="nav" data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
+    <button class="nav" data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
     <button class="nav" data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
     <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
@@ -271,10 +302,13 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
       <span class="chip hide-m" id="mode">SIM</span>
       <span class="chip hide-m num" id="clock">—</span>
       <span class="sp"></span>
+      <div class="seg" id="bookSeg" hidden><button data-b="live" class="on">Live</button><button data-b="shadow" class="ghost">Shadow</button></div>
       <button class="btn icon" id="theme" title="Theme"><svg><use href="#i-sun"/></svg></button>
       <button class="btn icon" id="pause" title="Pause / resume"><svg><use href="#i-pause"/></svg></button>
       <button class="btn red" id="flatten">Flatten</button>
     </div>
+
+    <div class="shbar" id="shbar">👻 <span id="shtext">Shadow book — virtual fills, no orders are sent</span></div>
 
     <!-- OVERVIEW -->
     <section class="page on" id="p-home">
@@ -312,6 +346,16 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
     <section class="page" id="p-trades">
       <div class="filters" id="tfilters"></div>
       <div class="card"><div class="tbl" id="trades"></div></div>
+    </section>
+
+    <!-- COMPARE -->
+    <section class="page" id="p-compare">
+      <div class="filters" style="align-items:center">
+        <div class="seg" id="cmpSeg"><button data-r="today">Today</button><button data-r="week" class="on">7 days</button><button data-r="all">Since start</button></div>
+        <span class="sp" style="flex:1"></span>
+        <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
+      </div>
+      <div id="cmpBody"><div class="card"><div class="empty">Loading…</div></div></div>
     </section>
 
     <!-- STRATEGIES -->
@@ -352,7 +396,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
   <button class="on" data-p="home"><svg><use href="#i-home"/></svg>Home</button>
   <button data-p="calendar"><svg><use href="#i-cal"/></svg>Calendar</button>
   <button data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
-  <button data-p="strategies"><svg><use href="#i-brain"/></svg>Strategy</button>
+  <button data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
   <button data-p="more"><svg><use href="#i-bot"/></svg>More</button>
 </nav>
 
@@ -370,20 +414,23 @@ const sR = (x, d=2) => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x
 const cls = x => x>0 ? "up" : x<0 ? "down" : "";
 const hm = iso => iso ? iso.slice(11,16) : "";
 const md = iso => iso ? new Date(iso.slice(0,10)+"T12:00").toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "";
-let S = null, page = "home", eqRange = "1W", theme = null;
+let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = null;
+const q = path => BOOK === "shadow" ? path + (path.includes("?") ? "&" : "?") + "book=shadow" : path;
 
 /* ── navigation ── */
-const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
-const shortTitles = {calendar:"Calendar", agents:"Agents"};
+const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const MORE = ["strategies","news","agents"];
+const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare"};
 function go(p){
-  if(p === "more") p = page === "news" ? "agents" : "news";
+  if(p === "more") p = MORE[(MORE.indexOf(page) + 1) % MORE.length];
   page = p;
   $$(".page").forEach(x => x.classList.toggle("on", x.id === "p-"+p));
   $$(".nav").forEach(x => x.classList.toggle("on", x.dataset.p === p));
-  $$(".tabbar button").forEach(x => x.classList.toggle("on", x.dataset.p === p || (x.dataset.p==="more" && (p==="news"||p==="agents"))));
+  $$(".tabbar button").forEach(x => x.classList.toggle("on", x.dataset.p === p || (x.dataset.p==="more" && MORE.includes(p))));
   $("#title").textContent = (matchMedia("(max-width:760px)").matches && shortTitles[p]) || titles[p];
   if(p === "calendar") loadCalendar();
   if(p === "trades") loadTrades();
+  if(p === "compare") loadCompare();
   if(S) render(S);
   window.scrollTo({top:0});
 }
@@ -522,7 +569,7 @@ function lineChart(svg, tip, pts, yf){
 let calMonth = null, calData = {days:{}, events:[]}, selDay = null;
 async function loadCalendar(){
   if(!calMonth){ const n = S && S.now ? new Date(S.now) : new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); }
-  try{ calData = await (await fetch("api/calendar",{credentials:"same-origin"})).json(); }catch(e){}
+  try{ calData = await (await fetch(q("api/calendar"),{credentials:"same-origin"})).json(); }catch(e){}
   renderCalendar();
 }
 function compact(x){ // full amount on desktop, +1.4k style on phones
@@ -583,7 +630,7 @@ function dailyBars(rows){
 }
 async function showDay(d){
   let data = {trades:[], events:[]};
-  try{ data = await (await fetch("api/day/"+d,{credentials:"same-origin"})).json(); }catch(e){}
+  try{ data = await (await fetch(q("api/day/"+d),{credentials:"same-origin"})).json(); }catch(e){}
   const net = data.trades.reduce((a,t)=>a+(t.realized||0),0);
   const html = `<h3>${new Date(d+"T12:00").toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"})}<span class="sp"></span><b class="num ${cls(net)}" style="font-size:15px">${smoney(net,2)}</b></h3>
     ${data.events.map(e=>`<div class="ev" style="padding:8px 10px"><span class="tm">${e.time}</span><span class="tier ${e.tier}">${e.tier.toUpperCase()}</span><span style="font-size:12.5px">${esc(e.title)}</span></div>`).join("")}
@@ -603,7 +650,7 @@ $("#todayM").onclick = () => { calMonth = null; loadCalendar(); };
 /* ── trades ── */
 let tradeRows = [], tf = {sym:"ALL", res:"ALL", tf:"ALL"};
 async function loadTrades(){
-  try{ tradeRows = await (await fetch("api/trades?limit=400",{credentials:"same-origin"})).json(); }catch(e){}
+  try{ tradeRows = await (await fetch(q("api/trades?limit=400"),{credentials:"same-origin"})).json(); }catch(e){}
   renderTrades();
 }
 function chips(el, groups){
@@ -683,11 +730,91 @@ function renderAgents(s){
   $("#alerts").innerHTML = s.alerts.map(a=>`<div class="fi"><span class="when">${hm(a.ts)}</span><span class="${a.level==="error"?"down":""}">${esc(a.msg)}</span></div>`).join("") || `<div class="empty">Quiet.</div>`;
 }
 
+/* ── compare (live vs shadow) ── */
+const modeName = m => m === "setup_first" ? "setup-first" : "hourly pick";
+let cmpRange = "week", CMP = null;
+$$("#cmpSeg button").forEach(b => b.onclick = () => { cmpRange = b.dataset.r;
+  $$("#cmpSeg button").forEach(x => x.classList.toggle("on", x === b)); loadCompare(); });
+async function loadCompare(){
+  try{ CMP = await (await fetch("api/compare?range="+cmpRange,{credentials:"same-origin"})).json(); }catch(e){ CMP = null; }
+  renderCompare();
+}
+function renderCompare(){
+  const el = $("#cmpBody");
+  if(!CMP){ el.innerHTML = `<div class="card"><div class="empty">Couldn't load the comparison.</div></div>`; return; }
+  if(!CMP.enabled){ el.innerHTML = `<div class="card"><div class="empty">The shadow book is off. Set <code>shadow.enabled: true</code> in config.yaml and restart.</div></div>`; return; }
+  const L = CMP.books.live, G = CMP.books.shadow;
+  const nl = `Live · ${modeName(L.mode)}`, ng = `Shadow · ${modeName(G.mode)}`;
+  const diff = +(G.sum_r - L.sum_r).toFixed(2), few = Math.min(L.trades, G.trades) < 20;
+  let verdict;
+  if(!L.trades && !G.trades) verdict = `<b>No closed trades yet</b><span class="mut">The comparison fills in as trades close in either book.</span>`;
+  else verdict = `<b>${diff === 0 ? "Level" : (diff > 0 ? "Shadow" : "Live") + " ahead by " + sR(Math.abs(diff))}</b>
+    <span class="tag ${few ? "" : "acc"}">${few ? "too early to call — under 20 trades in a book" : "enough trades to start reading"}</span>`;
+  const rows = [["Trades","trades",v=>fmt(v,0),0],["Win rate","win_rate",v=>Math.round(v*100)+"%",1],["Total R","sum_r",v=>sR(v),1],
+    ["Avg R / trade","avg_r",v=>sR(v),1],["P&L","pnl",v=>smoney(v),1],["Best day","best_day",v=>smoney(v),1],["Worst day","worst_day",v=>smoney(v),1],
+    ["Open now","open",v=>fmt(v,0),0]];
+  const vs = rows.map(([lab,k,f,better]) => {
+    const a = L[k], b = G[k], ba = better && (L.trades||G.trades) && a > b, bb = better && (L.trades||G.trades) && b > a;
+    return `<tr><td>${lab}</td><td class="r num l ${ba?"best":""}">${f(a)}</td><td class="r num g ${bb?"best":""}">${f(b)}</td></tr>`; }).join("");
+  const fun = (F, name) => {
+    const t = F.by_setup ? Object.values(F.by_setup).reduce((a,x)=>({seen:a.seen+x.seen,taken:a.taken+x.taken,filtered:a.filtered+x.filtered,
+      skipped:a.skipped+x.skipped,rejected:a.rejected+x.rejected}),{seen:0,taken:0,filtered:0,skipped:0,rejected:0}) : {seen:0};
+    if(!t.seen) return `<div class="row"><span>${name}</span><span class="mut">no setups seen yet</span></div>`;
+    const w = k => (t[k]/t.seen*100).toFixed(1)+"%";
+    return `<div class="row"><span>${name}<br><small class="mut">${t.seen} setups</small></span><div>
+      <div class="stack"><i style="width:${w("taken")};background:var(--up)" title="taken ${t.taken}"></i><i style="width:${w("filtered")};background:var(--line-2)" title="filtered ${t.filtered}"></i><i style="width:${w("skipped")};background:var(--warn)" title="Jev skipped ${t.skipped}"></i><i style="width:${w("rejected")};background:var(--down)" title="risk rejected ${t.rejected}"></i></div>
+      <small class="mut num">${t.taken} taken · ${t.filtered} filtered (bias/news/window) · ${t.skipped} skipped by Jev · ${t.rejected} rejected by risk</small></div></div>`;
+  };
+  const setups = Object.entries(G.funnel.by_setup || {}).sort((a,b)=>b[1].seen-a[1].seen).map(([k,v]) =>
+    `<tr><td><span class="tag gh">${esc(k)}</span></td><td class="r num">${v.seen}</td><td class="r num">${v.taken}</td><td class="r num">${v.seen?Math.round(v.taken/v.seen*100):0}%</td><td class="r num mut hide-m">${v.filtered}</td><td class="r num mut hide-m">${v.skipped}</td></tr>`).join("");
+  const hrs = G.funnel.by_hour || {}, mx = Math.max(1, ...Object.values(hrs).map(h=>h.seen));
+  const hbars = Array.from({length:24},(_,h)=>{const x = hrs[String(h)]||{seen:0,taken:0};
+    return `<div style="height:${x.seen/mx*100}%" title="${h}:00 — ${x.seen} seen, ${x.taken} taken"><i style="height:${x.seen?x.taken/x.seen*100:0}%"></i></div>`;}).join("");
+  const hlab = Array.from({length:24},(_,h)=>`<span>${h}</span>`).join("");
+  const reasons = (G.funnel.reasons||[]).map(([r,n])=>`<div class="fi"><span class="when num">${n}×</span><span>${esc(r)}</span></div>`).join("") || `<div class="empty">Nothing filtered yet.</div>`;
+  const days = CMP.days.map(d => {
+    const better = d.shadow.r > d.live.r ? `<span class="tag gh">shadow</span>` : d.live.r > d.shadow.r ? `<span class="tag acc">live</span>` : `<span class="mut">—</span>`;
+    return `<tr><td>${md(d.date)}</td><td class="r num hide-m">${d.live.trades}</td><td class="r num ${cls(d.live.r)}">${sR(d.live.r)}</td><td class="r num ${cls(d.live.pnl)} hide-m">${smoney(d.live.pnl)}</td>
+      <td class="r num hide-m">${d.shadow.trades}</td><td class="r num ${cls(d.shadow.r)}">${sR(d.shadow.r)}</td><td class="r num ${cls(d.shadow.pnl)} hide-m">${smoney(d.shadow.pnl)}</td><td class="r">${better}</td></tr>`; }).join("");
+  el.innerHTML = `
+    <div class="grid">
+      <div class="card c12"><div class="verdict">${verdict}</div>
+        <div class="mut" style="font-size:12px;margin-top:6px">${CMP.started ? "Shadow started " + md(CMP.started) + " " + hm(CMP.started) + " NY · " : ""}both books trade the same live bars; shadow fills are simulated with an estimated spread.</div></div>
+      <div class="card c5"><h3>Head to head</h3><table class="vs"><tr><th></th><th class="r l">${nl}</th><th class="r g">${ng}</th></tr>${vs}</table></div>
+      <div class="card c7"><h3>Cumulative R <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>live <i class="dot" style="background:var(--ghost);margin-left:8px"></i>shadow</span></h3>
+        <div class="chart"><svg id="cmpChart" height="230"></svg></div></div>
+      <div class="card c12"><h3>Setups seen → what happened</h3><div class="fun">${fun(L.funnel, "Live")}${fun(G.funnel, "Shadow")}</div></div>
+      <div class="card c7"><h3>Shadow · by setup type</h3>${setups ? `<div class="tbl"><table><tr><th>Setup</th><th class="r">Seen</th><th class="r">Taken</th><th class="r">Rate</th><th class="r hide-m">Filtered</th><th class="r hide-m">Jev skip</th></tr>${setups}</table></div>` : `<div class="empty">No setups seen yet.</div>`}</div>
+      <div class="card c5"><h3>Shadow · why setups were passed</h3><div class="feed" style="max-height:300px">${reasons}</div></div>
+      <div class="card c12"><h3>Shadow · setups by hour (NY) <span class="sp"></span><span class="mut" style="font-weight:500">bar = seen · fill = share taken</span></h3><div class="hrs">${hbars}</div><div class="hrl">${hlab}</div></div>
+      <div class="card c12"><h3>By day</h3>${days ? `<div class="tbl"><table><tr><th>Day</th><th class="r hide-m">Live #</th><th class="r">Live R</th><th class="r hide-m">Live P&amp;L</th><th class="r hide-m">Shadow #</th><th class="r">Shadow R</th><th class="r hide-m">Shadow P&amp;L</th><th class="r">Better</th></tr>${days}</table></div>` : `<div class="empty">No closed trades in this range yet.</div>`}</div>
+    </div>`;
+  cmpChart($("#cmpChart"), CMP.curve);
+}
+function cmpChart(svg, pts){
+  const W = svg.clientWidth || svg.parentNode.clientWidth || 600, H = 230, pl = 44, pr = 10, pt = 10, pb = 24;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", "100%");
+  if(!pts.length){ svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--muted)" font-size="12">No closed trades yet</text>`; return; }
+  const all = [0, ...pts.flatMap(p => [p.live, p.shadow])], lo = Math.min(...all), hi = Math.max(...all), span = (hi - lo) || 1;
+  const n = pts.length, x = i => pl + (n === 1 ? (W-pl-pr)/2 : i/(n-1)*(W-pl-pr)), y = v => pt + (hi - v)/span*(H-pt-pb);
+  const path = k => pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join("");
+  const ticks = [lo, (lo+hi)/2, hi].map(v => `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" fill="var(--muted)" font-size="11">${v>0?"+":""}${v.toFixed(1)}R</text>`).join("");
+  const zero = `<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
+  const xl = pts.map((p,i)=> (n<=8 || i%Math.ceil(n/8)===0 || i===n-1) ? `<text x="${x(i)}" y="${H-6}" text-anchor="${n>1&&i===n-1?"end":n>1&&i===0?"start":"middle"}" fill="var(--muted)" font-size="11">${md(p.date)}</text>` : "").join("");
+  const dots = k => n === 1 ? `<circle cx="${x(0)}" cy="${y(pts[0][k])}" r="4" fill="var(--${k==="live"?"accent":"ghost"})"/>` : "";
+  svg.innerHTML = ticks + zero + xl + `<path d="${path("live")}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`
+    + `<path d="${path("shadow")}" fill="none" stroke="var(--ghost)" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="1 0"/>` + dots("live") + dots("shadow");
+}
+
 /* ── render loop ── */
 let lastAlert = null;
 function render(s){
   S = s;
-  $("#mode").textContent = s.mode.toUpperCase();
+  const sh = s.shadow && s.shadow.enabled;
+  $("#bookSeg").hidden = !sh;
+  if(!sh && BOOK === "shadow") setBook("live");
+  if(sh) $("#shtext").textContent = `Shadow book · ${modeName(s.shadow.mode)} on the same live bars — virtual fills, no orders are sent`;
+  $("#mode").textContent = s.book === "shadow" ? "SHADOW" : s.mode.toUpperCase();
   const st = $("#status"); st.className = "chip " + (s.trading_enabled?"live":"halt"); st.textContent = s.trading_enabled ? "Trading" : "Halted";
   st.title = s.halt_reason || "";
   $("#pause").innerHTML = `<svg><use href="#i-${s.trading_enabled?"pause":"play"}"/></svg>`;
@@ -720,14 +847,29 @@ $("#flatten").onclick = () => { if(Date.now()-armed < 4000){ armed = 0; $("#flat
   else { armed = Date.now(); $("#flatten").textContent = "Tap to confirm"; setTimeout(()=>$("#flatten").textContent="Flatten", 4000); } };
 
 function connect(){
-  const ws = new WebSocket((location.protocol==="https:"?"wss://":"ws://") + location.host + location.pathname.replace(/[^/]*$/,"") + "ws");
-  ws.onmessage = e => render(JSON.parse(e.data));
-  ws.onclose = () => setTimeout(connect, 2000);
+  const ws = new WebSocket((location.protocol==="https:"?"wss://":"ws://") + location.host + location.pathname.replace(/[^/]*$/,"") + q("ws"));
+  WS = ws;
+  ws.onmessage = e => { if(ws === WS) render(JSON.parse(e.data)); };
+  ws.onclose = () => { if(ws === WS) setTimeout(connect, 2000); };
 }
-fetch("api/state",{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
+function setBook(b){
+  if(b === BOOK) return;
+  BOOK = b;
+  try{ localStorage.setItem("fx-book", b); }catch(e){}
+  $$("#bookSeg button").forEach(x => x.classList.toggle("on", x.dataset.b === b));
+  document.body.classList.toggle("shadow", b === "shadow");
+  const old = WS; WS = null; if(old) old.close();
+  connect();
+  fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
+  if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades();
+}
+$$("#bookSeg button").forEach(x => x.onclick = () => setBook(x.dataset.b));
+try{ const b = localStorage.getItem("fx-book"); if(b === "shadow"){ BOOK = "shadow"; document.body.classList.add("shadow");
+  $$("#bookSeg button").forEach(x => x.classList.toggle("on", x.dataset.b === "shadow")); } }catch(e){}
+fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
 connect();
-setInterval(()=>{ if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades(); }, 15000);
-window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); });
+setInterval(()=>{ if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades(); if(page==="compare") loadCompare(); }, 15000);
+window.addEventListener("resize", () => { if(S) render(S); if(page==="calendar") renderCalendar(); if(page==="compare") renderCompare(); });
 const hashP = location.hash.slice(1); if(titles[hashP]) go(hashP);
 </script>
 </body>

@@ -154,6 +154,7 @@ jev:
   min_signal_confidence: 0.5
 
 selector:
+  mode: hourly_pick            # hourly_pick: trade only this hour's top strategy per TF | setup_first: scan every strategy each bar
   top_n_per_tf: 1              # per symbol per hour: best 5m strategy + best 15m strategy
   min_trades_for_stats: 8
   hour_shrinkage_k: 12         # Bayesian shrink of hour-of-day stats toward overall
@@ -190,3 +191,20 @@ sim:
 
 storage:
   db_path: data/journal.sqlite
+
+# ── Setup-first selection (used by whichever book runs it) ──
+setup_first:
+  max_graded_per_bar: 3          # Jev grades at most this many setups per symbol per bar (best hour-prior first)
+  today_context: true            # tell Jev how each setup has done on today's bars so far
+
+# ── Shadow book: runs the OTHER selection mode on the same live bars, virtual fills only ──
+shadow:
+  enabled: true
+  # mode: setup_first           # default = the opposite of selector.mode
+  notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
+  spread:                       # estimated full spread in price points (virtual fills pay half on entry and exit)
+    XAUUSD: 0.40
+    SPX: 0.50
+    NDQ: 1.50
+    US30: 2.50
+  # db_path: data/journal_shadow.sqlite   # default: next to the main journal

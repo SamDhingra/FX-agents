@@ -6,7 +6,7 @@ picks the best-rated strategy for each symbol. Trades start at 1:1 R:R, pyramid 
 and move the stop into profit. There is a trade journal and a live dashboard that works on
 phone and laptop.
 
-> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 34 unit tests
+> **Status:** it has run end-to-end on a synthetic market with a paper broker, and 45 unit tests
 > pass. Two live brokers are supported: **OANDA** (default; v20 REST API) and **IBKR** (`ib_async`).
 > Both are tested against fakes only: neither has yet traded on your real practice/paper account.
 > Run `--mode paper` for at least 2–4 weeks before you consider live.
@@ -78,7 +78,7 @@ cd fx-agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py                        # sim: 3 synthetic days, dashboard on http://localhost:8088
-python -m pytest -q                   # 34 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA adapter
+python -m pytest -q                   # 45 tests: risk guards, pyramiding, no look-ahead, Jev, OANDA, setup-first/shadow
 python backtest.py --synthetic        # leaderboard + expectancy by hour
 ```
 
@@ -169,6 +169,25 @@ Execution goes through the configured broker (OANDA or IBKR).
 
 Backtest on TradingView data: chart → *Export chart data* → `python backtest.py --csv NDQ=export.csv`.
 
+## Two ways to choose trades, and a shadow book to compare them
+
+* **Hourly pick** (`selector.mode: hourly_pick`): each hour the Selector picks the best strategy per
+  timeframe for each symbol (Jev rating blended with backtest stats), and only those are traded.
+* **Setup-first** (`selector.mode: setup_first`): at every 5m/15m close, **every** live strategy is
+  scanned. Setups that pass the hard gates (entry window, news, open positions, HTF bias rule) are
+  graded by Jev, with two extra pieces of context: the setup's record at this hour (shrunk toward its
+  overall record) and how it has done on today's bars. The best-graded setup that clears the gate is
+  traded; the hourly ranking is passed to Jev as context only.
+* **Shadow book** (`shadow.enabled: true`): runs the *other* mode on the same live bars with virtual
+  fills (live price ± an estimated half-spread, `shadow.spread`). It never sends orders. It has its own
+  journal (`data/journal_shadow.sqlite`), its own kill switch and the same trade management. The
+  dashboard's **Live / Shadow** switch views either book, and the **Compare** page shows them head to
+  head (trades, win rate, R, P&L, best/worst day, cumulative R, a funnel of every setup seen and why it
+  was passed, setups by hour, a per-day table). The daily phone summary has a shadow line.
+
+To switch the real book to setup-first, set `selector.mode: setup_first` (the shadow book then runs
+hourly-pick automatically) and restart.
+
 ## Higher-timeframe bias: a hard rule, with safeguards
 
 **Rule:** every strategy may only trade in the direction of the composite bias. The score is
@@ -226,6 +245,7 @@ fxagents/sim.py        management-accurate trade simulator + stats + synthetic m
 fxagents/jev.py        Jev scorer with heuristic fallback
 fxagents/broker.py     PaperBroker, IBKRBroker (bracket entry + resting GTC stop)
 fxagents/oanda.py      OandaFeed + OandaBroker (v20 REST, stopLossOnFill, per-trade stops)
+fxagents/agents/setup_first.py  SetupFirstTrader + the shadow book (own bus/state/journal, virtual fills)
 fxagents/journal.py    SQLite journal
 fxagents/dashboard/    FastAPI server + single-page responsive UI
 deploy/                launchd plist (Mac, always-on) · systemd unit (Linux / Lightsail)
