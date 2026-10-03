@@ -30,8 +30,8 @@ case "${1:-help}" in
                python main.py --no-dashboard --exit-after-sim --days "${2:-2}" ;;
   backtest)  # full-system replay on cached OANDA history, in its own low-priority container (live bot unaffected)
              #   ./fx.sh backtest 60 [--no-learner] [--jev live] [--name label]
-             need_env; days="${2:-60}"; shift 2 2>/dev/null || shift $#
-             $DC build fxagents >/dev/null
+             need_env; days="${2:-60}"; shift 2 2>/dev/null || shift $#; mkdir -p logs
+             echo "Building image (quiet)..."; BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/backtest-build.log 2>&1 || { echo "build failed — see logs/backtest-build.log"; exit 1; }
              mkdir -p logs; lf="logs/backtest-$(date +%Y%m%d-%H%M%S).log"
              # no -d and no TTY: some compose versions fail "failed to get console" with run -d; nohup keeps it running after logout
              nohup $DC run -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@" \
