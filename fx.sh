@@ -32,7 +32,7 @@ case "${1:-help}" in
              #   ./fx.sh backtest 60 [--no-learner] [--jev live] [--name label]
              need_env; days="${2:-60}"; shift 2 2>/dev/null || shift $#
              $DC build fxagents >/dev/null
-             cid=$($DC run -d --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@")
+             cid=$($DC run -d -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@")
              echo "Backtest started (container $cid). Progress and results: dashboard → Backtests."
              echo "Follow the log with: docker logs -f $cid" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
