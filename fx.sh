@@ -32,9 +32,12 @@ case "${1:-help}" in
              #   ./fx.sh backtest 60 [--no-learner] [--jev live] [--name label]
              need_env; days="${2:-60}"; shift 2 2>/dev/null || shift $#
              $DC build fxagents >/dev/null
-             cid=$($DC run -d -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@")
-             echo "Backtest started (container $cid). Progress and results: dashboard → Backtests."
-             echo "Follow the log with: docker logs -f $cid" ;;
+             mkdir -p logs; lf="logs/backtest-$(date +%Y%m%d-%H%M%S).log"
+             # no -d and no TTY: some compose versions fail "failed to get console" with run -d; nohup keeps it running after logout
+             nohup $DC run -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_backtest.py --days "$days" "$@" \
+               </dev/null >"$lf" 2>&1 &
+             echo "Backtest started in the background. Progress and results: dashboard → Backtests."
+             echo "Follow the log with: tail -f $lf" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
              for j in journal journal_shadow; do
                $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
