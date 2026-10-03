@@ -130,17 +130,52 @@ def build_app(ctx) -> FastAPI:
         if not authed(tok(request)):
             raise HTTPException(401, "token required")
 
+    def login_page(error: str = "", status: int = 401) -> HTMLResponse:
+        msg = f"<p style='color:#f87171;font-size:14px'>{error}</p>" if error else ""
+        return HTMLResponse(
+            "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+            "<title>FX-Agents</title><body style='margin:0;background:#0d0f14;color:#f3f5f9;font:16px system-ui'>"
+            "<form method=post action='login' style='margin:18vh auto;max-width:320px;padding:0 16px'>"
+            "<h2 style='margin:0 0 6px'>FX-Agents</h2><p style='color:#aab2c2;margin:0 0 16px;font-size:14px'>"
+            "Enter the dashboard token (DASHBOARD_TOKEN in .env). It's remembered on this device for 30 days.</p>"
+            f"{msg}<input name=token type=password autocomplete=current-password autofocus required "
+            "style='width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #313848;"
+            "background:#161a23;color:inherit;font:inherit' placeholder='Dashboard token'>"
+            "<button style='margin-top:10px;padding:12px;width:100%;border:0;border-radius:10px;background:#4f8ff7;"
+            "color:#fff;font:600 15px system-ui'>Open dashboard</button></form>", status)
+
+    def with_cookie(resp, request: Request, value: str):
+        secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+        resp.set_cookie("fx_token", value, httponly=True, samesite="strict", secure=secure,
+                        max_age=60 * 60 * 24 * 30, path="/")
+        return resp
+
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
-        if not authed(tok(request)):
-            return HTMLResponse("<meta name=viewport content='width=device-width'><form style='font:16px system-ui;"
-                                "margin:20vh auto;max-width:320px'><p>FX-Agents</p><input name=token type=password "
-                                "placeholder='Dashboard token' style='width:100%;padding:10px'><button "
-                                "style='margin-top:8px;padding:10px;width:100%'>Open</button></form>", 401)
-        resp = HTMLResponse((STATIC / "index.html").read_text())
-        if request.query_params.get("token"):
-            resp.set_cookie("fx_token", request.query_params["token"], httponly=True, samesite="strict",
-                            max_age=60 * 60 * 24 * 30)
+        qtok = request.query_params.get("token")
+        if qtok is not None:
+            # old ?token= links still work once: set the cookie and bounce to the clean address
+            if authed(qtok):
+                return with_cookie(RedirectResponse("./", status_code=303), request, qtok)
+            return login_page("That token isn't right.")
+        if not authed(request.cookies.get("fx_token") or request.headers.get("x-token")):
+            return login_page()
+        return HTMLResponse((STATIC / "index.html").read_text())
+
+    @app.post("/login")
+    async def login(request: Request):
+        from urllib.parse import parse_qs
+        form = parse_qs((await request.body()).decode(errors="ignore"))
+        value = (form.get("token") or [""])[0].strip()
+        if not token or not authed(value):
+            await asyncio.sleep(1.0)       # slow down guessing
+            return login_page("That token isn't right.")
+        return with_cookie(RedirectResponse("./", status_code=303), request, value)
+
+    @app.get("/logout")
+    async def logout():
+        resp = RedirectResponse("./", status_code=303)
+        resp.delete_cookie("fx_token", path="/")
         return resp
 
     @app.get("/api/state")
