@@ -1028,7 +1028,8 @@ function renderReport(){
   const rows = [["Trades","trades",v=>fmt(v,0),0],["Win rate","win_rate",v=>Math.round(v*100)+"%",1],["Total R","sum_r",v=>sR(v),1],["Avg R / trade","avg_r",v=>sR(v),1],
     ["Profit factor","profit_factor",v=>v==null?"—":fmt(v,2),1],["P&L","pnl",v=>smoney(v),1],["Return","return_pct",pct,1],["Max drawdown","max_dd",v=>smoney(v),1],
     ["Max drawdown %","max_dd_pct",pct,1],["Sharpe (rough)","sharpe",v=>v==null?"—":fmt(v,2),1],["Green / red days","green_days",(v,b)=>`${b.green_days} / ${b.red_days}`,0],
-    ["Worst day","worst_day",v=>smoney(v),1],["Longest losing streak","max_losing_streak",v=>fmt(v,0),-1],["Avg hold","avg_hold_min",v=>v==null?"—":v+" min",0],["Trades pyramided","pyramided",v=>fmt(v,0),0]];
+    ["Worst day","worst_day",v=>smoney(v),1],["Longest losing streak","max_losing_streak",v=>fmt(v,0),-1],["Avg hold","avg_hold_min",v=>v==null?"—":v+" min",0],["Trades pyramided","pyramided",v=>fmt(v,0),0],
+    ["Kill switch fired","kill_switch",(v,b)=>v==null?"—":(v?`${v}× <small class="mut">${(b.kill_dates||[]).slice(0,3).map(d=>d.slice(5)).join(", ")}</small>`:"0"),-1]];
   const vs = rows.map(([lab,k,f,b]) => { const a = M[k], c = G ? G[k] : null;
     const ba = G && b && a!=null && c!=null && (b>0 ? a>c : a<c), bc = G && b && a!=null && c!=null && (b>0 ? c>a : c<a);
     return `<tr><td>${lab}</td><td class="r num l ${ba?"best":""}">${f(a,M)}</td>${G?`<td class="r num g ${bc?"best":""}">${f(c,G)}</td>`:""}</tr>`; }).join("");

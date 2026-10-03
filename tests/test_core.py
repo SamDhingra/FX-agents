@@ -260,3 +260,31 @@ def test_monitor_ignores_event_driven_agents_and_does_not_repeat_alerts():
     assert [x for x in sent if "silent" in x] == [x for x in sent if "agent bias silent" in x]
     assert len([x for x in sent if "agent bias silent" in x]) == 1
     assert not [x for x in sent if any(n in x for n in ("risk", "trader", "notifier", "selector"))]
+
+
+def test_replay_resumes_after_max_drawdown_halt_but_live_does_not():
+    from fxagents.agents.core import Ctx
+    from fxagents.agents.ops import MonitorAgent
+
+    class FakeBroker:
+        async def broker_positions(self): return {}
+        async def unprotected(self): return []
+
+    class J:
+        def __init__(self): self.log = []
+        def learner(self, ts, msg, data=None): self.log.append(msg)
+
+    for replay in (True, False):
+        cfg = dict(CFG); cfg["mode"] = "sim"
+        if replay:
+            cfg["replay"] = {"days": 5}
+        st = LiveState(); t = pd.Timestamp("2026-09-29 10:00", tz=TZ)
+        st.equity_peak = 100000; st.equity = st.day_start_equity = 93000   # 7% under the peak
+        ctx = Ctx(cfg, Bus(), st, None, FakeBroker(), J(), None, None)
+        m = MonitorAgent(ctx); m.start()
+        asyncio.run(m.on_clock(t))
+        assert not st.trading_enabled and st.halt_reason.startswith("max drawdown")
+        asyncio.run(m.on_clock(t + pd.Timedelta(days=1)))                  # next trading day
+        assert st.trading_enabled is replay
+        if replay:
+            assert st.equity_peak == 93000 and ctx.journal.log[0].startswith("KILL SWITCH")

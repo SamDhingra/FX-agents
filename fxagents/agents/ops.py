@@ -145,6 +145,7 @@ class MonitorAgent(Agent):
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
+        self._now = now
         st, r = self.state, self.cfg["risk"]
         # trading day rolls at 17:00 NY (CME)
         tday = (now + pd.Timedelta(hours=7)).date()
@@ -154,6 +155,11 @@ class MonitorAgent(Agent):
             st.realized_today = 0.0
             if st.halt_reason.startswith("daily loss"):
                 st.trading_enabled, st.halt_reason = True, ""
+            elif st.halt_reason.startswith("max drawdown") and self.cfg.get("replay"):
+                # backtests only: live, a drawdown halt waits for you; in a replay nobody presses resume,
+                # so restart next day from a new peak and keep the event in the report
+                st.trading_enabled, st.halt_reason = True, ""
+                st.equity_peak = st.equity
         if st.day_start_equity and st.trading_enabled:
             day_pnl = st.equity - st.day_start_equity
             if day_pnl <= -r["daily_loss_limit_pct"] * st.day_start_equity:
@@ -219,5 +225,10 @@ class MonitorAgent(Agent):
     async def kill(self, why: str):
         self.state.trading_enabled = False
         self.state.halt_reason = why
+        if self.cfg.get("replay"):
+            try:
+                self.ctx.journal.learner(str(getattr(self, "_now", "")), f"KILL SWITCH: {why}")
+            except Exception:  # noqa: BLE001
+                pass
         await self.alert(f"KILL SWITCH: {why}. Flattening all positions; no new entries today.")
         await self.bus.publish("flatten_all", why)

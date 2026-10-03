@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-LEARNER_KEYS = ("new shadow", "PROMOTED", "demoted", "retired", "held", "re-activated", "learning on")
+LEARNER_KEYS = ("new shadow", "PROMOTED", "demoted", "retired", "held", "re-activated", "learning on", "KILL SWITCH")
 
 
 def _rows(db: sqlite3.Connection, q: str, args=()) -> list[dict]:
@@ -41,6 +41,7 @@ def book_report(path: str | Path, start_equity: float) -> dict | None:
     eq = _rows(db, "SELECT ts, equity FROM equity ORDER BY ts")
     learner = [r for r in _rows(db, "SELECT ts, msg FROM learner_log ORDER BY id")
                if any(k in r["msg"] for k in LEARNER_KEYS)]
+    kills = [r for r in learner if r["msg"].startswith("KILL SWITCH")]
     db.close()
     rs = [t["r_multiple"] or 0.0 for t in trades]
     n = len(trades)
@@ -91,6 +92,7 @@ def book_report(path: str | Path, start_equity: float) -> dict | None:
         "green_days": sum(1 for x in dp if x > 0), "red_days": sum(1 for x in dp if x < 0),
         "max_losing_streak": streak, "avg_hold_min": round(sum(holds) / len(holds)) if holds else None,
         "pyramided": sum(1 for t in trades if (t["adds"] or 0) > 0),
+        "kill_switch": len(kills), "kill_dates": [str(k["ts"])[:10] for k in kills],
     }
     return {
         "summary": summary, "equity_daily": eq_daily, "days": day_list,
@@ -120,6 +122,9 @@ def build(out_dir: str | Path, meta: dict) -> dict:
                "The setup-map prior was off (the map is built on history that overlaps this period).",
                "For speed, each strategy scans the whole period once instead of a 700-bar window per bar; in testing "
                "the two agreed on 99.9% of bars, with a few percent of individual signals differing at window edges.",
+               "Kill switch: a daily-loss halt resumes next day as live; a max-drawdown halt (which live waits for you "
+               "to resume) also resumes next day from a new peak, so the run covers the whole period. Count and dates "
+               "are in the summary.",
                "Strategies were partly designed and tuned on recent markets — past results flatter future ones.",
            ]}
     (out / "report.json").write_text(json.dumps(rep, default=str))
