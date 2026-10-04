@@ -25,7 +25,8 @@ oanda:
   client_extensions: true           # set false if the account is linked to MT4
   poll_seconds: 5
 
-# Instruments. Top-level values = IBKR CME micro futures (also used by sim/backtests).
+# Instruments. Add `trade: false` under one to make it watch-only (data, bias, map kept; no new entries).
+# Top-level values = IBKR CME micro futures (also used by sim/backtests).
 # The `oanda:` block per symbol replaces them when broker = oanda (CFDs, 1 unit = $1 per point,
 # gold 1 unit = 1 oz). Tick size, unit step and minimum size are read from the account at start.
 instruments:

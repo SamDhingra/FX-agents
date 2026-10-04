@@ -158,3 +158,18 @@ def test_build_shadow_is_isolated_from_the_real_book(tmp_path):
     assert sctx.bus is not main.bus and sctx.journal.path.endswith("journal_shadow.sqlite")
     assert asyncio.run(sctx.broker.equity()) == pytest.approx(70000.0)
     assert {a.name for a in agents} >= {"trader", "risk", "position_manager", "journal", "monitor"}
+
+
+def test_watch_only_instrument_is_rejected_by_risk(tmp_path):
+    from fxagents.agents.trading import RiskAgent
+    from fxagents.models import Signal
+    cfg = copy.deepcopy(CFG); cfg["mode"] = "paper"
+    cfg["instruments"]["SPX"]["trade"] = False
+    st = LiveState(mode="paper"); st.now = NOW; st.equity = 70000
+    ctx = Ctx(cfg, Bus(), st, FakeStore(), None, Journal(str(tmp_path / "j.sqlite")), None, None, None)
+    r = RiskAgent(ctx); r.start()
+    sig = Signal("SPX", "smc_ifvg:5m@v1", 1, 6500.0, 6490.0, NOW, "test", {})
+    rec = {"ts": NOW.isoformat(), "symbol": "SPX", "strategy": sig.strategy, "side": "LONG", "entry": 6500.0, "stop": 6490.0}
+    asyncio.run(r.on_request({"signal": sig, "grade": {"quality": 0.9, "confidence": 0.9}, "record": rec}))
+    s = ctx.journal.signals(1)[0]
+    assert s["action"] == "rejected" and s["why"].startswith("instrument off") and not st.positions

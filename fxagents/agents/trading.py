@@ -345,6 +345,8 @@ class RiskAgent(Agent):
         now = self.now()
         if not self.state.trading_enabled:
             return self._reject(rec, f"trading halted: {self.state.halt_reason}")
+        if self.cfg["instruments"].get(sig.symbol, {}).get("trade", True) is False:
+            return self._reject(rec, f"instrument off: {sig.symbol} is watch-only (trade: false)")
         if not in_windows(now, s["entry_windows"]):
             return self._reject(rec, "outside entry windows")
         if now.hour * 60 + now.minute >= _hm(s["flatten_at"]) - 20 and now.hour < 17:

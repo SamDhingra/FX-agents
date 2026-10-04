@@ -152,6 +152,8 @@ def _bucket(row: dict, jc: dict) -> str:
         c_ok = (row["confidence"] or 0) >= jc["min_signal_confidence"] * 0.8
         return ("blocked: Jev confidence" if q_ok and not c_ok else
                 "blocked: Jev quality" if c_ok and not q_ok else "blocked: Jev quality + confidence")
+    if why.startswith("instrument off"):
+        return "blocked: instrument off"
     if a == "rejected":
         return "blocked: risk rules"
     return "skipped: other"
@@ -222,7 +224,7 @@ def filter_whatif(journal: str | Path, cfg: dict) -> list[dict] | None:
         d = out.setdefault(b, {"key": b, "n": 0, "wins": 0, "sum_r": 0.0})
         d["n"] += 1; d["wins"] += r > 0; d["sum_r"] += r
     order = ["taken", "blocked: counter to bias", "blocked: bias neutral", "blocked: Jev quality",
-             "blocked: Jev confidence", "blocked: Jev quality + confidence", "blocked: risk rules", "skipped: other"]
+             "blocked: Jev confidence", "blocked: Jev quality + confidence", "blocked: risk rules", "blocked: instrument off", "skipped: other"]
     res = [{**d, "sum_r": round(d["sum_r"], 2), "avg_r": round(d["sum_r"] / d["n"], 3),
             "win_rate": round(d["wins"] / d["n"], 3)} for d in out.values()]
     return sorted(res, key=lambda x: order.index(x["key"]) if x["key"] in order else 99)

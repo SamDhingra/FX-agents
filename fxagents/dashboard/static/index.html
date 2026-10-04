@@ -1014,7 +1014,7 @@ function renderRuns(){
     const per = r.period ? `${md(r.period.from)} → ${md(r.period.to)}` : `${r.days} days`;
     return `<tr class="row ${r.id===btSel?"sel":""}" data-id="${r.id}" style="${r.id===btSel?"background:var(--accent-soft)":""}">
       <td><b>${esc(r.name || r.id.slice(0,13))}</b><br><small class="mut">${per}</small></td>
-      <td class="hide-m"><small>Jev ${r.jev}${r.jev_gate==="advisory"?" (advisory)":""} · learner ${r.learner?"on":"off"}</small></td><td>${st}</td>
+      <td class="hide-m"><small>Jev ${r.jev}${r.jev_gate==="advisory"?" (advisory)":""}${(r.no_trade||[]).length?` · no ${r.no_trade.join(", ")}`:""} · learner ${r.learner?"on":"off"}</small></td><td>${st}</td>
       <td class="r num">${m.trades!=null?`<b class="${cls(m.sum_r)}">${sR(m.sum_r)}</b><br><small class="mut">${m.trades} trades · ${smoney(m.pnl)}</small>`:"—"}</td>
       <td class="r num">${g.trades!=null?`<b class="${cls(g.sum_r)}">${sR(g.sum_r)}</b><br><small class="mut">${g.trades} trades · ${smoney(g.pnl)}</small>`:"—"}</td></tr>`; }).join("")}</table>`;
   $$("#btRuns tr.row").forEach(tr => tr.onclick = () => { const r = BT.runs.find(x => x.id === tr.dataset.id); if(r && r.has_report) loadReport(r.id); });
@@ -1047,7 +1047,7 @@ function renderReport(){
   el.innerHTML = `
     <div class="grid">
       <div class="card c12"><div class="verdict"><b>${esc(meta.name || meta.id)}</b>
-        <span class="mut">${meta.period?`${md(meta.period.from)} → ${md(meta.period.to)} · ${meta.period.days} trading-calendar days`:""} · start equity ${money(meta.equity,0)} · Jev ${meta.jev}${meta.jev_gate==="advisory"?" (advisory)":""} · learner ${meta.learner?"on":"off"}</span></div>
+        <span class="mut">${meta.period?`${md(meta.period.from)} → ${md(meta.period.to)} · ${meta.period.days} trading-calendar days`:""} · start equity ${money(meta.equity,0)} · Jev ${meta.jev}${meta.jev_gate==="advisory"?" (advisory)":""}${(meta.no_trade||[]).length?` · ${meta.no_trade.join(", ")} watch-only`:""} · learner ${meta.learner?"on":"off"}</span></div>
         <details style="margin-top:8px"><summary>What this backtest does and doesn't include</summary><ul class="t2" style="font-size:13px;margin:8px 0 0;padding-left:18px">${BTR.caveats.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></details></div>
       <div class="card c5"><h3>Results</h3><table class="vs"><tr><th></th><th class="r l">${nm}<br><small class="mut">real book</small></th>${G?`<th class="r g">${ng}<br><small class="mut">shadow book</small></th>`:""}</tr>${vs}</table></div>
       <div class="card c7"><h3>Equity <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>${nm} ${G?`<i class="dot" style="background:var(--ghost);margin-left:8px"></i>${ng}`:""}</span></h3><div class="chart"><svg id="btChart" height="260"></svg></div></div>
