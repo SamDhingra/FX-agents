@@ -275,7 +275,7 @@ class TraderAgent(Agent):
                 "recent_bars": recent.to_dict("split")["data"], "time_ny": str(sig.ts)}
         g = await self.ctx.jev.rate_signal(info)
         jc = self.cfg["jev"]
-        ok = g["quality"] >= jc["min_signal_quality"] and g["confidence"] >= jc["min_signal_confidence"] * 0.8
+        ok = jev_gate(g, jc)
         rec = {"ts": sig.ts.isoformat(), "symbol": sig.symbol, "strategy": sig.strategy, "side": info["side"],
                "entry": sig.entry, "stop": sig.stop, "quality": g["quality"], "confidence": g["confidence"]}
         if not ok:
@@ -300,8 +300,21 @@ class TraderAgent(Agent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def jev_gate(g: dict, jc: dict) -> bool:
+    """True = the signal may go on to Risk. 'enforce': quality and confidence gates block.
+    'advisory': Jev's grade never blocks (except below advisory_floor) — it sets the size instead."""
+    if jc.get("signal_gate", "enforce") == "advisory":
+        q, c = float(g.get("quality", 0)), float(g.get("confidence", 0))
+        lo, hi = jc.get("size_from_quality", [0.3, 0.7])
+        g["size_mult"] = round(0.5 + 0.5 * min(1.0, max(0.0, (q - lo) / (hi - lo))), 3)   # 0.5× … 1.0×, never above normal risk
+        return q >= jc.get("advisory_floor", 0.0)
+    return g["quality"] >= jc["min_signal_quality"] and g["confidence"] >= jc["min_signal_confidence"] * 0.8
+
+
 def jev_gate_why(g: dict, jc: dict) -> str:
     """Say which part of the Jev gate failed — quality, confidence or both."""
+    if jc.get("signal_gate", "enforce") == "advisory":
+        return f"Jev quality {g['quality']:.2f} below advisory floor {jc.get('advisory_floor', 0.0):.2f}"
     q_min, c_min = jc["min_signal_quality"], jc["min_signal_confidence"] * 0.8
     parts = []
     if g["quality"] < q_min:
@@ -352,6 +365,7 @@ class RiskAgent(Agent):
         if gate.get("reject"):
             return self._reject(rec, gate["reject"])
         risk_mult = gate["risk_mult"] * (self.ctx.news.risk_mult(now) if self.ctx.news else 1.0)
+        risk_mult *= float((req.get("grade") or {}).get("size_mult", 1.0))   # Jev advisory mode: grade → size
 
         ic = self.cfg["instruments"][sig.symbol]
         mult, tick = float(ic["multiplier"]), float(ic["tick_size"])

@@ -30,7 +30,7 @@ from ..state import LiveState
 from ..strategies import Strategy
 from .core import Agent, Ctx
 from .ops import JournalAgent, MonitorAgent
-from .trading import PositionManagerAgent, RiskAgent, TraderAgent, _hm, jev_gate_why
+from .trading import PositionManagerAgent, RiskAgent, TraderAgent, _hm, jev_gate, jev_gate_why
 
 log = logging.getLogger("shadow")
 
@@ -157,7 +157,7 @@ class SetupFirstTrader(TraderAgent):
             if taken:
                 self.ctx.journal.add_signal(rec | {"action": "skipped", "why": "a better setup was taken on this bar"})
                 continue
-            if g["quality"] < jc["min_signal_quality"] or g["confidence"] < jc["min_signal_confidence"] * 0.8:
+            if not jev_gate(g, jc):
                 self.ctx.journal.add_signal(rec | {"action": "skipped",
                                                    "why": jev_gate_why(g, jc)})
                 continue

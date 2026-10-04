@@ -3,6 +3,7 @@
     python run_backtest.py --days 60                    # heuristic Jev, learner on, shadow book on
     python run_backtest.py --days 60 --no-learner       # same period with the learner switched off
     python run_backtest.py --days 30 --jev live         # grade with the real Jev API (slower, uses API calls)
+    python run_backtest.py --days 30 --jev live --jev-gate advisory   # Jev grades set size but never block
     ./fx.sh backtest 60 [--no-learner] [--jev live]     # on the server: separate low-priority container
 
 Results: data/backtests/<run-id>/ (journals, report.json) and the dashboard's Backtests page.
@@ -66,6 +67,8 @@ def prepare(args) -> tuple[dict, Path, dict]:
     cfg["shadow"]["db_path"] = str(out / "journal_shadow.sqlite")
     cfg["shadow"]["notify_trades"] = False
     cfg["jev"]["enabled"] = args.jev == "live"
+    if args.jev_gate:
+        cfg["jev"]["signal_gate"] = args.jev_gate
     # the heuristic stand-in for Jev doesn't read "today's form" — skip computing it (live Jev runs keep it)
     cfg.setdefault("setup_first", {})["today_context"] = args.jev == "live"
     ev = cfg["evaluator"]
@@ -75,7 +78,7 @@ def prepare(args) -> tuple[dict, Path, dict]:
     ev["refresh_minutes"] = args.refresh_minutes
     cfg["replay"] = {"days": args.days, "dir": str(out)}
     meta = {"id": rid, "name": args.name or "", "created": pd.Timestamp.now(tz=cfg["timezone"]).isoformat(timespec="seconds"),
-            "days": args.days, "jev": args.jev, "learner": not args.no_learner, "shadow": not args.no_shadow,
+            "days": args.days, "jev": args.jev, "jev_gate": cfg["jev"].get("signal_gate", "enforce"), "learner": not args.no_learner, "shadow": not args.no_shadow,
             "equity": round(equity, 2), "main_mode": cfg["selector"].get("mode", "hourly_pick"),
             "shadow_mode": "hourly_pick" if cfg["selector"].get("mode") == "setup_first" else "setup_first",
             "status": "running"}
@@ -87,6 +90,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="FX-Agents full-system replay backtest")
     ap.add_argument("--days", type=int, default=60)
     ap.add_argument("--jev", choices=["heuristic", "live"], default="heuristic")
+    ap.add_argument("--jev-gate", choices=["enforce", "advisory"], help="override jev.signal_gate for this run")
     ap.add_argument("--no-learner", action="store_true")
     ap.add_argument("--no-shadow", action="store_true")
     ap.add_argument("--equity", type=float, help="starting equity in USD (default: the live account's latest)")

@@ -152,6 +152,9 @@ jev:
   min_select_score: 0.55       # below this, the symbol sits out the hour
   min_signal_quality: 0.5      # per-setup gate
   min_signal_confidence: 0.5
+  signal_gate: enforce         # enforce: the two gates above block trades | advisory: Jev never blocks, its grade sets size
+  advisory_floor: 0.0          # advisory only: block below this quality (0 = never block)
+  size_from_quality: [0.3, 0.7]  # advisory only: quality ≤0.3 → half size, ≥0.7 → full size (never above normal risk)
 
 selector:
   mode: hourly_pick            # hourly_pick: trade only this hour's top strategy per TF | setup_first: scan every strategy each bar

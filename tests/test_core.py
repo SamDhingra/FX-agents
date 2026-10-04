@@ -288,3 +288,16 @@ def test_replay_resumes_after_max_drawdown_halt_but_live_does_not():
         assert st.trading_enabled is replay
         if replay:
             assert st.equity_peak == 93000 and ctx.journal.log[0].startswith("KILL SWITCH")
+
+
+def test_jev_advisory_gate_sizes_instead_of_blocking():
+    from fxagents.agents.trading import jev_gate, jev_gate_why
+    jc = dict(CFG["jev"]); jc["signal_gate"] = "enforce"
+    assert not jev_gate({"quality": 0.62, "confidence": 0.3}, dict(jc))        # confidence blocks
+    assert "confidence 0.30" in jev_gate_why({"quality": 0.62, "confidence": 0.3}, jc)
+    jc["signal_gate"] = "advisory"
+    lo, mid, hi = ({"quality": q, "confidence": 0.2} for q in (0.1, 0.5, 0.9))
+    assert jev_gate(lo, jc) and jev_gate(mid, jc) and jev_gate(hi, jc)       # nothing blocked
+    assert lo["size_mult"] == 0.5 and mid["size_mult"] == 0.75 and hi["size_mult"] == 1.0
+    jc["advisory_floor"] = 0.2
+    assert not jev_gate({"quality": 0.1, "confidence": 0.9}, jc)
