@@ -279,7 +279,7 @@ class TraderAgent(Agent):
         rec = {"ts": sig.ts.isoformat(), "symbol": sig.symbol, "strategy": sig.strategy, "side": info["side"],
                "entry": sig.entry, "stop": sig.stop, "quality": g["quality"], "confidence": g["confidence"]}
         if not ok:
-            self.ctx.journal.add_signal(rec | {"action": "skipped", "why": f"Jev grade {g['quality']:.2f} below gate"})
+            self.ctx.journal.add_signal(rec | {"action": "skipped", "why": jev_gate_why(g, jc)})
             return
         await self.bus.publish("entry_request", {"signal": sig, "grade": g, "record": rec})
 
@@ -300,6 +300,17 @@ class TraderAgent(Agent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def jev_gate_why(g: dict, jc: dict) -> str:
+    """Say which part of the Jev gate failed — quality, confidence or both."""
+    q_min, c_min = jc["min_signal_quality"], jc["min_signal_confidence"] * 0.8
+    parts = []
+    if g["quality"] < q_min:
+        parts.append(f"quality {g['quality']:.2f} < {q_min:.2f}")
+    if g["confidence"] < c_min:
+        parts.append(f"confidence {g['confidence']:.2f} < {c_min:.2f}")
+    return "Jev " + " and ".join(parts or [f"grade {g['quality']:.2f}"])
+
+
 class RiskAgent(Agent):
     """Final gate before the broker: stop mandatory, ≤10% of trade value, risk-%-of-equity sizing,
     exposure limits, entry windows, news blackouts, kill switch."""

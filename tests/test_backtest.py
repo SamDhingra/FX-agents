@@ -76,3 +76,27 @@ def test_report_metrics(tmp_path):
     assert {x["key"]: x["n"] for x in r["by_setup"]} == {"smc_ifvg": 3, "ict_ote": 1}
     assert [d["date"] for d in r["days"]] == ["2026-09-01", "2026-09-02", "2026-09-03"]
     assert r["months"][0]["key"] == "2026-09" and r["trades"][0]["id"] == "d"
+
+
+def test_whatif_simulates_blocked_signals_by_reason(tmp_path):
+    from fxagents.backtest_report import filter_whatif
+    cfg = copy.deepcopy(CFG)
+    cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    m1 = synth_1m(25000, 0.012, pd.Timestamp("2026-06-01", tz=TZ), 10, 3, TZ)
+    save_history(cfg, "NDQ", m1, resample_ohlc(m1, "1h"))
+    df = resample_ohlc(m1, "5min")
+    Journal(cfg["storage"]["db_path"])
+    db = sqlite3.connect(cfg["storage"]["db_path"])
+    rows = []
+    for k, i in enumerate(range(300, 1500, 100)):
+        c = float(df["close"].iloc[i]); ts = (df.index[i] + pd.Timedelta("5min")).isoformat()
+        act, why, q, cf = [("taken", "qty 1", 0.7, 0.6), ("filtered", "counter to BEARISH bias", None, None),
+                           ("skipped", "Jev grade 0.62 below gate", 0.62, 0.3)][k % 3]
+        rows.append((ts, "NDQ", "smc_ifvg:5m@v1", "LONG", c, c - 20, act, why, q, cf))
+    db.executemany("INSERT INTO signals(ts,symbol,strategy,side,entry,stop,action,why,quality,confidence) "
+                   "VALUES(?,?,?,?,?,?,?,?,?,?)", rows)
+    db.commit()
+    w = {x["key"]: x for x in filter_whatif(cfg["storage"]["db_path"], cfg)}
+    assert w["taken"]["n"] == 4 and w["blocked: counter to bias"]["n"] == 4
+    assert w["blocked: Jev confidence"]["n"] == 4                      # quality passed, confidence failed
+    assert all(x["avg_r"] >= -1.01 for x in w.values())                # never worse than a full stop (no slippage)

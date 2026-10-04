@@ -109,7 +109,7 @@ def main() -> int:
         if prog.exists():
             p = json.loads(prog.read_text())
             meta["period"] = {"from": p.get("from"), "to": p.get("to"), "days": p.get("days")}
-        rep = backtest_report.build(out, meta)
+        rep = backtest_report.build(out, meta, cfg)
         m = rep["books"]["main"]["summary"] if rep["books"]["main"] else {}
         meta["headline"] = {k: (rep["books"][k] or {}).get("summary") for k in ("main", "shadow")}
         log.info("BACKTEST DONE in %ds: %s", meta["seconds"], m)

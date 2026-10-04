@@ -108,7 +108,7 @@ def book_report(path: str | Path, start_equity: float) -> dict | None:
     }
 
 
-def build(out_dir: str | Path, meta: dict) -> dict:
+def build(out_dir: str | Path, meta: dict, cfg: dict | None = None) -> dict:
     out = Path(out_dir)
     eq0 = float(meta.get("equity") or 100000)
     rep = {"meta": meta,
@@ -127,5 +127,121 @@ def build(out_dir: str | Path, meta: dict) -> dict:
                "are in the summary.",
                "Strategies were partly designed and tuned on recent markets — past results flatter future ones.",
            ]}
+    if cfg is not None:
+        for k, f in (("main", "journal.sqlite"), ("shadow", "journal_shadow.sqlite")):
+            if rep["books"][k]:
+                try:
+                    rep["books"][k]["whatif"] = filter_whatif(out / f, cfg)
+                except Exception as e:  # noqa: BLE001  never lose the report over the extra section
+                    rep["books"][k]["whatif_error"] = str(e)
     (out / "report.json").write_text(json.dumps(rep, default=str))
     return rep
+
+
+# ── what-if: how would the signals the filters blocked have done? ─────────────
+def _bucket(row: dict, jc: dict) -> str:
+    a, why = row["action"], row["why"] or ""
+    if a == "taken":
+        return "taken"
+    if why.startswith("counter to"):
+        return "blocked: counter to bias"
+    if why.startswith("bias neutral"):
+        return "blocked: bias neutral"
+    if why.startswith("Jev") and row["quality"] is not None:
+        q_ok = row["quality"] >= jc["min_signal_quality"]
+        c_ok = (row["confidence"] or 0) >= jc["min_signal_confidence"] * 0.8
+        return ("blocked: Jev confidence" if q_ok and not c_ok else
+                "blocked: Jev quality" if c_ok and not q_ok else "blocked: Jev quality + confidence")
+    if a == "rejected":
+        return "blocked: risk rules"
+    return "skipped: other"
+
+
+def filter_whatif(journal: str | Path, cfg: dict) -> list[dict] | None:
+    """Simulate every logged signal with the bot's own trade management (stop, 1R partial, trailing,
+    adds, session flat) on the cached history, grouped by why it was or wasn't taken. Approximate:
+    first target 1R, no slippage, no Jev pyramid check — good for comparing groups, not for exact P&L."""
+    import numpy as np
+    from .indicators import resample_ohlc
+    from .setup_map import load_history
+    from .sim import Mgmt, simulate_outcome
+    path = Path(journal)
+    if not path.exists():
+        return None
+    db = sqlite3.connect(str(path))
+    sigs = _rows(db, "SELECT ts, symbol, strategy, side, entry, stop, action, why, quality, confidence FROM signals")
+    db.close()
+    if not sigs:
+        return []
+    jc, frames, out = cfg["jev"], {}, {}
+    fh, fm = map(int, cfg["sessions"]["flatten_at"].split(":"))
+    seen = set()
+    for s in sigs:
+        key = (s["ts"], s["symbol"], s["strategy"], s["side"])
+        if key in seen:
+            continue
+        seen.add(key)
+        tf = "15min" if ":15m" in (s["strategy"] or "") else "5min"
+        fk = (s["symbol"], tf)
+        if fk not in frames:
+            h = load_history(cfg, s["symbol"])
+            if h is None:
+                frames[fk] = None
+            else:
+                m1 = h[0] if isinstance(h, tuple) else h
+                df = resample_ohlc(m1, tf)
+                close_ts = df.index + pd.Timedelta(tf)
+                mins = close_ts.hour * 60 + close_ts.minute
+                tr = pd.concat([df["high"] - df["low"], (df["high"] - df["close"].shift()).abs(),
+                                (df["low"] - df["close"].shift()).abs()], axis=1).max(axis=1)
+                frames[fk] = (df, np.asarray((mins >= fh * 60 + fm) & (mins < 17 * 60), dtype=bool),
+                              tr.ewm(alpha=1 / 14, adjust=False).mean().to_numpy())
+        fr = frames[fk]
+        if fr is None or s["entry"] is None or s["stop"] is None:
+            continue
+        df, flat, atr = fr
+        ts = pd.Timestamp(s["ts"])
+        lo = df.index.searchsorted(ts - 3 * pd.Timedelta(tf))
+        hi = df.index.searchsorted(ts, side="right")
+        if hi <= lo:
+            continue
+        C = df["close"].to_numpy()
+        i0 = lo + int(np.argmin(np.abs(C[lo:hi] - s["entry"])))
+        side = 1 if s["side"] == "LONG" else -1
+        entry, stop = float(s["entry"]), float(s["stop"])
+        if (entry - stop) * side <= 0:
+            continue
+        m = Mgmt.from_cfg(cfg, bar_minutes=int(pd.Timedelta(tf).total_seconds() // 60))
+        if abs(entry - stop) < m.min_stop_atr * atr[i0]:            # the live risk agent widens these
+            stop = entry - side * m.min_stop_atr * atr[i0]
+        if abs(entry - stop) / entry > m.max_stop_pct:
+            continue
+        O, H, L = (df[c].to_numpy() for c in ("open", "high", "low"))
+        r = simulate_outcome(O, H, L, C, i0, side, entry, stop, m, flat)["r"]
+        b = _bucket(s, jc)
+        d = out.setdefault(b, {"key": b, "n": 0, "wins": 0, "sum_r": 0.0})
+        d["n"] += 1; d["wins"] += r > 0; d["sum_r"] += r
+    order = ["taken", "blocked: counter to bias", "blocked: bias neutral", "blocked: Jev quality",
+             "blocked: Jev confidence", "blocked: Jev quality + confidence", "blocked: risk rules", "skipped: other"]
+    res = [{**d, "sum_r": round(d["sum_r"], 2), "avg_r": round(d["sum_r"] / d["n"], 3),
+            "win_rate": round(d["wins"] / d["n"], 3)} for d in out.values()]
+    return sorted(res, key=lambda x: order.index(x["key"]) if x["key"] in order else 99)
+
+
+def rebuild(run_dir: str | Path, config: str = "config.yaml") -> dict:
+    """Re-make report.json for an existing run (adds sections introduced after it ran)."""
+    from .config import load_config
+    out = Path(run_dir)
+    meta = json.loads((out / "meta.json").read_text())
+    cfg = load_config(config)
+    return build(out, meta, cfg)
+
+
+if __name__ == "__main__":
+    import sys
+    for d in sys.argv[1:] or sorted(str(p) for p in (Path("data/backtests")).glob("*") if (p / "meta.json").exists()):
+        try:
+            rebuild(d)
+            print("rebuilt", d)
+        except Exception as e:  # noqa: BLE001
+            print("skipped", d, e)

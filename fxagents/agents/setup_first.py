@@ -30,7 +30,7 @@ from ..state import LiveState
 from ..strategies import Strategy
 from .core import Agent, Ctx
 from .ops import JournalAgent, MonitorAgent
-from .trading import PositionManagerAgent, RiskAgent, TraderAgent, _hm
+from .trading import PositionManagerAgent, RiskAgent, TraderAgent, _hm, jev_gate_why
 
 log = logging.getLogger("shadow")
 
@@ -159,7 +159,7 @@ class SetupFirstTrader(TraderAgent):
                 continue
             if g["quality"] < jc["min_signal_quality"] or g["confidence"] < jc["min_signal_confidence"] * 0.8:
                 self.ctx.journal.add_signal(rec | {"action": "skipped",
-                                                   "why": f"Jev {g['quality']:.2f} (conf {g['confidence']:.2f}) below gate"})
+                                                   "why": jev_gate_why(g, jc)})
                 continue
             before = {p.id for p in self.state.positions.values()}
             await self.bus.publish("entry_request", {"signal": sig, "grade": g, "record": rec})
