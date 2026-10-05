@@ -72,6 +72,7 @@ class FakeJev:
 def make(tmp_path, grades, strategies, bias_score=1.0):
     cfg = copy.deepcopy(CFG)
     cfg["mode"] = "paper"
+    cfg["jev"]["signal_gate"] = "enforce"          # these tests are about the gate; don't depend on the server's config
     st = LiveState(mode="paper")
     st.now = NOW
     st.bias["NDQ"] = {"score": bias_score, "suspended": False, "h1": 1, "label": "BULLISH", "in_doubt": False}
@@ -149,6 +150,7 @@ def test_build_shadow_is_isolated_from_the_real_book(tmp_path):
     cfg = copy.deepcopy(CFG)
     cfg["mode"] = "paper"
     cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    cfg["shadow"].pop("db_path", None)               # the default path is what's under test
     st = LiveState(mode="paper")
     st.now = NOW
     real_broker = PaperBroker(cfg, st, Bus())
