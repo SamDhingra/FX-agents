@@ -36,8 +36,28 @@ def _tday(df: pd.DataFrame, ctx: dict) -> np.ndarray:
 
 
 class _Fast(Strategy):
-    """Marker: linear-time scan, can run on a whole history frame (no windowing needed)."""
+    """Marker: linear-time scan, can run on a whole history frame (no windowing needed).
+    Every fast setup also takes an optional `vol` parameter (structure.vol_ok: impulse / dry / climax);
+    the research grid tries each as a separate variant."""
     fast = True
+    vol_grid = ("impulse", "dry", "climax")
+
+    def _scan_full(self, df, ctx=None):
+        out = super()._scan_full(df, ctx)
+        mode = self.params.get("vol", "any")
+        if mode in (None, "any") or not out:
+            return out
+        ctx = ctx if ctx is not None else self.context(df)
+        rv = ctx.get("rvol")
+        if rv is None or len(rv) != len(df):
+            rv = ctx["rvol"] = sx.rvol_tod(df)
+        O, C = df["open"].to_numpy(float), df["close"].to_numpy(float)
+        keep = []
+        for s in out:
+            if sx.vol_ok(mode, s.i, s.side, O, C, rv):
+                s.features["rvol"] = float(rv[s.i]) if np.isfinite(rv[s.i]) else None
+                keep.append(s)
+        return keep
 
 
 # ─────────────────────────────────────────────────────────────────────────────

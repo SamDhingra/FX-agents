@@ -398,6 +398,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <!-- TRADES -->
     <section class="page" id="p-trades">
       <div class="filters" id="tfilters"></div>
+      <div class="card" style="margin-bottom:12px"><div class="tbl" id="pipsum"></div></div>
       <div class="card"><div class="tbl" id="trades"></div></div>
     </section>
 
@@ -515,6 +516,8 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 const fmt = (x, d=2) => x==null||isNaN(x) ? "—" : Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
 const money = (x, d=2) => x==null ? "—" : (x<0?"−":"") + "$" + fmt(Math.abs(x), d);
 const smoney = (x, d=0) => x==null ? "—" : (x>0?"+":x<0?"−":"") + "$" + fmt(Math.abs(x), d);
+const sPip = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1) + " pips";
+const lots = x => x==null ? "—" : fmt(x, x>=10?1:2) + " lot" + (x===1?"":"s");
 const sR = (x, d=2) => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), d) + "R";
 const cls = x => x>0 ? "up" : x<0 ? "down" : "";
 const hm = iso => iso ? iso.slice(11,16) : "";
@@ -622,7 +625,8 @@ function positions(s){
       <div class="rtrack">${ticks.join("")}<span class="rfill" style="left:${a}%;width:${w}%;background:var(${p.r_now>=0?"--up":"--down"})"></span>
         <i class="rtick" style="left:calc(${x(sR_)}% - 1px);background:var(--warn);width:3px;height:14px;top:-4px" title="stop"></i></div>
       <div class="rlabels"><span>stop ${sR(sR_,1)} ${p.stop_in_profit?"🔒":""}</span><span class="num"><b class="${cls(p.r_now)}">${sR(p.r_now)}</b> now</span><span>step ${p.stage}${p.adds?` · +${p.adds} adds`:""}</span></div>
-      <div class="mini"><span>qty ${fmt(p.qty,0)}</span><span>avg ${fmt(p.avg_entry)}</span><span>stop ${fmt(p.stop)}</span><span>Jev ${fmt(p.jev_quality,2)}/${fmt(p.jev_confidence,2)}</span>${p.risk_mult<1?`<span>size ×${p.risk_mult}</span>`:""}</div>
+      <div class="rlabels"><span>stop ${sPip(p.locked_pips)}</span><span class="num"><b class="${cls(p.pips_now)}">${sPip(p.pips_now)}</b></span><span>risk ${fmt(p.stop_pips,0)} pips</span></div>
+      <div class="mini"><span><b>${lots(p.lots)}</b> (${fmt(p.qty,p.qty%1?2:0)} units)</span><span>avg ${fmt(p.avg_entry)}</span><span>stop ${fmt(p.stop)}</span><span>Jev ${fmt(p.jev_quality,2)}/${fmt(p.jev_confidence,2)}</span>${p.risk_mult<1?`<span>size ×${p.risk_mult}</span>`:""}</div>
     </div>`;
   }).join("");
 }
@@ -748,7 +752,7 @@ async function showDay(d){
     ${data.trades.length ? data.trades.map((t,i)=>`<div class="fi" style="cursor:pointer" data-i="${i}"><span class="when">${hm(t.opened)}–${hm(t.closed)}</span>
       <div style="flex:1;min-width:0"><div><span class="side ${t.side[0]}">${t.side}</span> <b>${t.symbol}</b> <span class="mut" style="font-size:12px">${esc(t.strategy)}</span></div>
       <small class="mut">${esc(t.exit_reason)} · ${t.adds?`+${t.adds} adds · `:""}${esc(t.bias_mode||"")}</small></div>
-      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="${cls(t.r_multiple)}">${sR(t.r_multiple)}</small></div></div>`).join("")
+      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="${cls(t.r_multiple)}">${sR(t.r_multiple)} · ${sPip(t.pips)}</small><br><small class="mut">${lots(t.lots)}</small></div></div>`).join("")
       : `<div class="empty">No closed trades this day.</div>`}`;
   $("#dayPanel").innerHTML = html;
   $$("#dayPanel .fi").forEach(el => el.onclick = () => openTrade(data.trades[+el.dataset.i]));
@@ -770,23 +774,35 @@ function chips(el, groups){
 }
 function renderTrades(){
   const syms = ["ALL", ...new Set(tradeRows.map(t=>t.symbol))];
-  chips($("#tfilters"), [["sym", syms], ["res", ["ALL","Winners","Losers"]], ["tf", ["ALL","5m","15m"]]]);
+  const tfs = ["ALL", ...[...new Set(tradeRows.map(t=>t.tf).filter(Boolean))].sort((a,b)=>parseInt(a)*(a.endsWith("h")?60:1)-parseInt(b)*(b.endsWith("h")?60:1))];
+  chips($("#tfilters"), [["sym", syms], ["res", ["ALL","Winners","Losers"]], ["tf", tfs]]);
   const rows = tradeRows.filter(t => (tf.sym==="ALL"||t.symbol===tf.sym) && (tf.res==="ALL"||(tf.res==="Winners"?t.realized>0:t.realized<=0)) && (tf.tf==="ALL"||t.tf===tf.tf));
+  const ps = pipSummary(rows); $("#pipsum").innerHTML = ps; $("#pipsum").parentElement.style.display = ps ? "" : "none";
   if(matchMedia("(max-width:760px)").matches){   // phone: tappable cards instead of a wide table
     $("#trades").innerHTML = rows.length ? rows.map((t,i)=>`<div class="fi" style="cursor:pointer" data-i="${i}"><span class="when">${md(t.closed)}<br>${hm(t.closed)}</span>
       <div style="flex:1;min-width:0"><div><span class="side ${t.side[0]}">${t.side}</span> <b>${t.symbol}</b> <span class="tag">${t.tf||""}</span></div>
-      <small class="mut">${esc(t.strategy.split(":")[0])} · ${esc(t.exit_reason)}${t.adds?` · +${t.adds} adds`:""}</small></div>
-      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</small></div></div>`).join("")
+      <small class="mut">${esc(t.strategy.split(":")[0])} · ${lots(t.lots)} · ${esc(t.exit_reason)}${t.adds?` · +${t.adds} adds`:""}</small></div>
+      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="num ${cls(t.pips)}">${sPip(t.pips)}</small><br><small class="num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</small></div></div>`).join("")
       : `<div class="empty">No trades match.</div>`;
     $$("#trades .fi").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
     return;
   }
-  $("#trades").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Bias</th><th class=r>Entry</th><th class=r>Exit</th><th class=r>R</th><th class=r>P&amp;L</th><th>Exit</th></tr>` +
+  $("#trades").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Bias</th><th class=r>Lots</th><th class=r>Entry</th><th class=r>Exit</th><th class=r>Pips</th><th class=r>R</th><th class=r>P&amp;L</th><th>Exit</th></tr>` +
     rows.map((t,i)=>`<tr class="row" data-i="${i}"><td class="mut">${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td><span class="side ${t.side[0]}">${t.side}</span></td>
-      <td>${esc(t.strategy)}</td><td class="mut">${esc(t.bias_mode||"")}</td><td class="r num">${fmt(t.entry)}</td><td class="r num">${fmt(t.exit_price)}</td>
-      <td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}"><b>${smoney(t.realized)}</b></td><td class="mut">${esc(t.exit_reason)}</td></tr>`).join("") + `</table>`
+      <td>${esc(t.strategy)}</td><td class="mut">${esc(t.bias_mode||"")}</td><td class="r num">${fmt(t.lots,2)}${t.lots_max>t.lots?`<small class="mut">→${fmt(t.lots_max,2)}</small>`:""}</td><td class="r num">${fmt(t.entry)}</td><td class="r num">${fmt(t.exit_price)}</td>
+      <td class="r num ${cls(t.pips)}">${sPip(t.pips)}</td><td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}"><b>${smoney(t.realized)}</b></td><td class="mut">${esc(t.exit_reason)}</td></tr>`).join("") + `</table>`
     : `<div class="empty">No trades match.</div>`;
   $$("#trades tr.row").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
+}
+function pipSummary(rows){
+  // pips aren't comparable across instruments (a gold pip ≠ an index point), so one line per symbol
+  const by = {}; rows.forEach(t => { if(t.pips==null) return; (by[t.symbol] = by[t.symbol] || []).push(t); });
+  const lines = Object.entries(by).map(([sym, ts]) => {
+    const w = ts.filter(t=>t.realized>0), l = ts.filter(t=>t.realized<=0), avg = a => a.length ? a.reduce((x,t)=>x+t.pips,0)/a.length : null;
+    const net = ts.reduce((x,t)=>x+t.pips,0), lt = ts.reduce((x,t)=>x+(t.lots||0),0)/ts.length;
+    const pp = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1);
+    return `<tr><td><b>${sym}</b><br><small class="mut">${ts.length} trades</small></td><td class="r num up">${pp(avg(w))}<br><small class="mut">${w.length} won</small></td><td class="r num down">${pp(avg(l))}<br><small class="mut">${l.length} lost</small></td><td class="r num ${cls(net)}"><b>${pp(net)}</b></td><td class="r num hide-m">${lots(lt)}</td></tr>`; });
+  return lines.length ? `<table class="pips"><tr><th>Pips</th><th class=r>Avg win</th><th class=r>Avg loss</th><th class=r>Net</th><th class="r hide-m">Avg size</th></tr>${lines.join("")}</table>` : "";
 }
 function openTrade(t){
   const ev = t.events || [];
@@ -795,6 +811,8 @@ function openTrade(t){
     <div class="hero" style="grid-template-columns:1fr 1fr;gap:10px">
       <div class="card kpi"><div class="l">P&amp;L</div><div class="v num ${cls(t.realized)}">${smoney(t.realized,2)}</div></div>
       <div class="card kpi"><div class="l">R multiple</div><div class="v num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</div></div>
+      <div class="card kpi"><div class="l">Pips</div><div class="v num ${cls(t.pips)}">${sPip(t.pips)}</div><div class="s">avg per unit · risked ${fmt(t.risk_pips,0)} pips</div></div>
+      <div class="card kpi"><div class="l">Size</div><div class="v num">${lots(t.lots)}</div><div class="s">${t.lots_max>t.lots?`peak ${lots(t.lots_max)} after adds`:"no adds"}</div></div>
       <div class="card kpi"><div class="l">Best excursion</div><div class="v num">${sR(t.mfe_r,1)}</div></div>
       <div class="card kpi"><div class="l">Jev grade</div><div class="v num">${fmt(t.jev_quality,2)}</div><div class="s">${esc(t.jev_source||"")} · bias ${esc(t.bias_mode||"")}</div></div></div>
     <div class="tl">${ev.map(e => { const {ts, kind, ...rest} = e; return `<div><span class="k">${kind.replace(/_/g," ")}</span> <span class="mut num">${hm(ts)}</span>

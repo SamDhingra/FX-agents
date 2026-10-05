@@ -12,6 +12,11 @@ Definitions used throughout (long side; shorts run the same code on a mirrored s
   displacement     a candle whose body ≥ k × ATR and ≥ 60% of its range, closing in the move's direction
   FVG              three-candle imbalance: low[i] > high[i-2]; known at the close of bar i
   sweep            trading through a liquidity level (swing low, session low, PDL) — a raid on stops
+  RVOL             a bar's (tick) volume ÷ the average volume of the same time-of-day bar over the previous
+                   5 trading days — volume is strongly seasonal (Asia vs NY open), so a plain moving
+                   average would call every NY-open bar "high volume". OANDA volume is tick volume (count
+                   of price changes), which tracks real futures volume well enough for relative use.
+  VWAP             session VWAP anchored at the 17:00 NY roll, typical price weighted by tick volume
 """
 from __future__ import annotations
 
@@ -229,3 +234,59 @@ def htf_trend(df: pd.DataFrame, ctx: dict, rule: str = "1h", swing: int = 2) -> 
     u = known.index.union(ctx["close_ts"])
     ctx[key] = known.reindex(u).ffill().reindex(ctx["close_ts"]).fillna(0).to_numpy()
     return ctx[key]
+
+
+# ── volume ────────────────────────────────────────────────────────────────────
+def rvol_tod(df: pd.DataFrame, days: int = 5, min_days: int = 3) -> np.ndarray:
+    """Relative volume vs the same time-of-day bar on the previous `days` days (causal: today excluded)."""
+    if "volume" not in df or len(df) == 0:
+        return np.full(len(df), np.nan)
+    v = df["volume"].astype(float).replace(0.0, np.nan)
+    key = df.index.hour * 60 + df.index.minute
+    base = v.groupby(key).transform(lambda x: x.shift(1).rolling(days, min_periods=min_days).mean())
+    return (v / base).to_numpy()
+
+
+def session_vwap(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Session VWAP and its volume-weighted standard deviation, anchored at the 17:00 NY roll."""
+    n = len(df)
+    if "volume" not in df or n == 0:
+        return np.full(n, np.nan), np.full(n, np.nan)
+    tp = ((df["high"] + df["low"] + df["close"]) / 3).to_numpy(float)
+    v = np.nan_to_num(df["volume"].to_numpy(float))
+    day = (df.index + pd.Timedelta(hours=7)).normalize()
+    g = pd.Series(day).ne(pd.Series(day).shift()).cumsum().to_numpy()
+    s_v = pd.Series(v).groupby(g).cumsum().to_numpy()
+    s_pv = pd.Series(tp * v).groupby(g).cumsum().to_numpy()
+    s_p2v = pd.Series(tp * tp * v).groupby(g).cumsum().to_numpy()
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vw = np.where(s_v > 0, s_pv / s_v, np.nan)
+        sd = np.sqrt(np.maximum(np.where(s_v > 0, s_p2v / s_v, np.nan) - vw * vw, 0))
+    return vw, sd
+
+
+VOL_MODES = ("impulse", "dry", "climax")
+
+
+def vol_ok(mode: str, i: int, side: int, O: np.ndarray, C: np.ndarray, rvol: np.ndarray,
+           look: int = 6, impulse: float = 1.5, dry: float = 0.9, climax: float = 2.0) -> bool:
+    """Volume confirmation for a signal on bar i (one definition per mode; modes are never combined):
+      impulse  the move behind the setup had participation: a bar in the trade's direction within the
+               last `look` bars with RVOL ≥ 1.5
+      dry      the pullback into the entry was on light volume: mean RVOL of the 3 bars before ≤ 0.9
+      climax   a stop-run was absorbed: a bar AGAINST the trade within the last 4 bars with RVOL ≥ 2"""
+    if mode in (None, "any"):
+        return True
+    if i < 4:
+        return False
+    if mode == "impulse":
+        lo = max(0, i - look + 1)
+        d = (C[lo:i + 1] - O[lo:i + 1]) * side > 0
+        return bool(np.any(d & (rvol[lo:i + 1] >= impulse)))
+    if mode == "dry":
+        w = rvol[i - 3:i]
+        return bool(np.all(np.isfinite(w)) and w.mean() <= dry)
+    if mode == "climax":
+        d = (C[i - 3:i + 1] - O[i - 3:i + 1]) * side < 0
+        return bool(np.any(d & (rvol[i - 3:i + 1] >= climax)))
+    raise ValueError(f"unknown volume mode {mode}")

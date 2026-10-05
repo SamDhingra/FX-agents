@@ -517,6 +517,9 @@ class PositionManagerAgent(Agent):
         hi = bar.high if pos.side > 0 else bar.low
         lo = bar.low if pos.side > 0 else bar.high
         pos.last_price = bar.close
+        new_best = pos.r_now(hi) > pos.mfe_r
+        if new_best or "best_ts" not in pos.meta:
+            pos.meta["best_ts"] = now.isoformat()          # when the trade last made a new best price
         pos.mfe_r = max(pos.mfe_r, pos.r_now(hi))
         pos.mae_r = min(pos.mae_r, pos.r_now(lo))
 
@@ -533,6 +536,7 @@ class PositionManagerAgent(Agent):
             pos.stage += 1
             level = self.lvl(pos, pos.stage)
             if pos.stage == 1:
+                pos.meta.setdefault("t1", bar.ts.isoformat())     # runner rules only use structure formed after this
                 if not self.m["pyramid"]["enabled"] or pos.meta.get("full_exit"):
                     return await self.close(pos, level, "target", limit=True)
                 step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
@@ -549,25 +553,89 @@ class PositionManagerAgent(Agent):
                 pos.log(now, "stop_moved", stop=pos.stop, stage=pos.stage)
                 await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
                                                             "msg": f"stop → {pos.stop} (locks +{pos.r_now(pos.stop):.2f}R)"})
-            await self.maybe_pyramid(pos, level, mult, bar)
+            if ((self.m.get("runner") or {}).get("add_mode", "step")) in ("step", "both"):
+                await self.maybe_pyramid(pos, level, mult, bar)
 
-        # 3) continuous trail: after the first target, the stop follows the best price `trail_gap_r` behind,
-        #    so profit is locked between the 1R steps too. Re-sent only on a ≥0.1R improvement.
-        gap = float(self.m.get("trail_gap_r", 0) or 0)
-        if gap > 0 and pos.stage >= 1 and pos.risk_per_unit:
-            new_stop = pos.entry + pos.side * (pos.mfe_r - gap) * pos.risk_per_unit
-            if (new_stop - pos.stop) * pos.side >= 0.1 * pos.risk_per_unit:
-                if (bar.close - new_stop) * pos.side <= 0:      # gave back more than the gap inside this bar
-                    return await self.close(pos, bar.close, "trail_stop")
-                await broker.move_stop(pos, new_stop)
-                pos.log(now, "stop_moved", stop=pos.stop, stage=pos.stage, why="trail")
-                await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
-                                                            "msg": f"trail stop → {pos.stop} (locks +{pos.r_now(pos.stop):.2f}R)"})
+        # 3) runner rules after the first target (management.trail_gap_r / management.runner); each only
+        #    ratchets the stop toward profit and is re-sent on a ≥0.1R improvement
+        if pos.stage >= 1 and pos.risk_per_unit:
+            run = self.m.get("runner") or {}
+            gap = float(self.m.get("trail_gap_r", 0) or 0)
+            cands = []
+            if gap > 0:
+                cands.append(("trail", pos.mfe_r - gap))
+            stall = float(run.get("stall_minutes", 0) or 0)
+            if stall > 0:
+                idle = (now - pd.Timestamp(pos.meta["best_ts"])).total_seconds() / 60
+                if idle >= stall:
+                    cands.append((f"stalled {idle:.0f} min", pos.mfe_r - float(run.get("stall_gap_r") or 0.5)))
+            add_mode = run.get("add_mode", "step")
+            piv = self.last_pivot(pos) if (run.get("structure_trail") or add_mode in ("structure", "both")) else None
+            if add_mode in ("structure", "both") and piv is not None:
+                # structure add: a fresh higher low (lower high) after the first target arms it; the next new best
+                # price adds — the trend has pulled back, held, and resumed
+                seen = pos.meta.get("piv_seen")
+                if seen is None or (piv - seen) * pos.side > 0:
+                    pos.meta["piv_seen"], pos.meta["armed"] = piv, True
+                if pos.meta.get("armed") and new_best:
+                    pos.meta["armed"] = False
+                    await self.maybe_pyramid(pos, bar.close, mult, bar, structure=True)
+            if run.get("structure_trail"):
+                if piv is not None:
+                    cands.append(("higher low" if pos.side > 0 else "lower high",
+                                  pos.r_now(piv - pos.side * self.half_spread(pos.symbol))
+                                  - float(run.get("struct_buf_r") or 0.1)))
+            if cands:
+                why, best_r = max(cands, key=lambda c: c[1])
+                new_stop = pos.entry + pos.side * best_r * pos.risk_per_unit
+                if (new_stop - pos.stop) * pos.side >= 0.1 * pos.risk_per_unit:
+                    # the stop triggers on the bid (longs) / ask (shorts): if that's already through, exit now
+                    far = bar.close - pos.side * self.half_spread(pos.symbol)
+                    if (far - new_stop) * pos.side <= 0.02 * pos.risk_per_unit:
+                        return await self.close(pos, bar.close, "trail_stop")
+                    try:
+                        await broker.move_stop(pos, new_stop)
+                    except OrderRejected as e:
+                        pos.log(now, "stop_move_failed", why=str(e)[:200])
+                        return
+                    pos.log(now, "stop_moved", stop=pos.stop, stage=pos.stage, why=why)
+                    await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
+                                                                "msg": f"stop → {pos.stop} ({why}; locks +{pos.r_now(pos.stop):.2f}R)"})
 
-    async def maybe_pyramid(self, pos: Position, level: float, mult: float, bar: Bar):
+    def half_spread(self, sym: str) -> float:
+        from ..research import DEFAULT_SPREAD
+        sp = ((self.cfg.get("shadow") or {}).get("spread") or {}).get(sym, DEFAULT_SPREAD.get(sym, 0.0))
+        return float(sp or 0) / 2
+
+    def last_pivot(self, pos: Position) -> float | None:
+        """Highest confirmed 1-minute swing low (longs; lowest swing high for shorts) in the rising chain of
+        pivots CONFIRMED after the first target was hit — pivot half-width = the entry timeframe in minutes.
+        Same rule as research.simulate_live."""
+        if "t1" not in pos.meta:
+            return None
+        tf = pos.strategy.split(":")[1].split("@")[0] if ":" in pos.strategy else "5m"
+        try:
+            k = int((self.m.get("runner") or {}).get("struct_k") or pd.Timedelta(tf.replace("m", "min")).total_seconds() // 60)
+        except ValueError:
+            k = 5
+        df = self.ctx.store.tf(pos.symbol, "1min")
+        df = df[df.index >= pd.Timestamp(pos.opened_ts).floor("1min")]
+        if len(df) < 2 * k + 1:
+            return None
+        x = (df["low"] if pos.side > 0 else -df["high"]).to_numpy(float)
+        t1 = pd.Timestamp(pos.meta["t1"])
+        last = None
+        for p in range(k, len(x) - k):
+            if df.index[p + k] >= t1 and x[p] <= x[p - k:p + k + 1].min() and (last is None or x[p] > last):
+                last = x[p]
+        return None if last is None else (last if pos.side > 0 else -last)
+
+    async def maybe_pyramid(self, pos: Position, level: float, mult: float, bar: Bar, structure: bool = False):
         pc = self.m["pyramid"]
         if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled or pos.meta.get("no_pyramid"):
             return
+        if not structure and pos.stage < int(pc.get("from_step", 1)):
+            return          # e.g. from_step 2: no add right after banking the first partial
         if self.ctx.news and self.ctx.news.blocked(self.now()):
             return  # never add into a news release
         step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])

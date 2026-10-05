@@ -3,6 +3,8 @@ They share structure.market_structure, so 'BOS', 'CHoCH' and 'MSS' mean exactly 
 (see the definitions at the top of fxagents/structure.py)."""
 from __future__ import annotations
 
+import pandas as pd
+
 from .. import structure as sx
 from ..structure import BULL_BOS, BULL_CHOCH
 from .base import RawSignal
@@ -134,4 +136,58 @@ class SMCMss(_Fast):
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(sweep["low"] - p["stop_buf_atr"] * a[i]),
                                          "Sweep → MSS (displacement CHoCH)"))
                     sweep = None
+        return out
+
+
+class VWAPSetup(_Fast):
+    name = "vwap"
+    family = "vwap"
+    description = ("Session VWAP (anchored at the 17:00 NY roll, weighted by tick volume). Three separate "
+                   "definitions, never mixed: 'pullback' — price held above VWAP (≥6 of the last 8 closes), "
+                   "dips to it and closes back above with a bullish candle; 'reclaim' — a close back above "
+                   "VWAP from below with a ≥0.5 ATR body; 'band' — a dip to the −2σ VWAP band that closes back "
+                   "inside it. Stop below the last 3 bars' low. The HTF bias rule decides the side, as for "
+                   "every setup.")
+    default_params = dict(mode="pullback", tol_atr=0.15, hold=6, stop_buf_atr=0.1, cooldown=6, windows=None)
+    param_grid = {"mode": ["pullback", "reclaim", "band"], "tol_atr": [0.05, 0.3]}
+
+    def _scan(self, df, ctx):
+        import numpy as np
+        p, a = self.params, ctx["atr"]
+        if "_vwap" not in ctx:
+            ctx["_vwap"] = sx.session_vwap(df)
+        vw0, sd = ctx["_vwap"]
+        win = _mask(ctx, p["windows"])
+        O0, H0, L0, C0 = (df[c].to_numpy(dtype=float) for c in ("open", "high", "low", "close"))
+        day = ((df.index + pd.Timedelta(hours=7)).normalize().asi8)
+        out = []
+        for side in (1, -1):
+            if side > 0:
+                O, H, L, C, vw = O0, H0, L0, C0, vw0
+            else:
+                O, H, L, C, vw = -O0, -L0, -H0, -C0, -vw0
+            above = C > vw
+            last = -10**9
+            for i in range(10, len(C)):
+                if not (np.isfinite(vw[i]) and np.isfinite(a[i]) and win[i]) or i - last < p["cooldown"]:
+                    continue
+                if day[i] != day[i - 8]:            # need 8 bars of today's VWAP
+                    continue
+                m = p["mode"]
+                if m == "pullback":
+                    ok = (above[i - 8:i].sum() >= p["hold"] and L[i] <= vw[i] + p["tol_atr"] * a[i]
+                          and C[i] > vw[i] and C[i] > O[i])
+                elif m == "reclaim":
+                    ok = (not above[i - 1] and above[i] and C[i] - O[i] >= 0.5 * a[i])
+                else:                                # band: dip to −2σ, close back inside
+                    band = vw[i] - 2 * sd[i]
+                    ok = bool(np.isfinite(band) and sd[i] > 0 and L[i] <= band + p["tol_atr"] * a[i]
+                              and C[i] > band and C[i] > O[i])
+                if not ok:
+                    continue
+                stop = min(L[i - 2:i + 1]) - p["stop_buf_atr"] * a[i]
+                if stop >= C[i]:
+                    continue
+                out.append(RawSignal(i, side, side * C[i], side * stop, f"VWAP {m}"))
+                last = i
         return out

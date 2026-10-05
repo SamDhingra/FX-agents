@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .. import units
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
@@ -25,7 +26,8 @@ STATIC = Path(__file__).parent / "static"
 def snapshot(ctx) -> dict:
     st, cfg = ctx.state, ctx.cfg
     inst = cfg["instruments"]
-    positions = [p.to_public(float(inst[p.symbol]["multiplier"])) for p in st.positions.values() if p.status == "open"]
+    positions = [units.position(cfg, p.to_public(float(inst[p.symbol]["multiplier"])))
+                 for p in st.positions.values() if p.status == "open"]
     unreal = sum(p["unrealized"] for p in positions)
     open_risk = 0.0
     for p in st.positions.values():
@@ -189,6 +191,7 @@ def build_app(ctx) -> FastAPI:
         rows = bk(request).journal.trades(limit)
         for r in rows:
             r["events"] = json.loads(r["events"] or "[]")
+            units.trade(bk(request).cfg, r)
         return rows
 
     @app.get("/api/signals")
@@ -214,7 +217,7 @@ def build_app(ctx) -> FastAPI:
     @app.get("/api/day/{day}")
     async def api_day(day: str, request: Request):
         need(request)
-        return {"trades": bk(request).journal.day_trades(day),
+        return {"trades": [units.trade(bk(request).cfg, t) for t in bk(request).journal.day_trades(day)],
                 "events": [{"title": e["title"], "tier": e["tier"], "time": e["ts"].strftime("%H:%M")}
                            for e in (ctx.news.events if ctx.news else []) if e["ts"].strftime("%Y-%m-%d") == day]}
 
@@ -222,7 +225,7 @@ def build_app(ctx) -> FastAPI:
     async def journal_csv(request: Request):
         need(request)
         c = bk(request)
-        rows = c.journal.trades(100000)
+        rows = [units.trade(c.cfg, r) for r in c.journal.trades(100000)]
         buf = io.StringIO()
         if rows:
             w = csv.DictWriter(buf, fieldnames=[k for k in rows[0] if k != "events"], extrasaction="ignore")

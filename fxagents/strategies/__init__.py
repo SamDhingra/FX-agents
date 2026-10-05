@@ -9,7 +9,7 @@ from .dtfx import DTFXCloseFib, DTFXCloseFibBreak, DTFXCloseOrigin, DTFXWickFib
 from .ict import ICT2022, ICTAMD, ICTSilverBullet, ICTTurtleSoup, SMTDivergence
 from .smc import (DTFXZone, ICTFvgSweep, ICTOte, SMCBreaker, SMCInverseFVG, SMCLiquiditySweep,
                   SMCOrderBlock, StoicSBS)
-from .structure_setups import SMCBosRetest, SMCChochRetest, SMCDisplacement, SMCMss
+from .structure_setups import SMCBosRetest, SMCChochRetest, SMCDisplacement, SMCMss, VWAPSetup
 
 BUILTIN: dict[str, type[Strategy]] = {c.name: c for c in
                                       (ICTFvgSweep, ICTOte, DTFXZone, StoicSBS, SMCOrderBlock, SMCBreaker,
@@ -20,7 +20,7 @@ BUILTIN: dict[str, type[Strategy]] = {c.name: c for c in
 SETUPS: dict[str, type[Strategy]] = {c.name: c for c in
                                      (ICT2022, ICTSilverBullet, ICTTurtleSoup, ICTAMD, SMTDivergence,
                                       SMCDisplacement, SMCBosRetest, SMCChochRetest, SMCMss,
-                                      DTFXCloseFib, DTFXWickFib, DTFXCloseFibBreak, DTFXCloseOrigin)}
+                                      DTFXCloseFib, DTFXWickFib, DTFXCloseFibBreak, DTFXCloseOrigin, VWAPSetup)}
 ALL: dict[str, type[Strategy]] = {**BUILTIN, **SETUPS}
 
 

@@ -64,6 +64,9 @@ class Policy:
     index_group_max: int = 1          # NDQ / US30 / SPX move together: one index position at a time
     max_open: int = 3
     daily_loss_r: float = 4.0         # -2% day at 0.5% per trade = -4R
+    # volume cells (vol=impulse/dry/climax variants, the VWAP setup) are researched and shown, but only
+    # traded when this is on: in the first walk-forward they lost (22 trades, -2.4R vs +3.5R for the rest)
+    volume: bool = False
 
     def to_json(self) -> dict:
         d = asdict(self)
@@ -141,6 +144,8 @@ def eligible(st: pd.DataFrame, pol: Policy) -> pd.Series:
     """Which scored cells pass the policy (before the per-instrument cap)."""
     min_n = st["sym"].map(lambda s: _rule(pol, s).min_n if _rule(pol, s).min_n is not None else pol.min_n)
     ok = (st["n"] >= min_n) & st["tf"].isin(pol.tfs)
+    if not pol.volume:
+        ok &= ~(st["variant"].astype(str).str.contains("vol=") | (st["setup"] == "vwap"))
     if pol.halves_positive:
         ok &= (st["exp1"] > 0) & (st["exp2"] > 0)
     rules = st["sym"].map(lambda s: _rule(pol, s))
@@ -258,7 +263,8 @@ def summarize(x: pd.DataFrame, col: str | None = None) -> dict:
 def policy_from_cfg(cfg) -> Policy:
     pc = (cfg.get("playbook") or {})
     pol = Policy()
-    for k in ("window_days", "min_n", "k_p", "k_e", "halves_positive", "max_open", "daily_loss_r", "index_group_max"):
+    for k in ("window_days", "min_n", "k_p", "k_e", "halves_positive", "max_open", "daily_loss_r", "index_group_max",
+              "volume"):
         if k in pc:
             setattr(pol, k, pc[k])
     if "tfs" in pc:

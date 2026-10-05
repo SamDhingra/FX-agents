@@ -39,7 +39,7 @@ phone and laptop.
 | **Selector** | A few minutes before each hour, Jev rates every live strategy per symbol and gives a confidence. That rating is blended with hour-of-day stats, and the best **5m** strategy and the best **15m** strategy are activated. A symbol can also **sit the hour out**. |
 | **Trader** | Runs the active strategy on each 5-minute close. Jev grades each setup (A+…D plus a confidence), and weak setups are skipped. TradingView alerts come in here too. |
 | **Risk** | The hard gate: stop required, stop ≤ **10% of trade value**, size = 0.5% of equity at risk, max positions, entry windows, news blackouts, kill switch. |
-| **PositionManager** | At **1R**, it banks 50% and moves the stop to **+0.1R (in profit)**. From then on the stop also **trails 0.75R behind the best price** (`trail_gap_r`, re-sent on every ≥0.1R gain), and at each further +1R it steps up and **pyramids** (only if Jev rates continuation as likely **and** the worst case after the add is still ≥ $0). All positions are flattened at 15:50 NY. |
+| **PositionManager** | At **1R**, it banks 50% and moves the stop to **+0.1R (in profit)**; at each further +1R the stop steps up. Runners are left alone while they keep making new highs; if price **stalls 45 min** without a new best, the stop tightens to best − 0.5R. Adds (**pyramiding**) wait for the trend to prove itself: after the first target, a confirmed **higher low** (lower high for shorts) arms an add, and the next new high places it — only if Jev rates continuation as likely **and** the worst case after the add is still ≥ $0 (`management.runner`; see *Trade management* below). All positions are flattened at 15:50 NY. |
 | **Journal** | SQLite store of every trade, every management event (partial, stop move, pyramid), every Jev decision (inputs → outputs), every signal taken or skipped with the reason, and the equity curve. |
 | **Notifier** | Push notifications to your phone (Telegram and/or ntfy), grouped: entries, exits, kill switch and the daily summary arrive at once; partials, stop moves and adds are folded into the trade's exit message (on Telegram the exit replies to its entry, so each trade is one thread); news, bias and strategy updates come as one silent digest per hour (`notifications.grouping`). |
 | **Monitor** | Kill switch at −2% for the day or −6% from the equity peak. Flattens any broker position that has no working stop. Alerts on stale data or silent agents. Rolls the day at 17:00 NY. |
@@ -253,6 +253,46 @@ NY) if the history cache is newer.
 It ships as the **shadow book** so live data can decide. The dashboard's **Playbook** page has
 everything by instrument: the setup × timeframe heatmap, current cells, the index watchlist, the
 walk-forward, calibration, robustness and significance.
+
+## Trade management for runners (`management.runner`)
+
+Tested on ~46,000 research trades with identical entries, only the exits/adds changed (1-minute execution,
+spread included). What we found:
+
+| Rule | Avg R / trade vs old rules | Trades peaking 1–2R | Trades running past 2R |
+|---|---|---|---|
+| Old: stop only moves at whole-R steps, add right after the partial | — | +0.42R | **+1.71R** |
+| Trail 0.75R behind the best price | +0.006 | **+0.67R** | +1.41R |
+| Stall 45 min → stop to best − 0.5R | +0.006 | +0.46R | +1.69R |
+| **Stall 45 + structure adds (default)** | **+0.013** (t ≈ 8, better in 10 of 13 weeks) | +0.60R | +1.54R |
+| Stall 45 + step adds + structure adds (3 adds) | +0.003 | +0.46R | +1.68R |
+
+* More adds did **not** help: every extra add mode lowered the average. Adding *later and on confirmation*
+  (after a higher low, on a new high) beat adding *more*.
+* No rule keeps 100% of the big runners **and** protects the 1–2R trades — it's a trade-off. Set
+  `add_mode: step` to keep the early add (best for big runners) or `trail_gap_r: 0.75` to lock more on stalls.
+* The effect is small next to entry selection (≈ +1R per 80 trades). Edge comes from which setups trade.
+
+## Volume
+
+OANDA volume is tick volume (number of price changes), which follows real futures volume well enough to use
+**relatively**. Volume is defined once (`structure.py`): RVOL = a bar's volume ÷ the same time-of-day bar's
+average over the previous 5 days, and a session VWAP anchored at the 17:00 roll. Every new setup gets three
+separate volume variants — `vol=impulse` (the move had RVOL ≥ 1.5), `vol=dry` (pullback on RVOL ≤ 0.9),
+`vol=climax` (a stop-run bar with RVOL ≥ 2) — plus a `vwap` setup (pullback / reclaim / −2σ band).
+Result so far: none of them improved results (impulse −0.006R, dry +0.024R ± 0.022, climax −0.09R per trade
+vs. the same setups without the filter), and the volume cells the playbook picked lost in walk-forward
+(22 trades, −2.4R). They stay in the research grid and on the Playbook page; `playbook.volume: true` lets
+the playbook trade them once they earn it.
+
+## Pips and lots
+
+The bot sizes every trade by risk (0.5% of equity to the stop, cut by the margin cap) — never by a fixed lot.
+The dashboard shows the same numbers the way traders read them (`fxagents/units.py`, overridable per
+instrument with `pip_size` / `lot_units`): gold 1 pip = $0.10, 1 lot = 100 oz (OANDA units are ounces, so
+10 units = 0.10 lot); indices 1 pip = 1 point, 1 lot = $1 per point (one OANDA unit). Trades show lots, pips
+won/lost (average per unit, partials and adds included) and pips risked; the Trades page has a per-symbol
+winners/losers pip summary.
 
 ## Backtesting the whole system (replay)
 

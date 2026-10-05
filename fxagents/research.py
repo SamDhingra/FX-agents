@@ -61,6 +61,7 @@ def variants(cls) -> list[dict]:
             for v in vals:
                 if base.get(k) != v:
                     out.append({k: v})
+        out += [{"vol": v} for v in getattr(cls, "vol_grid", ()) if base.get("vol", "any") != v]
     return out
 
 
@@ -88,6 +89,8 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
       the position manager notices target steps on the 1m mid high/low and acts at that bar's close —
       partials, full exits and adds all fill AT MARKET (OANDA ignores limit prices); the add's safety
       check uses the level (as live does) but the add fills at the close; time exits at the close.
+    Runner rules (Mgmt): gap trail, structure trail (confirmed 1m pivots), stall tightening, structure adds.
+    Every stop change is decided at a bar's close and protects from the next bar on.
     Accounting is average-cost. Returns R in units of the filled entry's risk."""
     px_in = C[j0] + side * hs
     R = abs(px_in - stop)
@@ -97,13 +100,39 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
     stop_after = lambda k: px_in + side * ((0.0 if k == 1 else m.rr + (k - 2) * m.trail_step_r) + m.lock_r) * R  # noqa: E731
     stop_px, step, adds = stop, 0, 0
     open_q, avg, realized = 1.0, px_in, 0.0          # realized in price × qty (initial qty = 1)
-    mfe = 0.0
+    mfe, best_j = 0.0, j0
+    k = int(m.struct_k)
+    use_struct = (m.trail_struct or m.add_mode in ("structure", "both")) and k > 0
+    last_pivot = None                                 # price of the last confirmed higher low (longs) / lower high
+    armed = False                                     # structure add: a fresh higher low is in, waiting for a new high
     n = len(C)
 
     def done(px, reason, j):
         tot = realized + (px - avg) * side * open_q
         return {"r": float(tot / R), "exit_reason": reason, "j_exit": int(j), "adds": adds, "steps": step,
                 "mfe": float(mfe), "R": float(R), "px_in": float(px_in)}
+
+    def try_add(j, worst_stop, ref):
+        """Add at market (fills at the ask/bid). The never-risk-open-profit check uses `ref` exactly as live
+        does: the step level for step adds, the bar's mid close for structure adds."""
+        nonlocal avg, open_q, adds
+        if not (m.pyramid and adds < m.max_adds and (cont is None or cont[j])):
+            return
+        q = m.add_frac
+        chk = (avg * open_q + ref * q) / (open_q + q)
+        if realized + (worst_stop - chk) * side * (open_q + q) >= 0:          # never risk open profit
+            fill = C[j] + side * hs
+            avg, open_q, adds = (avg * open_q + fill * q) / (open_q + q), open_q + q, adds + 1
+
+    def move(ns, j, why):
+        """Ratchet the stop to ns (only toward profit, ≥0.1R better); out at market if price is already through."""
+        nonlocal stop_px
+        if (ns - stop_px) * side < 0.1 * R:
+            return None
+        if ((C[j] - side * hs) - ns) * side <= 0:
+            return done(C[j] - side * hs, why, j)
+        stop_px = ns
+        return None
 
     j = j0
     for j in range(j0 + 1, n):
@@ -114,7 +143,10 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             fill = far_open if (far_open - stop_px) * side < 0 else stop_px
             return done(fill, "stop" if step == 0 else ("breakeven_plus_stop" if step == 1 else "trail_stop"), j)
         mkt = C[j] - side * hs                                                   # exit at market
-        mfe = max(mfe, ((H[j] if side > 0 else L[j]) - px_in) * side / R)
+        prev_best = px_in + side * mfe * R
+        new_best = ((H[j] if side > 0 else L[j]) - px_in) * side / R
+        if new_best > mfe:
+            mfe, best_j = new_best, j
         # 2) time exits
         if flat[j]:
             return done(mkt, "session_flat", j)
@@ -133,23 +165,33 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             ns = stop_after(step)
             if (ns - stop_px) * side > 0:
                 stop_px = ns
-            if m.pyramid and adds < m.max_adds and (cont is None or cont[j]):
-                level = lvl(step)
-                q = m.add_frac
-                new_avg = (avg * open_q + level * q) / (open_q + q)
-                worst = realized + (stop_px - new_avg) * side * (open_q + q)
-                if worst >= 0:
-                    fill = C[j] + side * hs
-                    avg = (avg * open_q + fill * q) / (open_q + q)
-                    open_q += q
-                    adds += 1
-        # 4) continuous trail: after the first target, the stop follows the best mid price `trail_gap_r` behind
-        if m.trail_gap_r > 0 and step >= 1:
-            ns = px_in + side * (mfe - m.trail_gap_r) * R
-            if (ns - stop_px) * side >= 0.1 * R:          # live only re-sends the stop on a ≥0.1R improvement
-                if (mkt - ns) * side <= 0:                  # gave back more than the gap inside this bar → out at market
-                    return done(mkt, "trail_stop", j)
-                stop_px = ns
+            if m.add_mode in ("step", "both") and step >= m.add_from_step:
+                try_add(j, stop_px, lvl(step))
+        if step < 1:
+            continue
+        # 4) runner rules (after the first target)
+        if use_struct and j - k > j0 + k:
+            p = j - k
+            win = L[p - k:j + 1] if side > 0 else H[p - k:j + 1]
+            piv = L[p] if side > 0 else H[p]
+            if (piv <= win.min() if side > 0 else piv >= win.max()) and (last_pivot is None or (piv - last_pivot) * side > 0):
+                last_pivot = piv
+                armed = True
+                if m.trail_struct:
+                    r = move(piv - side * (hs + m.struct_buf_r * R), j, "trail_stop")
+                    if r:
+                        return r
+        if m.add_mode in ("structure", "both") and armed and ((H[j] if side > 0 else L[j]) - prev_best) * side > 0:
+            armed = False
+            try_add(j, stop_px, C[j])
+        if m.trail_gap_r > 0:
+            r = move(px_in + side * (mfe - m.trail_gap_r) * R, j, "trail_stop")
+            if r:
+                return r
+        if m.stall_minutes > 0 and tmin[j] - tmin[best_j] >= m.stall_minutes:
+            r = move(px_in + side * (mfe - m.stall_gap_r) * R, j, "trail_stop")
+            if r:
+                return r
     return done(C[j] - side * hs, "end", j)
 
 

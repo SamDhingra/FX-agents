@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .. import structure as sx
 from .. import playbook as pbk
 from ..models import Signal
 from ..strategies import build_strategy
@@ -209,6 +210,11 @@ class PlaybookTrader(TraderAgent):
         if len(df) < 120:
             return
         ctx = self.bar_context(sym, tf, df)
+        if any(c.st.params.get("vol", "any") not in (None, "any") for c in cells) and \
+                len(ctx.get("rvol", ())) != len(df):
+            # relative volume needs ~5 prior days of the same time-of-day bars: use the whole stored history
+            full = self.ctx.store.tf(sym, tf)
+            ctx["rvol"] = sx.rvol_tod(full)[-len(df):]
         if any(c.st.needs_peers for c in cells) and getattr(self.ctx, "oracle", None) is None:
             ctx.setdefault("peers", self.peers(sym, tf, df))
         cands = []

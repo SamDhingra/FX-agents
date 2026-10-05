@@ -22,6 +22,19 @@ class Mgmt:
     lock_r: float = 0.1
     trail_step_r: float = 1.0
     trail_gap_r: float = 0.0          # >0: once the first target is hit, the stop also follows the best price this far behind (R)
+    # runner management (after the first target):
+    #   structure: the stop follows each new confirmed higher low (lower high for shorts) on 1m pivots of
+    #              half-width `struct_k` (default = the entry timeframe in minutes), so pullbacks that keep the
+    #              trend's structure don't stop the trade
+    #   stall:     if no new best price for `stall_minutes`, the stop tightens to `stall_gap_r` behind the best
+    trail_struct: bool = False
+    struct_k: int = 0
+    struct_buf_r: float = 0.1
+    stall_minutes: float = 0.0
+    stall_gap_r: float = 0.5
+    # adds: "step" = at each +1R step (default); "structure" = after a confirmed higher low, when price makes a new high
+    add_mode: str = "step"
+    add_from_step: int = 1            # step adds start at this target step (1 = already at the first target)
     pyramid: bool = True
     max_adds: int = 2
     add_frac: float = 0.5
@@ -33,7 +46,14 @@ class Mgmt:
     def from_cfg(cls, cfg, rr: float | None = None, bar_minutes: int = 5) -> "Mgmt":
         m, r = cfg["management"], cfg["risk"]
         return cls(rr=rr or m["rr_initial"], partial=m["partial_at_target"], lock_r=m["lock_r"],
-                   trail_step_r=m["trail_step_r"], trail_gap_r=float(m.get("trail_gap_r", 0) or 0), pyramid=m["pyramid"]["enabled"],
+                   trail_step_r=m["trail_step_r"], trail_gap_r=float(m.get("trail_gap_r", 0) or 0),
+                   trail_struct=(m.get("runner") or {}).get("structure_trail", False),
+                   struct_k=int((m.get("runner") or {}).get("struct_k", 0) or bar_minutes),
+                   struct_buf_r=float((m.get("runner") or {}).get("struct_buf_r") or 0.1),
+                   stall_minutes=float((m.get("runner") or {}).get("stall_minutes", 0) or 0),
+                   stall_gap_r=float((m.get("runner") or {}).get("stall_gap_r") or 0.5),
+                   add_mode=(m.get("runner") or {}).get("add_mode", "step"),
+                   add_from_step=int(m["pyramid"].get("from_step", 1)), pyramid=m["pyramid"]["enabled"],
                    max_adds=m["pyramid"]["max_adds"], add_frac=m["pyramid"]["add_size_frac"],
                    max_hold_bars=int(cfg["sessions"]["max_hold_minutes"] / bar_minutes),
                    min_stop_atr=r["min_stop_atr"], max_stop_pct=r["max_stop_pct_of_trade_value"])

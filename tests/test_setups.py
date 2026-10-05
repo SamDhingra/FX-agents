@@ -144,3 +144,34 @@ def test_new_setups_are_fast_enough_for_minute_history():
     for name in ("ict_2022", "dtfx_close_fib", "smc_bos_retest"):
         build_strategy({"class": name, "tf": "1min"}).scan(m1)
     assert time.time() - t0 < 60          # ~40k 1m bars each, both sides
+
+
+def _with_volume(df, seed=5):
+    rng = np.random.default_rng(seed)
+    out = df.copy()
+    out["volume"] = rng.lognormal(4, 0.6, len(df)).round()
+    return out
+
+
+@pytest.mark.parametrize("mode", ["impulse", "dry", "climax"])
+def test_volume_variants_have_no_look_ahead(mode):
+    df = _with_volume(frame(7, days=14))
+    st = build_strategy({"class": "ict_turtle_soup", "tf": "5min", "params": {"vol": mode}})
+    full = st._scan_full(df, Strategy._context(df))
+    base = st.__class__({}, tf="5min")._scan_full(df, Strategy._context(df))
+    assert full and len(full) < len(base)                     # the filter really filters
+    for cut in (1500, 2500, len(df) - 5):
+        part = df.iloc[:cut + 1]
+        a = {(s.i, s.side) for s in full if s.i <= cut}
+        b = {(s.i, s.side) for s in st._scan_full(part, Strategy._context(part))}
+        assert a == b, f"vol={mode}: look-ahead around bar {cut}"
+
+
+def test_rvol_and_vwap_are_causal():
+    from fxagents import structure as sx
+    df = _with_volume(frame(3, days=10))
+    rv, (vw, sd) = sx.rvol_tod(df), sx.session_vwap(df)
+    cut = len(df) - 400
+    rv2, (vw2, sd2) = sx.rvol_tod(df.iloc[:cut]), sx.session_vwap(df.iloc[:cut])
+    np.testing.assert_allclose(rv[:cut], rv2, equal_nan=True)
+    np.testing.assert_allclose(vw[:cut], vw2, equal_nan=True)

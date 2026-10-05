@@ -280,3 +280,84 @@ def test_stop_trails_between_steps_after_first_target(tmp_path):
     assert abs(pos.r_now(pos.stop) - 0.85) < 0.02
     bar(e + 2.4 * R, e + 0.9 * R, 53)                        # spikes to +2.4R then closes below the trail → out
     assert pos.status == "closed" and pos.exit_reason == "trail_stop"
+
+
+def test_stall_rule_leaves_runners_alone_and_tightens_when_price_stalls(tmp_path):
+    ctx = make_ctx(tmp_path, [])
+    ctx.cfg["management"] = {**ctx.cfg["management"], "trail_gap_r": 0,
+                             "runner": {"stall_minutes": 30, "stall_gap_r": 0.5},
+                             "pyramid": {**ctx.cfg["management"]["pyramid"], "max_adds": 0}}
+    risk = RiskAgent(ctx); risk.start()
+    pm = PositionManagerAgent(ctx); pm.start()
+    px = float(ctx.store.df["close"].iloc[-1])
+    ctx.state.now = pd.Timestamp("2026-09-30 09:45", tz=TZ)
+    sig = Signal("XAUUSD", "b:5m@pb-d", 1, px, px - 5.0, NOW, "t", {"atr": 4.0}, None, rr=1.0)
+    rec = {"ts": NOW.isoformat(), "symbol": "XAUUSD", "strategy": "b:5m@pb-d", "side": "LONG", "entry": px, "stop": px - 5}
+    asyncio.run(risk.on_request({"signal": sig, "grade": {"quality": 0.6, "confidence": 0.6, "source": "stub"},
+                                 "record": rec, "playbook": {"max_per_symbol": 2, "mgmt": "std"}}))
+    pos = next(iter(ctx.state.positions.values()))
+    R, e = pos.risk_per_unit, pos.entry
+
+    def bar(hi, close, t):
+        ctx.state.now = pd.Timestamp(f"2026-09-30 {t}", tz=TZ)
+        asyncio.run(pm.on_bar(Bar("XAUUSD", ctx.state.now - pd.Timedelta("1min"), close, hi, close - 0.01, close, 1.0)))
+
+    bar(e + 1.05 * R, e + 1.0 * R, "09:50")                   # first target → +0.1R
+    for i, m in enumerate(range(51, 60)):                      # a runner: new highs every minute
+        bar(e + (1.1 + 0.1 * i) * R, e + (1.05 + 0.1 * i) * R, f"09:{m}")
+    assert abs(pos.r_now(pos.stop) - 0.1) < 0.02               # left alone while it keeps making new highs
+    best = pos.mfe_r
+    bar(e + (best - 0.2) * R, e + (best - 0.3) * R, "10:15")  # 20 min without a new high: still alone
+    assert abs(pos.r_now(pos.stop) - 0.1) < 0.02
+    bar(e + (best - 0.2) * R, e + (best - 0.3) * R, "10:30")  # 31 min stalled → stop to best − 0.5R
+    assert abs(pos.r_now(pos.stop) - (best - 0.5)) < 0.02 and pos.status == "open"
+
+
+def test_structure_add_waits_for_a_higher_low_then_a_new_high(tmp_path):
+    ctx = make_ctx(tmp_path, [])
+    ctx.cfg["management"] = {**ctx.cfg["management"], "trail_gap_r": 0,
+                             "runner": {"stall_minutes": 0, "add_mode": "structure", "structure_trail": True},
+                             "pyramid": {**ctx.cfg["management"]["pyramid"], "max_adds": 2, "require_continuation": False}}
+    risk = RiskAgent(ctx); risk.start()
+    pm = PositionManagerAgent(ctx); pm.start()
+    px = float(ctx.store.df["close"].iloc[-1])
+    ctx.state.now = pd.Timestamp("2026-09-30 09:45", tz=TZ)
+    sig = Signal("XAUUSD", "b:5m@pb-d", 1, px, px - 5.0, NOW, "t", {"atr": 4.0}, None, rr=1.0)
+    rec = {"ts": NOW.isoformat(), "symbol": "XAUUSD", "strategy": "b:5m@pb-d", "side": "LONG", "entry": px, "stop": px - 5}
+    asyncio.run(risk.on_request({"signal": sig, "grade": {"quality": 0.6, "confidence": 0.6, "source": "stub"},
+                                 "record": rec, "playbook": {"max_per_symbol": 2, "mgmt": "std"}}))
+    pos = next(iter(ctx.state.positions.values()))
+    R, e = pos.risk_per_unit, pos.entry
+    piv = {"v": None}                                 # no swing confirmed since the first target yet
+    pm.last_pivot = lambda p: piv["v"]
+
+    def bar(hi, close, t):
+        ctx.state.now = pd.Timestamp(f"2026-09-30 {t}", tz=TZ)
+        asyncio.run(pm.on_bar(Bar("XAUUSD", ctx.state.now - pd.Timedelta("1min"), close, hi, close - 0.01, close, 1.0)))
+
+    bar(e + 1.05 * R, e + 1.0 * R, "09:50")          # first target: partial, but NO immediate add any more
+    assert pos.partial_done and pos.adds == 0
+    bar(e + 1.4 * R, e + 1.35 * R, "09:55")          # new high, but no higher low since the target → no add
+    assert pos.adds == 0
+    piv["v"] = e + 1.1 * R                            # pullback held: a higher low is confirmed
+    bar(e + 1.3 * R, e + 1.25 * R, "10:00")          # arms, not a new high
+    assert pos.adds == 0
+    bar(e + 1.6 * R, e + 1.55 * R, "10:05")          # resumes to a new high → add
+    assert pos.adds == 1                             # (the stop sits under the higher low, so the add risks no profit)
+
+
+def test_last_pivot_uses_only_swings_confirmed_after_the_first_target(tmp_path):
+    ctx = make_ctx(tmp_path, [])
+    pm = PositionManagerAgent(ctx); pm.start()
+    t0 = pd.Timestamp("2026-09-30 10:00", tz=TZ)
+    lows = [10, 9, 8, 9, 10, 11, 12, 11, 10.5, 11, 12, 13, 14, 13, 12.5, 13, 14, 15, 16]   # swing lows 8, 10.5, 12.5
+    idx = pd.date_range(t0, periods=len(lows), freq="1min")
+    df = pd.DataFrame({"open": lows, "high": [x + 1 for x in lows], "low": lows, "close": lows, "volume": 1.0}, index=idx)
+    ctx.store.tf = lambda sym, tf, complete_only=True: df
+    pos = Position("XAUUSD", 1, "x:2m@pb-d", 1.0, 1.0, 1.0, 1.0, t0)
+    assert pm.last_pivot(pos) is None                                   # no first target yet
+    pos.meta["t1"] = (t0 + pd.Timedelta(minutes=5)).isoformat()         # target hit after the 8-low was confirmed
+    pm.m = {**pm.m, "runner": {"struct_k": 2}}
+    assert pm.last_pivot(pos) == 12.5                                   # 10.5 then 12.5: the rising chain's top
+    pos.meta["t1"] = (t0 + pd.Timedelta(minutes=12)).isoformat()        # 10.5 confirmed (min 10) before t1
+    assert pm.last_pivot(pos) == 12.5
