@@ -5,12 +5,23 @@ import pandas as pd
 
 from .base import RawSignal, Strategy
 from .classic import MACDCross, RSIReversion, SRRejection
+from .dtfx import DTFXCloseFib, DTFXCloseFibBreak, DTFXCloseOrigin, DTFXWickFib
+from .ict import ICT2022, ICTAMD, ICTSilverBullet, ICTTurtleSoup, SMTDivergence
 from .smc import (DTFXZone, ICTFvgSweep, ICTOte, SMCBreaker, SMCInverseFVG, SMCLiquiditySweep,
                   SMCOrderBlock, StoicSBS)
+from .structure_setups import SMCBosRetest, SMCChochRetest, SMCDisplacement, SMCMss
 
 BUILTIN: dict[str, type[Strategy]] = {c.name: c for c in
                                       (ICTFvgSweep, ICTOte, DTFXZone, StoicSBS, SMCOrderBlock, SMCBreaker,
                                        SMCInverseFVG, SMCLiquiditySweep, SRRejection, RSIReversion, MACDCross)}
+
+# Setups added for the playbook strategy. Kept out of BUILTIN so the hourly-pick book (and its default
+# strategy list in fresh journals / replays) is unchanged; build_strategy resolves both.
+SETUPS: dict[str, type[Strategy]] = {c.name: c for c in
+                                     (ICT2022, ICTSilverBullet, ICTTurtleSoup, ICTAMD, SMTDivergence,
+                                      SMCDisplacement, SMCBosRetest, SMCChochRetest, SMCMss,
+                                      DTFXCloseFib, DTFXWickFib, DTFXCloseFibBreak, DTFXCloseOrigin)}
+ALL: dict[str, type[Strategy]] = {**BUILTIN, **SETUPS}
 
 
 class Confluence(Strategy):
@@ -48,7 +59,7 @@ def build_strategy(spec: dict) -> Strategy:
     cls = spec["class"]
     kw = dict(version=spec.get("version", "v1"), rr=spec.get("rr", 1.0),
               status=spec.get("status", "live"), origin=spec.get("origin", "builtin"), tf=spec.get("tf", "5min"))
-    st = Confluence(spec["params"], **kw) if cls == "confluence" else BUILTIN[cls](spec.get("params"), **kw)
+    st = Confluence(spec["params"], **kw) if cls == "confluence" else ALL[cls](spec.get("params"), **kw)
     st.created = spec.get("created")  # type: ignore[attr-defined]
     st.vetted = bool(spec.get("vetted", False))  # type: ignore[attr-defined]  # approved for LIVE trading
     st.meta = spec.get("meta") or {}  # type: ignore[attr-defined]       # learner: parent, change, kind
@@ -60,4 +71,4 @@ def default_specs(rr: float = 1.0, tfs: tuple[str, ...] = ("5min", "15min")) -> 
     return [c(tf=tf).spec() | {"rr": rr} for tf in tfs for c in BUILTIN.values()]
 
 
-__all__ = ["Strategy", "RawSignal", "BUILTIN", "Confluence", "build_strategy", "default_specs"]
+__all__ = ["Strategy", "RawSignal", "BUILTIN", "SETUPS", "ALL", "Confluence", "build_strategy", "default_specs"]

@@ -158,7 +158,8 @@ jev:
   size_from_quality: [0.3, 0.7]  # advisory only: quality ≤0.3 → half size, ≥0.7 → full size (never above normal risk)
 
 selector:
-  mode: hourly_pick            # hourly_pick: trade only this hour's top strategy per TF | setup_first: scan every strategy each bar
+  mode: hourly_pick            # hourly_pick: this hour's top strategy per TF | setup_first: scan every strategy each bar
+                               # | playbook: the research-selected cells (see `playbook:` below)
   top_n_per_tf: 1              # per symbol per hour: best 5m strategy + best 15m strategy
   min_trades_for_stats: 8
   hour_shrinkage_k: 12         # Bayesian shrink of hour-of-day stats toward overall
@@ -212,7 +213,7 @@ setup_first:
 # ── Shadow book: runs the OTHER selection mode on the same live bars, virtual fills only ──
 shadow:
   enabled: true
-  # mode: setup_first           # default = the opposite of selector.mode
+  mode: playbook                # what the shadow book runs (default: setup_first if the real book is hourly_pick)
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
   spread:                       # estimated full spread in price points (virtual fills pay half on entry and exit)
     XAUUSD: 0.40
@@ -220,6 +221,17 @@ shadow:
     NDQ: 1.50
     US30: 2.50
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal
+
+# ── Playbook strategy (selector.mode or shadow.mode = playbook) ──
+# Cells = setup variant × instrument × timeframe × exit profile, chosen weekly from the research grid
+# (python run_research.py) over the trailing window. Defaults live in fxagents/playbook.py (Policy);
+# anything here overrides them. The research and the validation are on the dashboard's Research page.
+playbook:
+  tfs: [3min, 5min, 15min, 30min, 1h]   # 1m excluded: the spread is 13–30% of a 1-minute bar
+  window_days: 60
+  # instruments:                       # per-instrument overrides, e.g.
+  #   XAUUSD: {max_positions: 2, max_cells: 10, min_p: 0.45}
+  #   NDQ:    {min_p: 0.60, k_p: 40, min_n: 30}
 
 # ── 90-day setup map: every setup backtested by symbol × hour × weekday (heatmap + setup-first prior) ──
 setup_map:

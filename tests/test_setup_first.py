@@ -173,3 +173,24 @@ def test_watch_only_instrument_is_rejected_by_risk(tmp_path):
     asyncio.run(r.on_request({"signal": sig, "grade": {"quality": 0.9, "confidence": 0.9}, "record": rec}))
     s = ctx.journal.signals(1)[0]
     assert s["action"] == "rejected" and s["why"].startswith("instrument off") and not st.positions
+
+
+def test_shadow_broker_fills_like_oanda():
+    """Stops trigger on the bid (longs), limit exits fill at market on the far side of the spread."""
+    cfg = copy.deepcopy(CFG); cfg["mode"] = "paper"
+    st = LiveState(mode="paper"); st.now = NOW
+    br = ShadowBroker(cfg, st, Bus(), {"XAUUSD": 0.4})
+    br.round_px = lambda s, px: round(px, 3)
+    br.mult = lambda s: 1.0; br.commission = lambda s, q: 0.0
+    pos = Position("XAUUSD", 1, "t", 99.0, 99.0, 1.0, 1.0, NOW)
+    st.last_prices["XAUUSD"] = 100.0
+    asyncio.run(br.open(pos, 1.0, 100.0))
+    assert pos.legs[0].price == 100.2                                  # ask
+    from fxagents.models import Bar
+    asyncio.run(br.on_bar(Bar("XAUUSD", NOW, 100.0, 100.5, 99.15, 100.1, 1)))   # mid low 99.15 > stop, bid 98.95 < stop
+    assert pos.open_qty == 0 and abs(pos.realized - (99.0 - 100.2)) < 1e-9
+    pos2 = Position("XAUUSD", 1, "t2", 99.0, 99.0, 1.0, 1.0, NOW)
+    asyncio.run(br.open(pos2, 1.0, 100.0))
+    st.last_prices["XAUUSD"] = 101.0
+    px = asyncio.run(br.close(pos2, 101.2, limit=101.2))              # target level 101.2, market is 101.0
+    assert px == 100.8                                                 # bid at market, not the limit

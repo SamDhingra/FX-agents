@@ -47,6 +47,8 @@ class Strategy:
     description: ClassVar[str] = ""
     default_params: ClassVar[dict[str, Any]] = {}
     param_grid: ClassVar[dict[str, list]] = {}
+    fast: ClassVar[bool] = False          # True: linear-time scan, safe on a whole history frame
+    needs_peers: ClassVar[bool] = False   # True: reads ctx["peers"] (correlated instruments, e.g. SMT)
 
     def __init__(self, params: dict | None = None, version: str = "v1", rr: float = 1.0,
                  status: str = "live", origin: str = "builtin", tf: str = "5min") -> None:

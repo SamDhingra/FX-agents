@@ -371,6 +371,32 @@ def build_app(ctx) -> FastAPI:
         from ..replay import backtests_dir
         return backtests_dir(ctx.cfg)
 
+    @app.get("/api/research")
+    async def api_research(request: Request):
+        """Strategy research + playbook validation (written by run_research.py / the playbook refresh)."""
+        need(request)
+        from fxagents.research import research_dir
+        p = research_dir(ctx.cfg) / "summary.json"
+        if not p.exists():
+            return {"ready": False}
+        out = json.loads(p.read_text())
+        out["ready"] = True
+        # how the playbook has done since it went live (whichever book runs it)
+        live = {}
+        for name, c in (("live", ctx), ("shadow", getattr(ctx, "shadow", None))):
+            if c is None or getattr(c, "selection_mode", "") != "playbook":
+                continue
+            rows = [t for t in c.journal.trades(limit=2000) if t.get("status") == "closed" and "@pb-" in (t.get("strategy") or "")]
+            rs = [float(t.get("r_multiple") or 0) for t in rows]
+            live[name] = {"trades": len(rs), "win_rate": round(sum(r > 0 for r in rs) / len(rs), 3) if rs else 0.0,
+                          "sum_r": round(sum(rs), 2), "pnl": round(sum(float(t.get("realized") or 0) for t in rows), 2),
+                          "by_symbol": {s: round(sum(float(t.get("r_multiple") or 0) for t in rows if t.get("symbol") == s), 2)
+                                        for s in sorted({t.get("symbol") for t in rows})}}
+        out["live"] = live
+        pb = getattr(ctx, "playbook", None)
+        out["running"] = pb.summary() if pb is not None and pb.data.get("cells") is not None else None
+        return out
+
     @app.get("/api/backtests")
     async def api_backtests(request: Request):
         need(request)

@@ -161,9 +161,9 @@ class ICTOte(Strategy):
 class DTFXZone(Strategy):
     name = "dtfx_zone"
     family = "dtfx"
-    description = ("Dave Teaches FX: trade with the break of structure. The leg that broke structure "
-                   "becomes the zone (30/50/70% levels); enter on a confirmed rejection from the zone, "
-                   "stop beyond the zone origin (100%).")
+    description = ("DTFX-style, simplified (the original version here — not a formal DTFX definition; see the "
+                   "dtfx_* setups for those): the leg that broke structure becomes the zone (30/50/70% levels); "
+                   "enter on a confirmed rejection from the zone, stop beyond the zone origin (100%).")
     default_params = dict(swing=5, fib_touch=0.5, fib_floor=0.85, confirm=True, max_age=36,
                           stop_buf_atr=0.1, min_leg_atr=2.0, use_htf=False)
     param_grid = {"swing": [3, 5, 8], "fib_touch": [0.3, 0.5, 0.7], "min_leg_atr": [1.5, 2.0, 3.0],

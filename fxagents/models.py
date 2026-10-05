@@ -79,6 +79,16 @@ class Position:
     closed_ts: Optional[datetime] = None
     events: list[dict] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)  # broker handles, never serialised
+    open_avg: float = 0.0          # average cost of the units still open (maintained by add_leg)
+
+    def add_leg(self, leg: "Leg") -> None:
+        """Record a fill. Average-cost accounting: an add blends into the cost of the units still open;
+        partial closes leave that cost unchanged. (Averaging over every leg ever filled — including units
+        already closed by a partial — would overstate the profit of anything added after the partial.)"""
+        oq = self.open_qty if self.legs else 0.0
+        tot = oq + leg.qty
+        self.open_avg = (self.open_avg * oq + leg.price * leg.qty) / tot if tot > 0 else leg.price
+        self.legs.append(leg)
 
     @property
     def entry(self) -> float:
@@ -94,7 +104,10 @@ class Position:
 
     @property
     def avg_entry(self) -> float:
-        q = self.gross_qty
+        """Average cost of the open units."""
+        if self.open_avg:
+            return self.open_avg
+        q = self.gross_qty                      # legs recorded without add_leg (old journals, restores)
         return sum(l.qty * l.price for l in self.legs) / q if q else 0.0
 
     @property

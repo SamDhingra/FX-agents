@@ -209,6 +209,51 @@ keeps trading. It never re-proposes a version it already has or has retired.
 To switch the real book to setup-first, set `selector.mode: setup_first` (the shadow book then runs
 hourly-pick automatically) and restart.
 
+## The playbook strategy (`selector.mode` or `shadow.mode: playbook`)
+
+A third way to choose trades, built from a research grid instead of hourly ranking.
+
+**Setups** (`fxagents/strategies/ict.py`, `structure_setups.py`, `dtfx.py`, on the primitives in
+`fxagents/structure.py`, which define swing, BOS, CHoCH, MSS, displacement, FVG and sweep exactly
+once): ICT 2022, Silver Bullet, Turtle Soup, AMD (power of three), SMT divergence across NDQ/US30/SPX,
+displacement, BOS retest, CHoCH retest and MSS. DTFX is formalised as four separate definitions
+wherever the sources conflict (close vs wick breaks, Fibonacci leg vs origin-candle zone, leg-extreme
+vs break-candle anchor). None is labelled canonical. Tests prove every new setup has no look-ahead and
+is long/short symmetric.
+
+**Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
+variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
+30-minute hold). It runs on the cached OANDA history with the live rules: session windows, the hard
+bias rule, ≥0.5-ATR stops, an approximation of the news blackouts, and older setups re-checked on the
+exact 700-bar live window. Execution is like OANDA on 1-minute bars: buy at the ask, stops on the bid,
+partials, adds and exits at market. Each trade is weighted by the size Risk can really take (the margin
+cap cuts tight-stop trades); that is the `rw` column, in units of the full 0.5% budget.
+
+**Selection** (`fxagents/playbook.py`, weekly): a *cell* is one setup variant on one instrument,
+timeframe and exit profile. From the trailing 60 days, a cell qualifies when its shrunk expectancy and
+win probability clear its instrument's bar and it was profitable in both halves of the window.
+- XAUUSD is the core instrument: up to 10 cells and 2 positions.
+- NDQ and US30 only trade cells whose estimated win probability is ≥ 60%, with heavier shrinkage, at
+  most one index position at a time.
+- SPX is watch-only, and so is any instrument with `trade: false`.
+
+`walk_forward()` replays that weekly selection over history, scoring only weeks it hadn't seen.
+
+**Live** (`fxagents/agents/playbook_trader.py`): on each bar close the cells for that
+instrument/timeframe are scanned. The hard bias rule, capacity (no opposite positions per instrument)
+and Jev (advisory → size) apply, then Risk and the position manager run the cell's exit profile. The
+app re-selects when `data/playbook.json` changes, and re-runs the research by itself once a day (17:30
+NY) if the history cache is newer.
+
+**Evidence, plainly.** On the 13 weeks available (Jul–Oct 2026), with the corrected execution:
+- No configuration showed a statistically reliable edge.
+- A cell's in-sample result did not predict its out-of-sample result (correlation ≈ 0).
+- The weekly walk-forward was roughly break-even.
+
+It ships as the **shadow book** so live data can decide. The dashboard's **Playbook** page has
+everything by instrument: the setup × timeframe heatmap, current cells, the index watchlist, the
+walk-forward, calibration, robustness and significance.
+
 ## Backtesting the whole system (replay)
 
 `./fx.sh backtest 60` (server) or `python run_backtest.py --days 60` replays real OANDA 1-minute
@@ -221,7 +266,10 @@ heuristic), `--equity 73000`, `--name label`. On the server it runs in its own l
 Results — head-to-head metrics (R, win rate, profit factor, P&L, return, max drawdown, Sharpe, streaks),
 equity curves, monthly/instrument/setup/hour/exit breakdowns, learner activity and the trade list — are
 on the dashboard's **Backtests** page, and in `data/backtests/<run>/report.json`.
-Not replayed: news blackouts (no historical calendar). Fills are simulated (bar price ± half-spread).
+Pick the books' modes with `--main-mode` / `--shadow-mode` (e.g. `--shadow-mode playbook`) and make an
+instrument watch-only for one run with `--no-trade SPX`; the report's instrument chips show one instrument
+at a time. Not replayed: news blackouts (no historical calendar). Fills are simulated: entries at bar
+price ± half-spread, stops triggered on the bid/ask, target exits at market.
 For speed each strategy scans the period once instead of rescanning a window every bar (they agree on
 99.9% of bars). A day takes ~45 s plus the learner's weekly cycle, so 60 days ≈ 45–60 minutes.
 

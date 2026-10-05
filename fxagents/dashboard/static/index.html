@@ -255,6 +255,23 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .hmleg{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
 .hmleg .grad{width:160px;height:10px;border-radius:5px}
 .hmleg .thin{display:inline-block;width:16px;height:12px;border-radius:3px;opacity:.55;background:var(--card-2);background-image:repeating-linear-gradient(45deg,transparent 0 3px,rgb(127 127 127 / .35) 3px 4px)}
+.pbtop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.pbtop .mut{font-size:12px}
+.role{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px}
+.role.core{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.role.selective{background:var(--warn-soft);color:var(--warn)}
+.role.off{background:var(--card-2);color:var(--muted);border:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.stat{background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0}
+.stat .l{font-size:11px;color:var(--muted)} .stat .v{font-size:17px;font-weight:650;margin-top:2px;white-space:nowrap}
+.rule{font-size:12.5px;color:var(--text-2);line-height:1.55;margin-top:10px}
+.hm td.pbc{outline:2px solid var(--accent);outline-offset:-2px}
+.hm td.cv{font-size:10.5px;text-align:center;color:var(--text);font-variant-numeric:tabular-nums;min-width:52px}
+.pbnote{font-size:12.5px;color:var(--text-2);line-height:1.6}
+.pbnote li{margin:3px 0}
+.ok{color:var(--up-text);font-weight:600} .no{color:var(--muted)}
+.verdict-no{border-left:4px solid var(--warn);font-size:13.5px;line-height:1.6}
+.verdict-ok{border-left:4px solid var(--up);font-size:13.5px;line-height:1.6}
 .hmtip{position:fixed;z-index:60;pointer-events:none;background:var(--card);border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:var(--shadow);display:none;max-width:240px}
 .bn{display:grid;gap:8px}
 .bn .it{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);font-size:13px}
@@ -307,6 +324,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-cmp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="M14 8l3-3 3 3" /></symbol>
   <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></symbol>
 </svg>
@@ -318,6 +336,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <button class="nav" data-p="calendar"><svg><use href="#i-cal"/></svg>P&amp;L calendar</button>
     <button class="nav" data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
     <button class="nav" data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
+    <button class="nav" data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
     <button class="nav" data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
     <button class="nav" data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
@@ -400,11 +419,18 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
           On the server:<pre>cd ~/fx-agents
 ./fx.sh backtest 60                # 60 days
 ./fx.sh backtest 60 --no-learner   # learner off
-./fx.sh backtest 30 --jev live     # real Jev API</pre>
+./fx.sh backtest 30 --jev live     # real Jev API
+./fx.sh backtest 60 --shadow-mode playbook   # vs the playbook</pre>
           It runs in its own low-priority container, so the live bot isn't affected. Progress shows here; a 60-day run takes roughly 30–60 minutes.
-          <div class="mut" style="margin-top:8px">Every run replays the same agents as the live bot: the hourly pick (real book) and setup-first (shadow book) side by side.</div></div></div>
+          <div class="mut" style="margin-top:8px">Every run replays the same agents as the live bot, real book and shadow book side by side. Use the instrument chips under a report to see one instrument at a time.</div></div></div>
       </div>
       <div id="btReport" style="margin-top:16px"></div>
+    </section>
+
+    <!-- PLAYBOOK -->
+    <section class="page" id="p-playbook">
+      <div class="pbtop"><div class="filters" id="pbSym" style="margin:0"></div><span class="mut" id="pbMeta"></span></div>
+      <div id="pbBody"><div class="empty">Loading…</div></div>
     </section>
 
     <!-- STRATEGIES -->
@@ -471,6 +497,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 </nav>
 
 <div class="sheet" id="moreSheet">
+  <button data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
   <button data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
   <button data-p="news"><svg><use href="#i-news"/></svg>News</button>
@@ -496,8 +523,8 @@ let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = n
 const q = path => BOOK === "shadow" ? path + (path.includes("?") ? "&" : "?") + "book=shadow" : path;
 
 /* ── navigation ── */
-const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
-const MORE = ["strategies","backtests","news","agents"];
+const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const MORE = ["playbook","strategies","backtests","news","agents"];
 const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy", backtests:"Backtest"};
 function go(p){
   const sh = $("#moreSheet");
@@ -514,6 +541,7 @@ function go(p){
   if(p === "compare") loadCompare();
   if(p === "strategies"){ loadSetupMap(); loadLearner(); }
   if(p === "backtests") loadBacktests();
+  if(p === "playbook") loadResearch();
   if(S) render(S);
   window.scrollTo({top:0});
 }
@@ -814,7 +842,8 @@ function renderAgents(s){
 }
 
 /* ── compare (live vs shadow) ── */
-const modeName = m => m === "setup_first" ? "setup-first" : "hourly pick";
+const modeName = m => m === "setup_first" ? "setup-first" : m === "playbook" ? "playbook" : "hourly pick";
+const ModeName = m => { const x = modeName(m); return x.charAt(0).toUpperCase() + x.slice(1); };
 let cmpRange = "week", CMP = null;
 $$("#cmpSeg button").forEach(b => b.onclick = () => { cmpRange = b.dataset.r;
   $$("#cmpSeg button").forEach(x => x.classList.toggle("on", x === b)); loadCompare(); });
@@ -884,7 +913,7 @@ function cmpChart(svg, pts, opt){
   const path = k => pts.some(p => p[k]==null) ? "" : pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join("");
   const ticks = [lo, (lo+hi)/2, hi].map(v => `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" fill="var(--muted)" font-size="11">${unit==="$" ? "$"+Math.round(v).toLocaleString() : (v>0?"+":"")+v.toFixed(1)+"R"}</text>`).join("");
   const zero = unit==="R" ? `<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-dasharray="3 4"/>` : "";
-  const xl = pts.map((p,i)=> (n<=8 || i%Math.ceil(n/8)===0 || i===n-1) ? `<text x="${x(i)}" y="${H-6}" text-anchor="${n>1&&i===n-1?"end":n>1&&i===0?"start":"middle"}" fill="var(--muted)" font-size="11">${md(p.date)}</text>` : "").join("");
+  const xl = pts.map((p,i)=> ((n<=8 || i%Math.ceil(n/8)===0 || i===n-1) && (i===n-1 || x(n-1)-x(i) > 56)) ? `<text x="${x(i)}" y="${H-6}" text-anchor="${n>1&&i===n-1?"end":n>1&&i===0?"start":"middle"}" fill="var(--muted)" font-size="11">${md(p.date)}</text>` : "").join("");
   const dots = k => n === 1 ? `<circle cx="${x(0)}" cy="${y(pts[0][k])}" r="4" fill="var(--${k==="live"?"accent":"ghost"})"/>` : "";
   svg.innerHTML = ticks + zero + xl + `<path d="${path("live")}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`
     + `<path d="${path("shadow")}" fill="none" stroke="var(--ghost)" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="1 0"/>` + dots("live") + dots("shadow");
@@ -952,6 +981,188 @@ function renderSetupMap(){
     : `<div class="empty">Nothing with enough history at this hour.</div>`;
 }
 
+/* ── playbook: research by instrument ── */
+const SETUP_NAMES = {ict_2022:"ICT 2022", ict_silver_bullet:"Silver Bullet", ict_turtle_soup:"Turtle Soup", ict_amd:"AMD (power of 3)",
+  smt_divergence:"SMT divergence", smc_displacement:"Displacement", smc_bos_retest:"BOS retest", smc_choch:"CHoCH retest", smc_mss:"MSS",
+  dtfx_close_fib:"DTFX · close · fib", dtfx_wick_fib:"DTFX · wick · fib", dtfx_close_fib_brk:"DTFX · close · fib (break high)",
+  dtfx_close_origin:"DTFX · close · origin zone", dtfx_zone:"DTFX-style (legacy)", ict_fvg_sweep:"FVG sweep (legacy)", ict_ote:"OTE",
+  stoic_sbs:"Stoic SBS", smc_order_block:"Order block", smc_breaker:"Breaker", smc_ifvg:"Inverse FVG", smc_liquidity_sweep:"Liquidity sweep",
+  sr_rejection:"S/R rejection", rsi_pullback:"RSI pullback", macd_cross:"MACD cross"};
+const SETUP_ORDER = ["ict_2022","ict_silver_bullet","ict_turtle_soup","ict_amd","smt_divergence","ict_ote","ict_fvg_sweep","smc_mss","smc_displacement",
+  "smc_bos_retest","smc_choch","smc_order_block","smc_breaker","smc_ifvg","smc_liquidity_sweep","dtfx_close_fib","dtfx_wick_fib","dtfx_close_fib_brk",
+  "dtfx_close_origin","dtfx_zone","stoic_sbs","sr_rejection","rsi_pullback","macd_cross"];
+const PB_TFS = ["1min","3min","5min","15min","30min","1h"], tfl = t => t === "1h" ? "1h" : t.replace("min","m");
+const sname = s => SETUP_NAMES[s] || s;
+let RS = null, pbv = {sym:"XAUUSD", mgmt:"std", period:"all", metric:"r"};
+async function loadResearch(){
+  try{ RS = await (await fetch("api/research",{credentials:"same-origin"})).json(); }catch(e){ RS = null; }
+  renderResearch();
+}
+function pbSeg(id, key, opts){
+  return `<div class="seg" id="${id}">${opts.map(([v,l])=>`<button data-v="${v}" class="${pbv[key]===v?"on":""}">${l}</button>`).join("")}</div>`;
+}
+function pbStats(w){
+  if(!w || !w.trades) return `<div class="empty" style="margin-top:12px">No walk-forward trades.</div>`;
+  return `<div class="stats">
+    <div class="stat"><div class="l">Trades</div><div class="v num">${w.trades}</div></div>
+    <div class="stat"><div class="l">Win rate</div><div class="v num">${Math.round(w.win_rate*100)}%</div></div>
+    <div class="stat"><div class="l">Avg / trade</div><div class="v num ${cls(w.avg_r)}">${sR(w.avg_r)}</div></div>
+    <div class="stat"><div class="l">Total</div><div class="v num ${cls(w.sum_r)}">${sR(w.sum_r)}</div></div>
+    <div class="stat"><div class="l">Worst drawdown</div><div class="v num down">${sR(w.max_dd_r)}</div></div>
+    <div class="stat"><div class="l">Profit factor</div><div class="v num">${w.pf==null?"—":fmt(w.pf,2)}</div></div></div>
+    ${w.p_boot!=null ? `<div class="mut num" style="font-size:12px;margin-top:8px;line-height:1.55">Luck check: t-stat <b>${w.t_stat==null?"—":fmt(w.t_stat,2)}</b> · chance the true average is ≤ 0: <b>${Math.round(w.p_boot*100)}%</b>`
+      + (w.sum_ex_top3!=null ? ` · without the best 3 trades: <b class="${cls(w.sum_ex_top3)}">${sR(w.sum_ex_top3)}</b>` : "") + `</div>` : ""}`;
+}
+function roleBadge(role){
+  return role === "core" ? `<span class="role core">Core · priority &amp; capacity</span>`
+    : role === "selective" ? `<span class="role selective">Selective · ≥60% win probability only</span>` : `<span class="role off">Watch-only</span>`;
+}
+function ruleText(inst, pol){
+  const r = inst.rule;
+  if(r.role === "off") return "Not traded by the playbook (switched to watch-only). Its prices still feed the bias, the setup map and SMT divergence for NDQ/US30.";
+  return `Up to <b>${r.max_positions}</b> open position${r.max_positions>1?"s":""} and <b>${r.max_cells}</b> cells. A cell qualifies with an estimated win probability ≥ <b>${Math.round(r.min_p*100)}%</b>`
+    + ` and ≥ <b>${sR(r.min_e)}</b> per trade after spread, at least <b>${r.min_n || pol.min_n}</b> trades and a profit in both halves of the last ${pol.window_days} days.`
+    + (r.k_p ? ` Estimates are shrunk harder here (${r.k_p} pseudo-trades), because high win rates regress.` : "")
+    + (pol.index_group && pol.index_group.includes(inst.sym) ? ` One index position at a time across NDQ/US30.` : "");
+}
+function wfCurve(trades){
+  const by = {}; let c = 0;
+  trades.slice().sort((a,b)=>a.ts<b.ts?-1:1).forEach(t => { c += t.r; by[t.ts.slice(0,10)] = c; });
+  return Object.keys(by).sort().map(d => ({date:d, live: +by[d].toFixed(2)}));
+}
+function renderResearch(){
+  const el = $("#pbBody");
+  if(!RS || !RS.ready){
+    $("#pbSym").innerHTML = ""; $("#pbMeta").textContent = "";
+    el.innerHTML = `<div class="card"><div class="empty">No research yet. On the server: <code>docker compose exec fxagents python run_research.py</code> (≈5 minutes), or wait for the weekly refresh after the history cache updates.</div></div>`;
+    return;
+  }
+  const ORD = ["XAUUSD","NDQ","US30","SPX"], ks = Object.keys(RS.instruments);
+  const syms = ["ALL", ...ORD.filter(x => ks.includes(x)), ...ks.filter(x => !ORD.includes(x))];
+  if(!syms.includes(pbv.sym)) pbv.sym = syms[1] || "ALL";
+  $("#pbSym").innerHTML = syms.map(x => `<button class="fchip ${pbv.sym===x?"on":""}" data-v="${x}">${x==="ALL"?"All":x}</button>`).join("");
+  $$("#pbSym .fchip").forEach(b => b.onclick = () => { pbv.sym = b.dataset.v; renderResearch(); });
+  const D = RS.data;
+  $("#pbMeta").textContent = `${md(D.from)} → ${md(D.to)} · ${D.days} trading days · ${fmt(D.trades,0)} simulated trades · updated ${md(RS.created)}`;
+  el.innerHTML = pbv.sym === "ALL" ? pbAll() : pbInstrument(pbv.sym);
+  $$("#pbMgmt button, #pbPer button, #pbMet button").forEach(b => b.onclick = () => {
+    const key = {pbMgmt:"mgmt", pbPer:"period", pbMet:"metric"}[b.parentNode.id]; pbv[key] = b.dataset.v; renderResearch(); });
+  const svg = $("#pbChart");
+  if(svg){ const tr = (RS.walk_forward.trades||[]).filter(t => pbv.sym==="ALL" || t.sym===pbv.sym); cmpChart(svg, wfCurve(tr), {unit:"R"}); }
+  const tip = $("#hmtip");
+  $$("#pbHeat td.c").forEach(td => {
+    const show = e => { const p = e.touches ? e.touches[0] : e; tip.innerHTML = td.dataset.tip; tip.style.display = "block";
+      tip.style.left = Math.min(innerWidth - 250, p.clientX + 12) + "px"; tip.style.top = (p.clientY + 14) + "px"; };
+    td.onmousemove = show; td.ontouchstart = show; td.onmouseleave = () => tip.style.display = "none";
+    td.ontouchend = () => setTimeout(()=>tip.style.display="none", 1800);
+  });
+}
+function cellsTable(cells, withSym, role){
+  if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the 60% bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
+  return `<div class="tbl"><table><tr>${withSym?"<th>Symbol</th>":""}<th>Setup</th><th>TF</th><th class="hide-m">Exit</th><th class="hide-m">Variant</th><th class="r hide-m">Trades</th><th class="r hide-m">Win</th><th class="r">Est. win</th><th class="r">Avg R</th></tr>${
+    cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="scalp"?'<span class="tag gh">scalp</span>':"standard"}</td>
+      <td class="hide-m"><small class="mut">${esc(c.variant)}</small></td><td class="r num hide-m">${c.n}</td><td class="r num hide-m">${Math.round(c.win_rate*100)}%</td>
+      <td class="r num">${Math.round(c.p*100)}%</td><td class="r num ${cls(c.exp_r)}">${sR(c.exp_r)}</td></tr>`).join("")}</table></div>`;
+}
+function pbHeat(sym){
+  const H = RS.heat.filter(h => h.sym === sym && h.mgmt === pbv.mgmt);
+  const tfs = pbv.mgmt === "scalp" ? ["1min","3min","5min"] : PB_TFS;
+  const inPb = new Set((RS.playbook.cells||[]).filter(c=>c.sym===sym).map(c => `${c.setup}|${c.tf}|${c.mgmt}`));
+  const key = {all:["exp","wr","n"], is:["exp_is","wr_is","n_is"], oos:["exp_oos","wr_oos","n_oos"]}[pbv.period];
+  const cell = {}; H.forEach(h => cell[`${h.setup}|${h.tf}`] = h);
+  const vals = H.map(h => h[key[2]] || 0), maxN = Math.max(1, ...vals);
+  const rows = SETUP_ORDER.filter(s => H.some(h => h.setup === s));
+  const body = rows.map(s => `<tr><td class="lab">${esc(sname(s))}</td>${tfs.map(tf => {
+      const h = cell[`${s}|${tf}`];
+      if(!h || !h[key[2]]) return `<td class="emp"></td>`;
+      const c = {r: h[key[0]] ?? 0, w: h[key[1]] ?? 0.5, n: h[key[2]]};
+      const txt = pbv.metric === "r" ? sR(c.r) : pbv.metric === "w" ? Math.round(c.w*100)+"%" : c.n;
+      const tip = `<b>${esc(sname(s))} · ${tfl(tf)} · ${pbv.mgmt==="scalp"?"scalp exit":"standard exit"}</b><br>best variant: ${esc(h.variant)}`
+        + `<br>all: ${h.n} trades · ${Math.round(h.wr*100)}% win · <b class="${cls(h.exp)}">${sR(h.exp)}</b> sized`
+        + (h.exp_unw!=null ? ` (${sR(h.exp_unw)} per trade's own risk; size taken ${Math.round((h.size||1)*100)}%)` : "")
+        + `<br>in-sample: ${h.n_is||0} · ${h.exp_is==null?"—":sR(h.exp_is)} &nbsp; out-of-sample: ${h.n_oos||0} · ${h.exp_oos==null?"—":sR(h.exp_oos)}`
+        + `<br>spread cost ${sR(-h.cost)} / trade · positive in ${h.months_pos||0} of ${h.months||0} months`
+        + (inPb.has(`${s}|${tf}|${pbv.mgmt}`) ? `<br><b style="color:var(--accent)">in the playbook now</b>` : "");
+      return `<td class="c cv ${c.n < 15 ? "thin" : ""} ${inPb.has(`${s}|${tf}|${pbv.mgmt}`)?"pbc":""}" style="background-color:${cellColor(c, pbv.metric, maxN)}" data-tip="${tip.replace(/"/g,"&quot;")}">${txt}</td>`;
+    }).join("")}</tr>`).join("");
+  return `<table style="min-width:${tfs.length*58+170}px"><tr><th></th>${tfs.map(t=>`<th>${tfl(t)}</th>`).join("")}</tr>${body}</table>`;
+}
+function pbInstrument(sym){
+  const inst = {...RS.instruments[sym], sym}, pol = RS.policy;
+  const live = RS.live || {}, lv = Object.entries(live).map(([b,x]) => x.by_symbol && x.by_symbol[sym] != null ? `${b === "shadow" ? "Shadow" : "Live"} book since start: <b class="${cls(x.by_symbol[sym])}">${sR(x.by_symbol[sym])}</b>` : "").filter(Boolean).join(" · ");
+  const cells = inst.cells || [], watch = inst.watch || [];
+  const costs = (RS.costs||[]).filter(c => c.sym === sym);
+  const trades = (RS.walk_forward.trades||[]).filter(t => t.sym === sym).slice().reverse().slice(0, 120);
+  const legend = pbv.metric === "n" ? "darker = more trades" : pbv.metric === "w" ? "red < 50% win < green" : "avg R as sized by Risk (margin cap applied) · red loses, green makes money";
+  return `<div class="grid">
+    <div class="card c5"><h3>${sym} <span class="sp"></span>${roleBadge(inst.role)}</h3>
+      <div class="rule">${ruleText(inst, pol)}</div>
+      <div class="mut" style="font-size:12px;margin-top:12px">Walk-forward: re-selected every Monday from the previous ${pol.window_days} days, then traded on the week it hadn't seen (${md(RS.data.walk_forward_from)} → ${md(RS.data.to)}), with the live capacity rules.</div>
+      ${pbStats(inst.walk_forward)}
+      ${inst.walk_forward && inst.walk_forward.p_boot!=null && inst.walk_forward.p_boot >= 0.05 ? `<div class="mut" style="font-size:12px;margin-top:6px">Not statistically reliable. See <a href="#" onclick="pbv.sym='ALL';renderResearch();return false">All</a> for the evidence.</div>` : ""}
+      ${lv ? `<div class="mut" style="font-size:12px;margin-top:10px">${lv}</div>` : ""}</div>
+    <div class="card c7"><h3>Walk-forward equity <span class="sp"></span><span class="mut" style="font-weight:500">cumulative R, after spread</span></h3><div class="chart"><svg id="pbChart" height="250"></svg></div></div>
+    <div class="card c12"><h3>Every setup × timeframe <span class="sp"></span><span class="mut" style="font-weight:500">${sym} · best variant per cell · bias rule applied · spread charged</span></h3>
+      <div class="smctl">${pbSeg("pbMgmt","mgmt",[["std","Standard exit"],["scalp","Scalp exit"]])}${pbSeg("pbPer","period",[["all","All"],["is","In-sample"],["oos","Out-of-sample"]])}${pbSeg("pbMet","metric",[["r","Avg R"],["w","Win rate"],["n","Trades"]])}</div>
+      <div class="hm" id="pbHeat">${pbHeat(sym)}</div>
+      <div class="hmleg"><span>${legend}</span><span><i class="thin"></i> under 15 trades</span><span><i style="display:inline-block;width:14px;height:12px;border-radius:3px;outline:2px solid var(--accent);outline-offset:-2px"></i> in the playbook now</span>
+        <span>· in-sample ${md(RS.data.from)}–${md(RS.data.oos_from)}, out-of-sample after</span></div></div>
+    <div class="card ${inst.role==="selective"?"c7":"c12"}"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">${cells.length} cell${cells.length===1?"":"s"} · as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(cells, false, inst.role)}</div>
+    ${inst.role==="selective" ? `<div class="card c5"><h3>Watchlist · closest to 60%</h3>${watch.length ? `<div class="tbl"><table><tr><th>Setup</th><th>TF</th><th class="r">Trades</th><th class="r">Raw win</th><th class="r">Est.</th></tr>${
+        watch.slice(0,8).map(w => `<tr><td>${esc(sname(w.setup))}${w.mgmt==="scalp"?' <span class="tag gh">scalp</span>':""}</td><td>${tfl(w.tf)}</td><td class="r num">${w.n}</td><td class="r num">${Math.round(w.win_rate*100)}%</td><td class="r num ${w.eligible?"ok":"no"}">${Math.round(w.p*100)}%</td></tr>`).join("")}</table></div>` : `<div class="empty">Nothing close yet.</div>`}
+      <div class="mut" style="font-size:12px;margin-top:10px">“Est.” is the shrunk win probability the 60% rule uses. A raw 70% over 30 trades isn't enough: combinations chosen for a high win rate tend to fall back toward average on the following weeks (see the calibration table under All).</div></div>` : ""}
+    <div class="card c5"><h3>Costs &amp; size per timeframe</h3><div class="tbl"><table><tr><th>Timeframe</th><th class="r">Spread (R)</th><th class="r">Size taken</th></tr>${
+      PB_TFS.map(tf => { const c = costs.find(x => x.tf === tf); return c ? `<tr><td>${tfl(tf)}${tf==="1min"?' <span class="mut">(not traded)</span>':""}</td><td class="r num down">${sR(-c.cost_r)}</td><td class="r num">${c.size!=null && c.size<=1 ? Math.round(c.size*100)+"%" : "—"}</td></tr>` : ""; }).join("")}</table></div>
+      <div class="mut" style="font-size:12px;margin-top:10px">Spread: average paid per trade, in units of the trade's risk. Size taken: the average share of the 0.5% risk budget Risk can really use. Tight stops hit the 25% margin cap per position, so small-timeframe trades are sized down.</div></div>
+    <div class="card c7"><h3>Walk-forward trades <span class="sp"></span><span class="mut" style="font-weight:500">latest ${trades.length}</span></h3>${trades.length ? `<div class="tbl" style="max-height:420px;overflow:auto"><table><tr><th>When</th><th>Setup</th><th>TF</th><th class="hide-m">Side</th><th class="r">R</th><th class="hide-m">Exit</th></tr>${
+      trades.map(t => `<tr><td>${md(t.ts)} ${hm(t.ts)}</td><td>${esc(sname(t.setup))}${t.mgmt==="scalp"?' <span class="tag gh">scalp</span>':""}</td><td>${tfl(t.tf)}</td><td class="hide-m">${t.side>0?"long":"short"}</td><td class="r num ${cls(t.r)}">${sR(t.r)}</td><td class="hide-m"><small class="mut">${esc(t.exit||"")}</small></td></tr>`).join("")}</table></div>` : `<div class="empty">None.</div>`}</div>
+  </div>`;
+}
+function pbVerdict(){
+  const w = RS.walk_forward.summary || {}, P = RS.persistence || {};
+  const ok = w.p_boot != null && w.p_boot < 0.05 && (P.corr || 0) > 0.1 && w.sum_r > 0;
+  if(ok) return `<div class="card c12 verdict-ok"><b>Evidence: an edge that held on unseen weeks.</b> <span class="t2">${w.trades} walk-forward trades, ${sR(w.sum_r)}, chance of luck ${Math.round(w.p_boot*100)}%. Past results predicted the following weeks (correlation ${fmt(P.corr,2)}).</span></div>`;
+  return `<div class="card c12 verdict-no"><b>No reliable edge yet.</b> <span class="t2">On weeks it hadn't seen, the playbook made <b class="${cls(w.sum_r)}">${sR(w.sum_r||0)}</b> over ${w.trades||0} trades`
+    + (w.pf!=null ? ` (profit factor ${fmt(w.pf,2)})` : "") + (w.p_boot!=null ? `, with a ${Math.round(w.p_boot*100)}% chance the true average is zero or worse` : "") + `.`
+    + (P.corr!=null ? ` Across ${P.cells} setup × timeframe cells, a cell's results before ${md(RS.data.oos_from)} had a correlation of <b>${fmt(P.corr,2)}</b> with its results after. Cells positive in both periods: ${Math.round((P.both_positive||0)*100)}%, vs ${Math.round((P.chance||0)*100)}% by chance. Past performance hasn't predicted the next weeks.` : "")
+    + ` Run it in the shadow book (virtual fills) and let live results decide. It re-selects every week and this page tracks it.</span></div>`;
+}
+function pbAll(){
+  const pol = RS.policy, I = RS.instruments, wf = RS.walk_forward, rob = RS.robustness || [];
+  const pos = rob.filter(r => r.sum_r > 0).length, med = rob.length ? rob.map(r=>r.sum_r).sort((a,b)=>a-b)[Math.floor(rob.length/2)] : null;
+  const live = RS.live || {};
+  const liveTxt = Object.entries(live).map(([b,x]) => `${b === "shadow" ? "Shadow" : "Live"} book since it started: <b>${x.trades}</b> trades · ${Math.round(x.win_rate*100)}% win · <b class="${cls(x.sum_r)}">${sR(x.sum_r)}</b>`).join("<br>");
+  return `<div class="grid">${pbVerdict()}
+    <div class="card c5"><h3>The playbook <span class="sp"></span><span class="mut" style="font-weight:500">${(RS.playbook.cells||[]).length} cells now</span></h3>
+      <div class="rule">Cells are setup × instrument × timeframe × exit, re-chosen every week from the last ${pol.window_days} days of research. Gold is the core instrument; NDQ and US30 only trade cells whose estimated win probability is ≥ 60%; SPX is watch-only. Your bias rule, Jev (advisory sizing) and every risk limit apply as usual.</div>
+      ${pbStats(wf.summary)}
+      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward ${md(RS.data.walk_forward_from)} → ${md(RS.data.to)}: each week traded with cells chosen only from earlier data.</div>
+      ${liveTxt ? `<div class="t2" style="font-size:12.5px;margin-top:10px">${liveTxt}</div>` : ""}</div>
+    <div class="card c7"><h3>Walk-forward equity <span class="sp"></span><span class="mut" style="font-weight:500">all instruments, cumulative R</span></h3><div class="chart"><svg id="pbChart" height="250"></svg></div></div>
+    <div class="card c12"><h3>By instrument</h3><div class="tbl"><table><tr><th>Instrument</th><th>Role</th><th class="r">Cells now</th><th class="r">WF trades</th><th class="r">Win</th><th class="r">Avg R</th><th class="r">Total</th><th class="r hide-m">Worst DD</th></tr>${
+      Object.entries(I).map(([s,x]) => `<tr style="cursor:pointer" onclick="pbv.sym='${s}';renderResearch()"><td><b>${s}</b></td><td>${roleBadge(x.role)}</td><td class="r num">${(x.cells||[]).length}</td>
+        <td class="r num">${x.walk_forward.trades}</td><td class="r num">${x.walk_forward.trades?Math.round(x.walk_forward.win_rate*100)+"%":"—"}</td>
+        <td class="r num ${cls(x.walk_forward.avg_r)}">${x.walk_forward.trades?sR(x.walk_forward.avg_r):"—"}</td><td class="r num ${cls(x.walk_forward.sum_r)}">${x.walk_forward.trades?sR(x.walk_forward.sum_r):"—"}</td>
+        <td class="r num hide-m down">${x.walk_forward.trades?sR(x.walk_forward.max_dd_r):"—"}</td></tr>`).join("")}</table></div></div>
+    <div class="card c12"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(RS.playbook.cells||[], true)}</div>
+    <div class="card c6"><h3>Is the win-probability estimate honest?</h3><div class="tbl"><table><tr><th>Estimate</th><th class="r">Trades</th><th class="r">Estimated</th><th class="r">Actual win</th><th class="r">Avg R</th></tr>${
+      (RS.calibration||[]).map(c => `<tr><td>${esc(c.bucket)}</td><td class="r num">${c.n}</td><td class="r num">${Math.round(c.p_est*100)}%</td><td class="r num">${Math.round(c.win_rate*100)}%</td><td class="r num ${cls(c.avg_r)}">${sR(c.avg_r)}</td></tr>`).join("")}</table></div>
+      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward trades grouped by the estimate made the week before. If the estimate were informative, the actual win rate would rise with it. Small groups are noisy. Cells picked for a high win rate tend to fall back toward average, so the 60% rule for indices demands much more evidence than a raw win rate.</div></div>
+    <div class="card c6"><h3>Robustness <span class="sp"></span><span class="mut" style="font-weight:500">${pos} of ${rob.length} settings positive</span></h3>
+      <div class="pbnote">The same walk-forward with ${rob.length} alternative settings: window 30/45/60 days, minimum trades 20/25/35, 5 or 10 gold cells, gold win estimate ≥45% or ≥50%. ${pos} ended positive, median ${med==null?"—":sR(med)}. The most favourable still had a ${rob.length ? Math.round(Math.min(...rob.map(r=>r.p_boot==null?1:r.p_boot))*100) : "—"}% chance of being luck.</div>
+      <div class="tbl" style="max-height:260px;overflow:auto;margin-top:10px"><table><tr><th>Window</th><th>Min n</th><th>Gold cells</th><th>Gold p</th><th class="r">Trades</th><th class="r">Total</th><th class="r">DD</th></tr>${
+        rob.map(r => `<tr><td>${r.window}d</td><td>${r.min_n}</td><td>${r.xau_cells}</td><td>${Math.round(r.xau_min_p*100)}%</td><td class="r num">${r.trades}</td><td class="r num ${cls(r.sum_r)}">${sR(r.sum_r)}</td><td class="r num down">${sR(r.max_dd_r)}</td></tr>`).join("")}</table></div></div>
+    <div class="card c12"><h3>How this was built</h3><ul class="pbnote" style="padding-left:18px;margin:0">
+      <li>${fmt(RS.data.trades,0)} simulated trades: ${(RS.data.grid.classes||[]).length || 24} setups (ICT 2022, Silver Bullet, Turtle Soup, AMD, SMT, displacement, BOS, MSS, CHoCH, four formal DTFX definitions, plus the existing book) × every variant × 4 instruments × 1m/3m/5m/15m/30m/1h × standard and scalp exits.</li>
+      <li>Every trade follows the live rules: session windows, your bias rule (neutral and counter-bias skipped), stops ≥0.5 ATR and the bot's exits. They are <b>executed like OANDA on 1-minute bars</b>: buy at the ask, stops on the bid, partials, adds and exits at market.</li>
+      <li>Results are in <b>sized R</b>: each trade is scaled by the size Risk can actually take (margin cap, unit limit), in units of the full 0.5% budget. Plain R per trade is in the heatmap tooltips.</li>
+      <li>News blackouts are approximated (08:30 and 10:00 release windows, NFP Fridays, FOMC afternoons), because no historical calendar is cached. Older setups are re-checked on the exact 700-bar window the live bot scans.</li>
+      <li>Reality check, average sized trade across every setup (standard exits), before → after ${md(RS.data.oos_from)}: ${(RS.periods||[]).map(p => `${p.sym} <b class="${cls(p.in_sample)}">${sR(p.in_sample)}</b> → <b class="${cls(p.out_of_sample)}">${sR(p.out_of_sample)}</b>`).join(" · ")}. Gold gets priority because you asked for it and it is the least-bad in-sample, not because it has a proven edge.</li>
+      <li>DTFX definitions that conflict (close vs wick breaks, Fibonacci vs origin-candle zone, extreme vs break-candle anchor) are separate setups. None is labelled canonical.</li>
+      <li>Not included: Jev's grading and sizing, bias suspensions and the reversal exception. The live bot applies these on top.</li></ul></div>
+  </div>`;
+}
+
 /* ── learner versions ── */
 let LRN = null;
 async function loadLearner(){
@@ -988,7 +1199,7 @@ function renderLearner(){
 }
 
 /* ── backtests ── */
-let BT = null, BTR = null, btSel = null, btBook = "main", btTimer = null;
+let BT = null, BTR = null, btSel = null, btBook = "main", btTimer = null; let btSym = "ALL";
 async function loadBacktests(){
   try{ BT = await (await fetch("api/backtests",{credentials:"same-origin"})).json(); }catch(e){ BT = null; }
   if(BT && BT.runs.length && !btSel){ const d = BT.runs.find(r => r.has_report); if(d) btSel = d.id; }
@@ -1023,7 +1234,7 @@ function renderReport(){
   const el = $("#btReport");
   if(!BTR || !BTR.books || !BTR.books.main){ el.innerHTML = ""; return; }
   const M = BTR.books.main.summary, G = BTR.books.shadow ? BTR.books.shadow.summary : null, meta = BTR.meta;
-  const nm = meta.main_mode === "setup_first" ? "Setup-first" : "Hourly pick", ng = meta.shadow_mode === "setup_first" ? "Setup-first" : "Hourly pick";
+  const nm = ModeName(meta.main_mode), ng = ModeName(meta.shadow_mode);
   const pct = v => v==null ? "—" : (v*100).toFixed(1) + "%";
   const rows = [["Trades","trades",v=>fmt(v,0),0],["Win rate","win_rate",v=>Math.round(v*100)+"%",1],["Total R","sum_r",v=>sR(v),1],["Avg R / trade","avg_r",v=>sR(v),1],
     ["Profit factor","profit_factor",v=>v==null?"—":fmt(v,2),1],["P&L","pnl",v=>smoney(v),1],["Return","return_pct",pct,1],["Max drawdown","max_dd",v=>smoney(v),1],
@@ -1034,39 +1245,56 @@ function renderReport(){
     const ba = G && b && a!=null && c!=null && (b>0 ? a>c : a<c), bc = G && b && a!=null && c!=null && (b>0 ? c>a : c<a);
     return `<tr><td>${lab}</td><td class="r num l ${ba?"best":""}">${f(a,M)}</td>${G?`<td class="r num g ${bc?"best":""}">${f(c,G)}</td>`:""}</tr>`; }).join("");
   const B = BTR.books[btBook] || BTR.books.main;
+  const bySym = k => ((BTR.books[k] || {}).by_instrument) || {};
+  const bsyms = [...new Set([...Object.keys(bySym("main")), ...Object.keys(bySym("shadow"))])].sort();
+  if(btSym !== "ALL" && !bsyms.includes(btSym)) btSym = "ALL";
+  const EMPTY = {summary:{trades:0}, months:[], by_setup:[], by_tf:[], by_hour:[], by_exit:[], trades:[], pnl_daily:[]};
+  const I = btSym === "ALL" ? null : (bySym(btBook)[btSym] || (BTR.books[btBook] ? EMPTY : bySym("main")[btSym]) || EMPTY);
+  const V = I || B;
   const grp = (list, keyf, title) => list.length ? `<div class="tbl"><table><tr><th>${title}</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r hide-m">P&amp;L</th></tr>${
     list.map(x=>`<tr><td>${keyf(x.key)}</td><td class="r num">${x.n}</td><td class="r num">${Math.round(x.win_rate*100)}%</td><td class="r num ${cls(x.sum_r)}">${sR(x.sum_r)}</td><td class="r num hide-m ${cls(x.avg_r)}">${sR(x.avg_r)}</td><td class="r num hide-m ${cls(x.pnl)}">${smoney(x.pnl)}</td></tr>`).join("")}</table></div>` : `<div class="empty">No trades.</div>`;
   const ym = k => { const [y,m] = String(k).split("-"); return new Date(+y, +m-1, 1).toLocaleDateString(undefined,{month:"short",year:"numeric"}); };
-  const curve = []; const ed = {}; (BTR.books.main.equity_daily||[]).forEach(x=>ed[x.date]={date:x.date,live:x.equity});
-  (BTR.books.shadow ? BTR.books.shadow.equity_daily : []).forEach(x=>{ ed[x.date] = Object.assign(ed[x.date]||{date:x.date}, {shadow:x.equity}); });
-  Object.keys(ed).sort().forEach(d => { const x = ed[d]; const prev = curve[curve.length-1] || {};
-    curve.push({date:d, live: x.live ?? prev.live ?? meta.equity, shadow: x.shadow ?? prev.shadow ?? meta.equity}); });
+  const curve = []; const ed = {};
+  if(I){
+    (bySym("main")[btSym] || EMPTY).pnl_daily.forEach(x=>ed[x.date]={date:x.date,live:x.pnl});
+    (BTR.books.shadow ? (bySym("shadow")[btSym] || EMPTY).pnl_daily : []).forEach(x=>{ ed[x.date] = Object.assign(ed[x.date]||{date:x.date}, {shadow:x.pnl}); });
+    Object.keys(ed).sort().forEach(d => { const x = ed[d]; const prev = curve[curve.length-1] || {};
+      curve.push({date:d, live: x.live ?? prev.live ?? 0, shadow: G ? (x.shadow ?? prev.shadow ?? 0) : undefined}); });
+  } else {
+    (BTR.books.main.equity_daily||[]).forEach(x=>ed[x.date]={date:x.date,live:x.equity});
+    (BTR.books.shadow ? BTR.books.shadow.equity_daily : []).forEach(x=>{ ed[x.date] = Object.assign(ed[x.date]||{date:x.date}, {shadow:x.equity}); });
+    Object.keys(ed).sort().forEach(d => { const x = ed[d]; const prev = curve[curve.length-1] || {};
+      curve.push({date:d, live: x.live ?? prev.live ?? meta.equity, shadow: x.shadow ?? prev.shadow ?? meta.equity}); });
+  }
   const learner = (B.learner||[]).map(x=>`<div class="fi"><span class="when">${md(x.ts)}</span><span>${esc(x.msg)}</span></div>`).join("") || `<div class="empty">${meta.learner ? "The learner made no changes in this period." : "Learner was off for this run."}</div>`;
-  const trades = (B.trades||[]).slice(0,150).map(t=>`<tr><td>${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td class="hide-m"><span class="tag acc">${esc((t.strategy||"").split("@")[0])}</span></td><td>${t.side}</td><td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}">${smoney(t.realized)}</td><td class="hide-m"><small class="mut">${esc(t.exit_reason||"")}${t.adds?` · +${t.adds} adds`:""}</small></td></tr>`).join("");
-  const hrs = B.by_hour || [], mx = Math.max(1, ...hrs.map(h=>Math.abs(h.sum_r)));
+  const trades = (V.trades||[]).slice(0,150).map(t=>`<tr><td>${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td class="hide-m"><span class="tag acc">${esc((t.strategy||"").split("@")[0])}</span></td><td>${t.side}</td><td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}">${smoney(t.realized)}</td><td class="hide-m"><small class="mut">${esc(t.exit_reason||"")}${t.adds?` · +${t.adds} adds`:""}</small></td></tr>`).join("");
+  const hrs = V.by_hour || [], mx = Math.max(1, ...hrs.map(h=>Math.abs(h.sum_r)));
   el.innerHTML = `
     <div class="grid">
       <div class="card c12"><div class="verdict"><b>${esc(meta.name || meta.id)}</b>
         <span class="mut">${meta.period?`${md(meta.period.from)} → ${md(meta.period.to)} · ${meta.period.days} trading-calendar days`:""} · start equity ${money(meta.equity,0)} · Jev ${meta.jev}${meta.jev_gate==="advisory"?" (advisory)":""}${(meta.no_trade||[]).length?` · ${meta.no_trade.join(", ")} watch-only`:""} · learner ${meta.learner?"on":"off"}</span></div>
         <details style="margin-top:8px"><summary>What this backtest does and doesn't include</summary><ul class="t2" style="font-size:13px;margin:8px 0 0;padding-left:18px">${BTR.caveats.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></details></div>
       <div class="card c5"><h3>Results</h3><table class="vs"><tr><th></th><th class="r l">${nm}<br><small class="mut">real book</small></th>${G?`<th class="r g">${ng}<br><small class="mut">shadow book</small></th>`:""}</tr>${vs}</table></div>
-      <div class="card c7"><h3>Equity <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>${nm} ${G?`<i class="dot" style="background:var(--ghost);margin-left:8px"></i>${ng}`:""}</span></h3><div class="chart"><svg id="btChart" height="260"></svg></div></div>
+      <div class="card c7"><h3>${I ? esc(btSym)+" · cumulative P&amp;L" : "Equity"} <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>${nm} ${G?`<i class="dot" style="background:var(--ghost);margin-left:8px"></i>${ng}`:""}</span></h3><div class="chart"><svg id="btChart" height="260"></svg></div></div>
       <div class="card c12" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><b style="font-size:13px">Breakdown for</b>
-        <div class="seg" id="btBook"><button data-b="main" class="${btBook==="main"?"on":""}">${nm}</button>${G?`<button data-b="shadow" class="ghost ${btBook==="shadow"?"on":""}">${ng}</button>`:""}</div></div>
-      <div class="card c6"><h3>By month</h3>${grp(B.months, ym, "Month")}</div>
-      <div class="card c6"><h3>By instrument</h3>${grp(B.by_symbol, k=>`<b>${k}</b>`, "Instrument")}</div>
-      <div class="card c7"><h3>By setup</h3>${grp(B.by_setup, k=>`<span class="tag acc">${esc(k)}</span>`, "Setup")}</div>
+        <div class="seg" id="btBook"><button data-b="main" class="${btBook==="main"?"on":""}">${nm}</button>${G?`<button data-b="shadow" class="ghost ${btBook==="shadow"?"on":""}">${ng}</button>`:""}</div>
+        <div class="filters" id="btSym" style="margin:0">${["ALL", ...bsyms].map(x => `<button class="fchip ${btSym===x?"on":""}" data-v="${x}">${x==="ALL"?"All instruments":x}</button>`).join("")}</div>
+        ${I ? `<div class="mut num" style="font-size:12.5px;width:100%">${esc(btSym)} in ${esc(btBook==="shadow"?ng:nm)}: <b>${I.summary.trades}</b> trades · ${I.summary.trades?Math.round(I.summary.win_rate*100)+"% win":"—"} · <b class="${cls(I.summary.sum_r)}">${sR(I.summary.sum_r||0)}</b> · <b class="${cls(I.summary.pnl)}">${smoney(I.summary.pnl||0)}</b>${I.summary.trades?` · PF ${I.summary.profit_factor==null?"—":fmt(I.summary.profit_factor,2)} · worst run ${smoney(I.summary.max_dd)}`:""}</div>` : ""}</div>
+      <div class="card c6"><h3>By month</h3>${grp(V.months, ym, "Month")}</div>
+      ${I ? `<div class="card c6"><h3>By timeframe</h3>${grp(I.by_tf, k=>esc(k), "Timeframe")}</div>` : `<div class="card c6"><h3>By instrument</h3>${grp(B.by_symbol, k=>`<b style="cursor:pointer" onclick="btSym='${k}';renderReport()">${k}</b>`, "Instrument")}</div>`}
+      <div class="card c7"><h3>By setup</h3>${grp(V.by_setup, k=>`<span class="tag acc">${esc(k)}</span>`, "Setup")}</div>
       <div class="card c5"><h3>By hour (NY) · total R</h3>${hrs.length?`<div style="display:grid;gap:6px">${hrs.map(h=>`<div style="display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:8px;font-size:12px;white-space:nowrap"><span class="mut num">${String(h.key).padStart(2,"0")}:00</span><div style="position:relative;height:14px;background:var(--card-2);border-radius:4px"><i style="position:absolute;${h.sum_r>=0?"left:50%":"right:50%"};width:${Math.abs(h.sum_r)/mx*50}%;top:0;bottom:0;border-radius:4px;background:var(${h.sum_r>=0?"--up":"--down"})"></i></div><span class="num r ${cls(h.sum_r)}">${sR(h.sum_r)} <small class="mut">(${h.n})</small></span></div>`).join("")}</div>`:`<div class="empty">No trades.</div>`}</div>
       <div class="card c12"><h3>What the filters did <span class="sp"></span><span class="mut" style="font-weight:500">every logged signal replayed with the bot's stop &amp; management · approximate</span></h3>${
         B.whatif && B.whatif.length ? `<div class="tbl"><table><tr><th>Signal group</th><th class="r">Signals</th><th class="r">Win</th><th class="r">Total R</th><th class="r">Avg R</th></tr>${
         B.whatif.map(x=>`<tr><td>${x.key==="taken"?"<b>Taken</b>":esc(x.key)}</td><td class="r num">${x.n}</td><td class="r num">${Math.round(x.win_rate*100)}%</td><td class="r num ${cls(x.sum_r)}">${sR(x.sum_r)}</td><td class="r num ${cls(x.avg_r)}">${sR(x.avg_r)}</td></tr>`).join("")}</table></div>
         <p class="mut" style="font-size:12px;margin:8px 0 0">A blocked group with a <b>positive</b> average means that filter cut winners; <b>negative</b> means it saved you losses.</p>`
         : `<div class="empty">${B.whatif_error ? esc(B.whatif_error) : "Not in this report — rebuild it with <code>python -m fxagents.backtest_report</code>."}</div>`}</div>
-      <div class="card c6"><h3>How trades ended</h3>${grp(B.by_exit, k=>esc(k||"—"), "Exit")}</div>
+      <div class="card c6"><h3>How trades ended</h3>${grp(V.by_exit, k=>esc(k||"—"), "Exit")}</div>
       <div class="card c6"><h3>Learner activity during the run</h3><div class="feed" style="max-height:320px">${learner}</div></div>
       <div class="card c12"><h3>Trades <span class="sp"></span><span class="mut" style="font-weight:500">latest ${Math.min(150,(B.trades||[]).length)}</span></h3><div class="tbl" style="max-height:520px;overflow:auto">${trades?`<table><tr><th>Closed</th><th>Symbol</th><th class="hide-m">Setup</th><th>Side</th><th class="r">R</th><th class="r">P&amp;L</th><th class="hide-m">Exit</th></tr>${trades}</table>`:`<div class="empty">No trades.</div>`}</div></div>
     </div>`;
   $$("#btBook button").forEach(b => b.onclick = () => { btBook = b.dataset.b; renderReport(); });
+  $$("#btSym .fchip").forEach(b => b.onclick = () => { btSym = b.dataset.v; renderReport(); });
   cmpChart($("#btChart"), curve, {unit:"$"});
 }
 

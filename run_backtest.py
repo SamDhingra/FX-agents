@@ -5,6 +5,7 @@
     python run_backtest.py --days 30 --jev live         # grade with the real Jev API (slower, uses API calls)
     python run_backtest.py --days 30 --jev live --jev-gate advisory   # Jev grades set size but never block
     python run_backtest.py --days 60 --no-trade SPX     # SPX watch-only (data, bias and map kept; no entries)
+    python run_backtest.py --days 30 --shadow-mode playbook   # hourly pick vs the playbook, side by side
     ./fx.sh backtest 60 [--no-learner] [--jev live]     # on the server: separate low-priority container
 
 Results: data/backtests/<run-id>/ (journals, report.json) and the dashboard's Backtests page.
@@ -57,6 +58,8 @@ def prepare(args) -> tuple[dict, Path, dict]:
         ic.update(specs.get(sym, {}))
     from fxagents.setup_map import history_dir
     cfg["history_dir"] = str(history_dir(cfg))       # pin before the journal path moves into the run folder
+    from fxagents.research import research_dir
+    cfg["research_dir"] = str(research_dir(cfg))
     slug = "".join(c if c.isalnum() else "-" for c in args.name.strip().lower()).strip("-")[:30]
     rid = time.strftime("%Y%m%d-%H%M%S") + (f"-{slug}" if slug else "")
     out = backtests_dir(cfg) / rid
@@ -81,12 +84,17 @@ def prepare(args) -> tuple[dict, Path, dict]:
     ev["optimize_daily"] = False                     # weekly learning keeps a 60-day replay to minutes, not hours
     ev["optimize_every_hours"] = args.learn_every_hours
     ev["refresh_minutes"] = args.refresh_minutes
+    if args.main_mode:
+        cfg["selector"]["mode"] = args.main_mode
+    if args.shadow_mode:
+        cfg["shadow"]["mode"] = args.shadow_mode
+    main_mode = cfg["selector"].get("mode", "hourly_pick")
+    cfg["shadow"].setdefault("mode", "hourly_pick" if main_mode != "hourly_pick" else "setup_first")
     cfg["replay"] = {"days": args.days, "dir": str(out)}
     meta = {"id": rid, "name": args.name or "", "created": pd.Timestamp.now(tz=cfg["timezone"]).isoformat(timespec="seconds"),
             "days": args.days, "jev": args.jev, "jev_gate": cfg["jev"].get("signal_gate", "enforce"),
             "no_trade": [k for k, v in cfg["instruments"].items() if v.get("trade", True) is False], "learner": not args.no_learner, "shadow": not args.no_shadow,
-            "equity": round(equity, 2), "main_mode": cfg["selector"].get("mode", "hourly_pick"),
-            "shadow_mode": "hourly_pick" if cfg["selector"].get("mode") == "setup_first" else "setup_first",
+            "equity": round(equity, 2), "main_mode": main_mode, "shadow_mode": cfg["shadow"]["mode"],
             "status": "running"}
     (out / "meta.json").write_text(json.dumps(meta, indent=1))
     return cfg, out, meta
@@ -98,6 +106,8 @@ def main() -> int:
     ap.add_argument("--jev", choices=["heuristic", "live"], default="heuristic")
     ap.add_argument("--jev-gate", choices=["enforce", "advisory"], help="override jev.signal_gate for this run")
     ap.add_argument("--no-trade", nargs="*", metavar="SYM", help="watch-only instruments for this run, e.g. --no-trade SPX")
+    ap.add_argument("--main-mode", choices=["hourly_pick", "setup_first", "playbook"], help="real book's selection mode")
+    ap.add_argument("--shadow-mode", choices=["hourly_pick", "setup_first", "playbook"], help="shadow book's selection mode")
     ap.add_argument("--no-learner", action="store_true")
     ap.add_argument("--no-shadow", action="store_true")
     ap.add_argument("--equity", type=float, help="starting equity in USD (default: the live account's latest)")

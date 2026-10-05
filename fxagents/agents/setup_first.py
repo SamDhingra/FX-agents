@@ -223,6 +223,31 @@ class ShadowBroker(PaperBroker):
             return super()._slip(sym, side)
         return side * sp / 2
 
+    def _hs(self, sym: str) -> float:
+        return float(self.spreads.get(sym, 0.0)) / 2
+
+    async def reduce(self, pos, qty, ref_price, limit=None):
+        # OANDA ignores limit prices on these closes: fill at market (the latest price, far side of the spread)
+        return await super().reduce(pos, qty, self.state.last_prices.get(pos.symbol, ref_price), limit=None)
+
+    async def close(self, pos, ref_price, limit=None):
+        return await super().close(pos, self.state.last_prices.get(pos.symbol, ref_price) if limit is not None else ref_price,
+                                   limit=None)
+
+    async def on_bar(self, bar) -> None:
+        """Resting stops trigger when the bid (longs) / ask (shorts) reaches them, not the mid."""
+        hs = self._hs(bar.symbol)
+        for pos in list(self.open_positions.values()):
+            if pos.symbol != bar.symbol or pos.open_qty <= 0:
+                continue
+            far = (bar.low - hs) if pos.side > 0 else (bar.high + hs)
+            if (far - pos.stop) * pos.side <= 0:
+                far_open = bar.open - pos.side * hs
+                px = self.round_px(pos.symbol, far_open if (far_open - pos.stop) * pos.side < 0 else pos.stop)
+                self._book(pos, pos.open_qty, px)
+                self.open_positions.pop(pos.id, None)
+                await self.bus.publish("stop_filled", {"position": pos, "price": px, "ts": bar.ts})
+
 
 class ShadowFeedAgent(Agent):
     """Lives on the REAL bus. After the real MarketData agent has stored each live bar, replays it into
@@ -232,7 +257,8 @@ class ShadowFeedAgent(Agent):
     def __init__(self, main_ctx: Ctx, shadow_ctx: Ctx):
         super().__init__(main_ctx)
         self.sh = shadow_ctx
-        self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in main_ctx.cfg["timeframes"]["entry"]]
+        from .trading import signal_tfs
+        self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in signal_tfs(main_ctx.cfg)]
 
     def start(self):
         super().start()
@@ -275,7 +301,12 @@ def build_shadow(main: Ctx, equity: float):
     journal = Journal(sc.get("db_path") or shadow_db_path(cfg["storage"]["db_path"]))
     sctx = Ctx(cfg, bus, st, main.store, broker, journal, main.jev, main.book, main.news)
     mode = sc.get("mode", "setup_first")
-    trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)
+    if mode == "playbook":
+        from .playbook_trader import PlaybookHolder, PlaybookTrader
+        sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
+        trader = PlaybookTrader(sctx)
+    else:
+        trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)
     agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), JournalAgent(sctx), MonitorAgent(sctx)]
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode

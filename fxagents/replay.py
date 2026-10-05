@@ -49,6 +49,10 @@ class SignalOracle:
                 self.df[(sym, tf)] = df
                 self.ctx[(sym, tf)] = Strategy._context(df)
                 self.pos[(sym, tf)] = {ts: i for i, ts in enumerate(df.index)}
+        peers = {"NDQ": ["US30", "SPX"], "US30": ["NDQ", "SPX"], "SPX": ["NDQ", "US30"]}
+        for (sym, tf), df in self.df.items():       # correlated indices for SMT divergence
+            self.ctx[(sym, tf)]["peers"] = [self.df[(p, tf)].reindex(df.index).ffill()
+                                            for p in peers.get(sym, []) if (p, tf) in self.df]
 
     def _signals(self, st, sym: str, tf: str) -> dict:
         key = (st.id, sym, tf)
@@ -97,7 +101,8 @@ class ReplayFeed:
         self.split = (last - pd.Timedelta(days=self.days)).normalize()
         self.warm_start = self.split - pd.Timedelta(days=warm)
         self.speed = 0.0
-        self.oracle = SignalOracle(self.frames, [str(t) for t in cfg["timeframes"]["entry"]], self.warm_start)
+        from .agents.trading import signal_tfs
+        self.oracle = SignalOracle(self.frames, signal_tfs(cfg), self.warm_start)
         if self.days < days:
             log.warning("only %d days of history available after warm-up (asked for %d)", self.days, days)
 

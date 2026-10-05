@@ -94,7 +94,7 @@ class PaperBroker(Broker):
     async def open(self, pos, qty, ref_price):
         px = self.round_px(pos.symbol, ref_price + self._slip(pos.symbol, pos.side))
         self.guard_entry(pos.symbol, pos.side, px, pos.stop)
-        pos.legs.append(Leg(qty, px, self.state.now, "initial"))
+        pos.add_leg(Leg(qty, px, self.state.now, "initial"))
         fee = self.commission(pos.symbol, qty)
         pos.realized -= fee; pos.commissions += fee; self.cash -= fee
         self.open_positions[pos.id] = pos
@@ -102,7 +102,7 @@ class PaperBroker(Broker):
 
     async def add(self, pos, qty, ref_price):
         px = self.round_px(pos.symbol, ref_price + self._slip(pos.symbol, pos.side))
-        pos.legs.append(Leg(qty, px, self.state.now, "pyramid"))
+        pos.add_leg(Leg(qty, px, self.state.now, "pyramid"))
         fee = self.commission(pos.symbol, qty)
         pos.realized -= fee; pos.commissions += fee; self.cash -= fee
         return px
@@ -186,7 +186,7 @@ class IBKRBroker(Broker):
         t_parent = self.ib.placeOrder(self._c(sym), parent)
         t_stop = self.ib.placeOrder(self._c(sym), child)
         px = await self._fill(t_parent)
-        pos.legs.append(Leg(qty, px, self.state.now, "initial"))
+        pos.add_leg(Leg(qty, px, self.state.now, "initial"))
         pos.meta["stop_trade"] = t_stop
         self._stop_ids[t_stop.order.orderId] = pos
         return px
@@ -206,7 +206,7 @@ class IBKRBroker(Broker):
         act = "BUY" if pos.side > 0 else "SELL"
         t = self.ib.placeOrder(self._c(pos.symbol), MarketOrder(act, qty, account=self.account))
         px = await self._fill(t)
-        pos.legs.append(Leg(qty, px, self.state.now, "pyramid"))
+        pos.add_leg(Leg(qty, px, self.state.now, "pyramid"))
         await self._resize_stop(pos, qty=pos.open_qty)
         return px
 

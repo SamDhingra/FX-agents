@@ -46,6 +46,18 @@ def round_step(x: float, step: float) -> float:
     return round(round(x / step) * step, 9)
 
 
+def signal_tfs(cfg) -> list[str]:
+    """Entry timeframes to fan out: the strategy book's, plus the playbook's when a book runs it."""
+    tfs = [str(t) for t in cfg["timeframes"]["entry"]]
+    modes = {cfg["selector"].get("mode", "hourly_pick"), ((cfg.get("shadow") or {}).get("mode") if (cfg.get("shadow") or {}).get("enabled") else None)}
+    if "playbook" in modes:
+        from ..playbook import policy_from_cfg
+        for t in policy_from_cfg(cfg).tfs:
+            if t not in tfs:
+                tfs.append(t)
+    return tfs
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 class MarketDataAgent(Agent):
     """Stores bars, lets the broker check resting stops, then fans out 1m and entry-TF (5m, 15m) events."""
@@ -55,7 +67,7 @@ class MarketDataAgent(Agent):
         super().start()
         self.bus.subscribe("bar", self.on_bar)
         self.bus.subscribe("backfill", self.on_backfill)
-        self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in self.cfg["timeframes"]["entry"]]
+        self.tfs = [(tf, int(pd.Timedelta(tf).total_seconds() // 60)) for tf in signal_tfs(self.cfg)]
 
     async def on_backfill(self, bars: list[Bar]):
         """Missed bars after an outage: into the store for indicators/bias only. No stop checks,
@@ -355,10 +367,17 @@ class RiskAgent(Agent):
         if nb:
             return self._reject(rec, f"news blackout: {nb['title']} ({nb['tier']}, {nb['phase']})")
         open_pos = [p for p in self.state.positions.values() if p.status == "open"]
+        pb = req.get("playbook") or {}           # playbook book: per-instrument caps + exit profile
         if len(open_pos) >= r["max_open_positions"]:
             return self._reject(rec, "max open positions")
-        if sum(p.symbol == sig.symbol for p in open_pos) >= r["max_positions_per_symbol"]:
+        if sum(p.symbol == sig.symbol for p in open_pos) >= int(pb.get("max_per_symbol", r["max_positions_per_symbol"])):
             return self._reject(rec, "already positioned in symbol")
+        grp = pb.get("group") or {}
+        if sig.symbol in grp.get("members", []) and \
+                sum(p.symbol in grp["members"] for p in open_pos) >= int(grp.get("max", 99)):
+            return self._reject(rec, "index group full (one index position at a time)")
+        if pb and any(p.strategy == sig.strategy for p in open_pos):
+            return self._reject(rec, "this playbook cell already has a position")
         if sig.stop is None:
             return self._reject(rec, "no stop loss")
 
@@ -404,6 +423,8 @@ class RiskAgent(Agent):
                        bias_mode=gate["mode"], risk_mult=round(risk_mult, 3))
         if gate.get("no_pyramid"):
             pos.meta["no_pyramid"] = True
+        if pb.get("mgmt") == "scalp":            # scalp exit profile: all out at 1R, no adds, 30-minute max hold
+            pos.meta.update(no_pyramid=True, full_exit=True, max_hold=30)
         if gate.get("rr"):
             pos.rr = gate["rr"]
         try:
@@ -503,15 +524,16 @@ class PositionManagerAgent(Agent):
         s = self.cfg["sessions"]
         mins = now.hour * 60 + now.minute
         held = (now - pos.opened_ts).total_seconds() / 60
-        if (_hm(s["flatten_at"]) <= mins < 17 * 60) or held >= s["max_hold_minutes"]:
-            return await self.close(pos, bar.close, "session_flat" if held < s["max_hold_minutes"] else "max_hold")
+        max_hold = float(pos.meta.get("max_hold", s["max_hold_minutes"]))
+        if (_hm(s["flatten_at"]) <= mins < 17 * 60) or held >= max_hold:
+            return await self.close(pos, bar.close, "session_flat" if held < max_hold else "max_hold")
 
         # 2) target steps
         while (hi - self.lvl(pos, pos.stage + 1)) * pos.side >= 0:
             pos.stage += 1
             level = self.lvl(pos, pos.stage)
             if pos.stage == 1:
-                if not self.m["pyramid"]["enabled"]:
+                if not self.m["pyramid"]["enabled"] or pos.meta.get("full_exit"):
                     return await self.close(pos, level, "target", limit=True)
                 step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
                 part = floor_step(pos.initial_qty * self.m["partial_at_target"], step)
@@ -541,7 +563,7 @@ class PositionManagerAgent(Agent):
         if pos.open_qty + add_qty > float(self.cfg["instruments"][pos.symbol]["max_units"]):
             return
         # worst case if stopped right after adding must stay ≥ 0 (never turn a winner into a loser)
-        new_avg = (pos.avg_entry * pos.gross_qty + level * add_qty) / (pos.gross_qty + add_qty)
+        new_avg = (pos.avg_entry * pos.open_qty + level * add_qty) / (pos.open_qty + add_qty)
         open_after = pos.open_qty + add_qty
         worst = pos.realized + (pos.stop - new_avg) * pos.side * open_after * mult \
             - self.ctx.broker.commission(pos.symbol, add_qty + open_after)

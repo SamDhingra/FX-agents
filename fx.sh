@@ -38,6 +38,14 @@ case "${1:-help}" in
                </dev/null >"$lf" 2>&1 &
              echo "Backtest started in the background. Progress and results: dashboard → Backtests."
              echo "Follow the log with: tail -f $lf" ;;
+  research)  # strategy research grid → playbook (≈10 min, low priority, own container). The running app picks
+             # up the new playbook by itself within a few minutes.   ./fx.sh research [--tfs 3min 5min ...]
+             need_env; mkdir -p logs; lf="logs/research-$(date +%Y%m%d-%H%M%S).log"
+             echo "Building image (quiet)..."; BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/research-build.log 2>&1 || { echo "build failed — see logs/research-build.log"; exit 1; }
+             nohup $DC run -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python run_research.py --workers 1 "${@:2}" \
+               </dev/null >"$lf" 2>&1 &
+             echo "Research started in the background (about 10 minutes). Results: dashboard → Playbook."
+             echo "Follow the log with: tail -f $lf" ;;
   backup)    ts=$(date +%Y%m%d-%H%M); mkdir -p backups
              for j in journal journal_shadow; do
                $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
@@ -50,7 +58,7 @@ case "${1:-help}" in
   vnc)       echo "On your Mac:  ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem -L 5900:localhost:5900 ubuntu@<server-ip>"
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
-./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days] | backtest [days] [opts]
+./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days] | backtest [days] [opts] | research
         backup | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE

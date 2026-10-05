@@ -110,13 +110,22 @@ async def build(cfg, args):
     ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book, news)
     ctx.oracle = getattr(feed, "oracle", None)          # replays: precomputed per-bar signals
     from fxagents.agents.setup_first import SetupFirstTrader, build_shadow
+    from fxagents.agents.playbook_trader import PlaybookAgent, PlaybookHolder, PlaybookTrader
     sel_mode = cfg["selector"].get("mode", "hourly_pick")
-    trader = SetupFirstTrader(ctx) if sel_mode == "setup_first" else TraderAgent(ctx)
+    sc0 = cfg.get("shadow", {}) or {}
+    ctx.playbook = PlaybookHolder()
+    playbook_agent = None
+    if "playbook" in (sel_mode, sc0.get("mode") if sc0.get("enabled") else None):
+        playbook_agent = PlaybookAgent(ctx, ctx.playbook)
+    if sel_mode == "playbook":
+        trader = PlaybookTrader(ctx)
+    else:
+        trader = SetupFirstTrader(ctx) if sel_mode == "setup_first" else TraderAgent(ctx)
     ctx.selection_mode = sel_mode
     notifier = NotifierAgent(ctx)
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
               trader, RiskAgent(ctx), PositionManagerAgent(ctx), JournalAgent(ctx), notifier,
-              MonitorAgent(ctx)]
+              MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
     for a in agents:
         a.start()
     # 90-day setup map (heatmap + setup-first prior): loaded now, built/rebuilt in the background
@@ -133,7 +142,7 @@ async def build(cfg, args):
     ctx.shadow_info = {"enabled": False}
     sc = cfg.get("shadow", {}) or {}
     if sc.get("enabled"):
-        sc.setdefault("mode", "hourly_pick" if sel_mode == "setup_first" else "setup_first")
+        sc.setdefault("mode", "hourly_pick" if sel_mode != "hourly_pick" else "setup_first")
         sctx, sagents, sfeed = build_shadow(ctx, state.equity)
         sctx.oracle = ctx.oracle
         for a in sagents:

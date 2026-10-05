@@ -370,14 +370,14 @@ class OandaBroker(Broker):
                 raise OrderRejected(f"already {('long' if p.side > 0 else 'short')} {sym}; no opposite-side entry")
         pos.stop = stop
         px, tid, filled = await self._market(pos, qty, "initial")
-        pos.legs.append(Leg(filled, px, self.state.now, "initial"))
+        pos.add_leg(Leg(filled, px, self.state.now, "initial"))
         pos.meta["trades"] = [{"id": tid, "units": filled}]
         self.managed[tid] = pos
         return px
 
     async def add(self, pos, qty, ref_price):
         px, tid, filled = await self._market(pos, qty, "pyramid")
-        pos.legs.append(Leg(filled, px, self.state.now, "pyramid"))
+        pos.add_leg(Leg(filled, px, self.state.now, "pyramid"))
         pos.meta.setdefault("trades", []).append({"id": tid, "units": filled})
         self.managed[tid] = pos
         return px

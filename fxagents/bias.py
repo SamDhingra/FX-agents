@@ -14,7 +14,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .indicators import pivots
 
 DEFAULT_WEIGHTS = {"d": 0.40, "h4": 0.35, "h1": 0.25}
 
@@ -26,20 +25,23 @@ def _ohlc(df: pd.DataFrame, rule: str, offset: str | None = None) -> pd.DataFram
 
 
 def structure_state(htf: pd.DataFrame, swing: int) -> pd.DataFrame:
-    """Per completed HTF bar: structure state and the swing levels that would invalidate it."""
-    piv = sorted(pivots(htf, swing, swing), key=lambda p: (p.known_at, p.idx))
-    C = htf["close"].to_numpy()
-    st = np.zeros(len(C)); hi_lv = np.full(len(C), np.nan); lo_lv = np.full(len(C), np.nan)
-    ptr, last_h, last_l, cur = 0, np.nan, np.nan, 0
+    """Per completed HTF bar: structure state and the swing levels that would invalidate it.
+
+    Swing levels come from structure.swing_levels (raw fractals, applied in the order they are
+    confirmed), so the state at bar i is exactly what was knowable at bar i. The older version reduced
+    the whole history first, which let a later swing erase an earlier one before it was confirmed."""
+    from .structure import pivots_arr, swing_levels
+    H, L = htf["high"].to_numpy(dtype=float), htf["low"].to_numpy(dtype=float)
+    C = htf["close"].to_numpy(dtype=float)
+    lv = swing_levels(pivots_arr(H, L, swing, swing, reduce=False), len(C))
+    st = np.zeros(len(C))
+    cur = 0
     for i in range(len(C)):
-        while ptr < len(piv) and piv[ptr].known_at <= i:
-            p = piv[ptr]; ptr += 1
-            if p.kind == "H": last_h = p.price
-            else: last_l = p.price
-        if not np.isnan(last_h) and C[i] > last_h: cur = 1
-        if not np.isnan(last_l) and C[i] < last_l: cur = -1
-        st[i], hi_lv[i], lo_lv[i] = cur, last_h, last_l
-    return pd.DataFrame({"state": st, "swing_hi": hi_lv, "swing_lo": lo_lv}, index=htf.index)
+        h, l = lv["hi"][i], lv["lo"][i]
+        if not np.isnan(h) and C[i] > h: cur = 1
+        if not np.isnan(l) and C[i] < l: cur = -1
+        st[i] = cur
+    return pd.DataFrame({"state": st, "swing_hi": lv["hi"], "swing_lo": lv["lo"]}, index=htf.index)
 
 
 def _known(frame: pd.DataFrame, period: pd.Timedelta) -> pd.DataFrame:

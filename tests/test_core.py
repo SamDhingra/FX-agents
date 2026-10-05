@@ -301,3 +301,34 @@ def test_jev_advisory_gate_sizes_instead_of_blocking():
     assert lo["size_mult"] == 0.5 and mid["size_mult"] == 0.75 and hi["size_mult"] == 1.0
     jc["advisory_floor"] = 0.2
     assert not jev_gate({"quality": 0.1, "confidence": 0.9}, jc)
+
+
+def test_pnl_after_partial_then_add_is_not_overbooked():
+    """Long 1 @100, bank half @110, add 0.5 @110, close all @110 → +10 (5 from the partial, 5 on the rest)."""
+    from fxagents.broker import PaperBroker
+    from fxagents.models import Position
+    cfg = dict(CFG); cfg["mode"] = "sim"
+    st = LiveState(); st.now = pd.Timestamp("2026-09-30 10:00", tz=TZ)
+    br = PaperBroker(cfg, st, Bus()); br._slip = lambda s, side: 0.0; br.commission = lambda s, q: 0.0
+    br.mult = lambda s: 1.0; br.round_px = lambda s, px: px; br.guard_entry = lambda *a: None
+    pos = Position("XAUUSD", 1, "t", 90.0, 90.0, 10.0, 1.0, st.now)
+    asyncio.run(br.open(pos, 1.0, 100.0))
+    asyncio.run(br.reduce(pos, 0.5, 110.0))
+    asyncio.run(br.add(pos, 0.5, 110.0))
+    assert pos.avg_entry == 105.0 and pos.open_qty == 1.0
+    asyncio.run(br.close(pos, 110.0))
+    assert abs(pos.realized - 10.0) < 1e-9
+
+
+def test_bias_frame_has_no_look_ahead():
+    """The bias at a decision time is the same whether or not later hours exist."""
+    from fxagents.bias import bias_frame
+    from fxagents.indicators import resample_ohlc
+    for seed in (1, 4):                       # price paths where the old whole-history swing reduction leaked
+        m1 = synth_1m(25000, 0.012, pd.Timestamp("2026-05-01", tz=TZ), 45, seed, TZ)
+        h1 = resample_ohlc(m1, "1h")
+        when = h1.index[150:] + pd.Timedelta("1h")
+        full = bias_frame(h1, when)
+        for t in when[::3]:
+            part = bias_frame(h1[h1.index + pd.Timedelta("1h") <= t], pd.DatetimeIndex([t]))
+            assert part["score"].iloc[0] == full.loc[t, "score"], (seed, t)

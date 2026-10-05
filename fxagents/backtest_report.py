@@ -94,8 +94,35 @@ def book_report(path: str | Path, start_equity: float) -> dict | None:
         "pyramided": sum(1 for t in trades if (t["adds"] or 0) > 0),
         "kill_switch": len(kills), "kill_dates": [str(k["ts"])[:10] for k in kills],
     }
+    by_instrument = {}
+    for sym in sorted({t["symbol"] for t in trades}):
+        tt = [t for t in trades if t["symbol"] == sym]
+        r_ = [t["r_multiple"] or 0.0 for t in tt]
+        w_, l_ = [x for x in r_ if x > 0], [x for x in r_ if x < 0]
+        cum, curve, peak, dd = 0.0, [], 0.0, 0.0
+        for t in tt:
+            cum += t["realized"] or 0.0
+            peak = max(peak, cum); dd = min(dd, cum - peak)
+            curve.append({"date": (t["closed"] or "")[:10], "pnl": round(cum, 2)})
+        daily = {}
+        for c in curve:
+            daily[c["date"]] = c["pnl"]
+        by_instrument[sym] = {
+            "summary": {"trades": len(tt), "win_rate": round(len(w_) / len(tt), 3) if tt else 0.0,
+                        "sum_r": round(sum(r_), 2), "avg_r": round(sum(r_) / len(tt), 3) if tt else 0.0,
+                        "profit_factor": round(sum(w_) / -sum(l_), 2) if l_ else None,
+                        "pnl": round(sum(t["realized"] or 0 for t in tt), 2), "max_dd": round(dd, 2),
+                        "pyramided": sum(1 for t in tt if (t["adds"] or 0) > 0)},
+            "pnl_daily": [{"date": d, "pnl": v} for d, v in sorted(daily.items())],
+            "months": sorted(_group(tt, lambda t: (t["closed"] or "")[:7]), key=lambda x: x["key"]),
+            "by_setup": sorted(_group(tt, lambda t: (t["strategy"] or "").split(":")[0]), key=lambda x: -x["sum_r"]),
+            "by_tf": sorted(_group(tt, lambda t: (t["strategy"] or ":?").split(":")[1].split("@")[0] if ":" in (t["strategy"] or "") else "?"),
+                            key=lambda x: -x["sum_r"]),
+            "by_hour": sorted(_group(tt, lambda t: t["hour"]), key=lambda x: x["key"] if x["key"] is not None else -1),
+            "by_exit": sorted(_group(tt, lambda t: (t["exit_reason"] or "").split(":")[0]), key=lambda x: -x["n"]),
+            "trades": tt[-200:][::-1]}
     return {
-        "summary": summary, "equity_daily": eq_daily, "days": day_list,
+        "summary": summary, "equity_daily": eq_daily, "days": day_list, "by_instrument": by_instrument,
         "months": sorted(months, key=lambda x: x["key"]),
         "by_symbol": sorted(_group(trades, lambda t: t["symbol"]), key=lambda x: -x["sum_r"]),
         "by_setup": sorted(_group(trades, lambda t: (t["strategy"] or "").split(":")[0]), key=lambda x: -x["sum_r"]),
@@ -213,6 +240,8 @@ def filter_whatif(journal: str | Path, cfg: dict) -> list[dict] | None:
         entry, stop = float(s["entry"]), float(s["stop"])
         if (entry - stop) * side <= 0:
             continue
+        if abs(entry - C[i0]) > 2 * atr[i0]:
+            continue          # the history doesn't match this journal (e.g. a run made on other data) — don't guess
         m = Mgmt.from_cfg(cfg, bar_minutes=int(pd.Timedelta(tf).total_seconds() // 60))
         if abs(entry - stop) < m.min_stop_atr * atr[i0]:            # the live risk agent widens these
             stop = entry - side * m.min_stop_atr * atr[i0]
