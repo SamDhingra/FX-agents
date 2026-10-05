@@ -73,7 +73,7 @@ def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
     std = Mgmt.from_cfg(cfg, bar_minutes=bm)
     out = {"std": std}
     if tf in SCALP_TFS:
-        out["scalp"] = Mgmt(rr=1.0, partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r, pyramid=False,
+        out["scalp"] = Mgmt(rr=1.0, partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r, pyramid=False,
                             max_adds=0, add_frac=0.0, max_hold_bars=max(2, int(30 / bm)),
                             min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
     return out
@@ -143,6 +143,13 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
                     avg = (avg * open_q + fill * q) / (open_q + q)
                     open_q += q
                     adds += 1
+        # 4) continuous trail: after the first target, the stop follows the best mid price `trail_gap_r` behind
+        if m.trail_gap_r > 0 and step >= 1:
+            ns = px_in + side * (mfe - m.trail_gap_r) * R
+            if (ns - stop_px) * side >= 0.1 * R:          # live only re-sends the stop on a ≥0.1R improvement
+                if (mkt - ns) * side <= 0:                  # gave back more than the gap inside this bar → out at market
+                    return done(mkt, "trail_stop", j)
+                stop_px = ns
     return done(C[j] - side * hs, "end", j)
 
 

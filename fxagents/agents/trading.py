@@ -551,6 +551,19 @@ class PositionManagerAgent(Agent):
                                                             "msg": f"stop → {pos.stop} (locks +{pos.r_now(pos.stop):.2f}R)"})
             await self.maybe_pyramid(pos, level, mult, bar)
 
+        # 3) continuous trail: after the first target, the stop follows the best price `trail_gap_r` behind,
+        #    so profit is locked between the 1R steps too. Re-sent only on a ≥0.1R improvement.
+        gap = float(self.m.get("trail_gap_r", 0) or 0)
+        if gap > 0 and pos.stage >= 1 and pos.risk_per_unit:
+            new_stop = pos.entry + pos.side * (pos.mfe_r - gap) * pos.risk_per_unit
+            if (new_stop - pos.stop) * pos.side >= 0.1 * pos.risk_per_unit:
+                if (bar.close - new_stop) * pos.side <= 0:      # gave back more than the gap inside this bar
+                    return await self.close(pos, bar.close, "trail_stop")
+                await broker.move_stop(pos, new_stop)
+                pos.log(now, "stop_moved", stop=pos.stop, stage=pos.stage, why="trail")
+                await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
+                                                            "msg": f"trail stop → {pos.stop} (locks +{pos.r_now(pos.stop):.2f}R)"})
+
     async def maybe_pyramid(self, pos: Position, level: float, mult: float, bar: Bar):
         pc = self.m["pyramid"]
         if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled or pos.meta.get("no_pyramid"):

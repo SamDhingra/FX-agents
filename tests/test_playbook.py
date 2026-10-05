@@ -251,3 +251,32 @@ def test_risk_and_manager_apply_scalp_profile_and_symbol_cap(tmp_path):
     c = float(ctx.store.df["close"].iloc[-1])
     asyncio.run(pm.on_bar(Bar("XAUUSD", ctx.state.now - pd.Timedelta("1min"), c, c + 0.1, c - 0.1, c, 1.0)))
     assert s2.status == "closed" and s2.exit_reason == "max_hold"
+
+
+def test_stop_trails_between_steps_after_first_target(tmp_path):
+    ctx = make_ctx(tmp_path, [])
+    ctx.cfg["management"] = {**ctx.cfg["management"], "trail_gap_r": 0.75,
+                             "pyramid": {**ctx.cfg["management"]["pyramid"], "max_adds": 0}}
+    risk = RiskAgent(ctx); risk.start()
+    pm = PositionManagerAgent(ctx); pm.start()
+    px = float(ctx.store.df["close"].iloc[-1])
+    ctx.state.now = pd.Timestamp("2026-09-30 09:45", tz=TZ)
+    sig = Signal("XAUUSD", "b:5m@pb-d", 1, px, px - 5.0, NOW, "t", {"atr": 4.0}, None, rr=1.0)
+    rec = {"ts": NOW.isoformat(), "symbol": "XAUUSD", "strategy": "b:5m@pb-d", "side": "LONG", "entry": px, "stop": px - 5}
+    asyncio.run(risk.on_request({"signal": sig, "grade": {"quality": 0.6, "confidence": 0.6, "source": "stub"},
+                                 "record": rec, "playbook": {"max_per_symbol": 2, "mgmt": "std"}}))
+    pos = next(iter(ctx.state.positions.values()))
+    R, e = pos.risk_per_unit, pos.entry
+
+    def bar(hi, close, minute):
+        ctx.state.now = pd.Timestamp(f"2026-09-30 09:{minute}", tz=TZ)
+        asyncio.run(pm.on_bar(Bar("XAUUSD", ctx.state.now - pd.Timedelta("1min"), close, hi, close - 0.01, close, 1.0)))
+
+    bar(e + 1.05 * R, e + 1.0 * R, 50)                       # first target: partial; best +1.05R → stop +0.30R
+    assert pos.partial_done and abs(pos.r_now(pos.stop) - 0.30) < 0.02
+    bar(e + 1.6 * R, e + 1.5 * R, 51)                        # best +1.6R → stop follows to +0.85R
+    assert abs(pos.r_now(pos.stop) - 0.85) < 0.02
+    bar(e + 1.65 * R, e + 1.6 * R, 52)                       # < 0.1R better → no new stop order
+    assert abs(pos.r_now(pos.stop) - 0.85) < 0.02
+    bar(e + 2.4 * R, e + 0.9 * R, 53)                        # spikes to +2.4R then closes below the trail → out
+    assert pos.status == "closed" and pos.exit_reason == "trail_stop"

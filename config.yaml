@@ -137,6 +137,7 @@ management:
   partial_at_target: 0.5       # bank 50% at the first target
   lock_r: 0.1                  # stop moves to +0.1R (into profit) when the target is hit
   trail_step_r: 1.0            # each further +1R step trails the stop up one step
+  trail_gap_r: 0.75            # after the first target the stop also follows the best price 0.75R behind (0 = off)
   pyramid:
     enabled: true
     max_adds: 2

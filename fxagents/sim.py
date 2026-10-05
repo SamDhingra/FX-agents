@@ -21,6 +21,7 @@ class Mgmt:
     partial: float = 0.5
     lock_r: float = 0.1
     trail_step_r: float = 1.0
+    trail_gap_r: float = 0.0          # >0: once the first target is hit, the stop also follows the best price this far behind (R)
     pyramid: bool = True
     max_adds: int = 2
     add_frac: float = 0.5
@@ -32,7 +33,7 @@ class Mgmt:
     def from_cfg(cls, cfg, rr: float | None = None, bar_minutes: int = 5) -> "Mgmt":
         m, r = cfg["management"], cfg["risk"]
         return cls(rr=rr or m["rr_initial"], partial=m["partial_at_target"], lock_r=m["lock_r"],
-                   trail_step_r=m["trail_step_r"], pyramid=m["pyramid"]["enabled"],
+                   trail_step_r=m["trail_step_r"], trail_gap_r=float(m.get("trail_gap_r", 0) or 0), pyramid=m["pyramid"]["enabled"],
                    max_adds=m["pyramid"]["max_adds"], add_frac=m["pyramid"]["add_size_frac"],
                    max_hold_bars=int(cfg["sessions"]["max_hold_minutes"] / bar_minutes),
                    min_stop_atr=r["min_stop_atr"], max_stop_pct=r["max_stop_pct_of_trade_value"])
@@ -84,6 +85,10 @@ def simulate_outcome(O, H, L, C, i0: int, side: int, entry: float, stop: float, 
                 trial = units + [(lvl, m.add_frac)]
                 if worst_case_after_add(trial, realized, stop_r) >= 0:
                     units = trial
+        if m.trail_gap_r > 0 and step >= 1 and mfe - m.trail_gap_r - stop_r >= 0.1:
+            if c <= mfe - m.trail_gap_r:
+                return _close(realized, units, c, "trail_stop", j - i0, mfe, mae, step)
+            stop_r = mfe - m.trail_gap_r
         if flat_mask[j]:
             return _close(realized, units, c, "session_flat", j - i0, mfe, mae, step)
     j = min(n - 1, i0 + m.max_hold_bars)
