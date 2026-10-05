@@ -41,7 +41,7 @@ phone and laptop.
 | **Risk** | The hard gate: stop required, stop ≤ **10% of trade value**, size = 0.5% of equity at risk, max positions, entry windows, news blackouts, kill switch. |
 | **PositionManager** | At **1R**, it banks 50% and moves the stop to **+0.1R (in profit)**. At each further +1R it trails the stop up one step and **pyramids** (only if Jev rates continuation as likely **and** the worst case after the add is still ≥ $0). All positions are flattened at 15:50 NY. |
 | **Journal** | SQLite store of every trade, every management event (partial, stop move, pyramid), every Jev decision (inputs → outputs), every signal taken or skipped with the reason, and the equity curve. |
-| **Notifier** | Push notifications to your phone (ntfy and/or Telegram) for entries, exits, stop-to-profit, pyramids, kill switch, promotions and the daily summary. |
+| **Notifier** | Push notifications to your phone (Telegram and/or ntfy), grouped: entries, exits, kill switch and the daily summary arrive at once; partials, stop moves and adds are folded into the trade's exit message (on Telegram the exit replies to its entry, so each trade is one thread); news, bias and strategy updates come as one silent digest per hour (`notifications.grouping`). |
 | **Monitor** | Kill switch at −2% for the day or −6% from the equity peak. Flattens any broker position that has no working stop. Alerts on stale data or silent agents. Rolls the day at 17:00 NY. |
 
 ### Strategies (in `fxagents/strategies/`)

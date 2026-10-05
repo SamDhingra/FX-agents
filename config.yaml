@@ -126,6 +126,7 @@ sessions:
     - ["02:00", "05:00"]   # London killzone
     - ["08:30", "11:30"]   # NY AM (incl. 10–11 Silver Bullet)
     - ["13:30", "15:30"]   # NY PM
+    - ["20:00", "23:59"]   # Asia (overnight spreads are wider on indices; the 60% gate still applies to them)
   flatten_at: "15:50"      # day trading: all positions closed here
   max_hold_minutes: 240
 
@@ -188,6 +189,10 @@ notifications:
   telegram_bot_token: ""       # or set TELEGRAM_BOT_TOKEN
   telegram_chat_id: ""         # or set TELEGRAM_CHAT_ID
   events: [entry, exit, stop_to_profit, pyramid, kill_switch, agent_down, promotion, daily_summary, news, bias]
+  grouping:
+    fold_trade_updates: true   # partials / stop moves / adds go into the trade's exit message, not separate pushes
+    digest_minutes: 60         # news, bias and strategy updates arrive as one message per hour (0 = send each at once)
+    digest_events: [news, bias, promotion]
 
 dashboard:
   host: 0.0.0.0                # reachable over Tailscale from your phone

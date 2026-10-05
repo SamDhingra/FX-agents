@@ -59,8 +59,16 @@ class JournalAgent(Agent):
 
 
 class NotifierAgent(Agent):
-    """Pushes to your phone via ntfy and/or Telegram. Silent (log only) when neither is configured."""
+    """Pushes to your phone via ntfy and/or Telegram. Silent (log only) when neither is configured.
+
+    Grouped, so the phone only buzzes for what matters:
+      • immediate: entries, exits, kill switch, agent down, the daily summary
+      • folded into the trade: partials, stop moves and adds are not sent on their own; the exit message
+        lists them (Telegram: the exit is a reply to its entry, so each trade reads as one thread)
+      • digest: news heads-ups, bias changes and strategy/playbook updates are collected and sent as one
+        message every `digest_minutes`"""
     name = "notifier"
+    TRADE_UPDATES = {"partial", "stop_to_profit", "pyramid"}
 
     def start(self):
         super().start()
@@ -71,24 +79,36 @@ class NotifierAgent(Agent):
         self.tg_token = n.get("telegram_bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self.tg_chat = n.get("telegram_chat_id") or os.environ.get("TELEGRAM_CHAT_ID", "")
         self.enabled = bool(self.ntfy or (self.tg_token and self.tg_chat)) and self.cfg["mode"] != "sim"
+        g = n.get("grouping") or {}
+        self.fold = bool(g.get("fold_trade_updates", True))
+        self.digest_minutes = float(g.get("digest_minutes", 60))
+        self.digest_events = set(g.get("digest_events", ["news", "bias", "promotion"]))
+        self.digest: list[tuple[str, str, str]] = []
+        self.last_flush = None
+        self.trade_notes: dict[str, list[str]] = {}
+        self.tg_msg: dict[str, int] = {}
         self.sent: list[dict] = []
         b = self.bus
         b.subscribe("position_opened", self.on_open)
         b.subscribe("position_updated", self.on_update)
         b.subscribe("position_closed", self.on_close)
         b.subscribe("alert", self.on_alert)
-        b.subscribe("promotion", lambda e: self.send("promotion", "🧠 Strategy promoted", e["msg"]))
-        b.subscribe("daily_summary", lambda e: self.send("daily_summary", "📒 Daily summary", e["msg"]))
+        b.subscribe("clock", self.on_clock)
+        b.subscribe("promotion", lambda e: self.queue("promotion", "🧠 Strategy promoted", e["msg"]))
+        b.subscribe("daily_summary", self.on_daily)
 
-    async def send(self, event: str, title: str, body: str, priority: str = "default", record: bool = True):
+    async def send(self, event: str, title: str, body: str, priority: str = "default", record: bool = True,
+                   reply_to: int | None = None) -> int | None:
+        """Send now. Returns the Telegram message id (for threading) when there is one."""
         self.beat()
-        if event not in self.events:
-            return
+        if event not in self.events and event != "digest":
+            return None
         self.sent.append({"ts": str(self.now()), "event": event, "title": title, "body": body})
         if record:
             self.state.alert("info" if priority == "default" else "warn", f"{title} — {body}", event=event)
         if not self.enabled:
-            return
+            return None
+        mid = None
         try:
             async with httpx.AsyncClient(timeout=8) as c:
                 if self.ntfy:
@@ -97,30 +117,89 @@ class NotifierAgent(Agent):
                                           "Priority": "high" if priority != "default" else "default",
                                           "Tags": event})
                 if self.tg_token and self.tg_chat:
-                    await c.post(f"https://api.telegram.org/bot{self.tg_token}/sendMessage",
-                                 json={"chat_id": self.tg_chat, "text": f"*{title}*\n{body}", "parse_mode": "Markdown"})
+                    payload = {"chat_id": self.tg_chat, "text": f"<b>{_html(title)}</b>\n{_html(body)}", "parse_mode": "HTML",
+                               "disable_notification": priority == "low"}
+                    if reply_to:
+                        payload["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
+                    r = await c.post(f"https://api.telegram.org/bot{self.tg_token}/sendMessage", json=payload)
+                    try:
+                        mid = r.json().get("result", {}).get("message_id")
+                    except Exception:  # noqa: BLE001
+                        mid = None
         except Exception as e:
             self.log.warning("notify failed: %s", e)
+        return mid
 
+    # ── digest ──
+    async def queue(self, event: str, title: str, body: str):
+        if event not in self.events:
+            return
+        self.state.alert("info", f"{title} — {body}", event=event)
+        if event in self.digest_events and self.digest_minutes > 0:
+            self.digest.append((event, title, body))
+        else:
+            await self.send(event, title, body, record=False)
+
+    async def on_clock(self, now):
+        if self.last_flush is None:
+            self.last_flush = now
+        if self.digest and (now - self.last_flush).total_seconds() >= self.digest_minutes * 60:
+            await self.flush(now)
+
+    async def flush(self, now=None):
+        if not self.digest:
+            return
+        items, self.digest = self.digest, []
+        self.last_flush = now or self.now()
+        lines = [f"• {t}: {b}" for _, t, b in items]
+        await self.send("digest", f"FX-Agents · {len(items)} update{'s' if len(items) != 1 else ''}",
+                        "\n".join(lines), priority="low", record=False)
+
+    async def on_daily(self, e):
+        await self.flush()
+        await self.send("daily_summary", "📒 Daily summary", e["msg"])
+
+    # ── trades ──
     async def on_open(self, pos):
         side = "LONG" if pos.side > 0 else "SHORT"
-        await self.send("entry", f"▶ {side} {pos.symbol}",
-                        f"{pos.strategy}: {pos.initial_qty:g} @ {pos.entry} SL {pos.stop} "
-                        f"(Jev {pos.jev_quality:.2f}/{pos.jev_confidence:.2f} {pos.jev_source})")
+        self.trade_notes[pos.id] = []
+        mid = await self.send("entry", f"▶ {side} {pos.symbol}",
+                              f"{pos.strategy}: {pos.initial_qty:g} @ {pos.entry} SL {pos.stop} "
+                              + (f"(Jev {pos.jev_quality:.2f}/{pos.jev_confidence:.2f} {pos.jev_source})"
+                                 if pos.jev_quality is not None and pos.jev_confidence is not None else ""))
+        if mid:
+            self.tg_msg[pos.id] = mid
 
     async def on_update(self, ev):
-        e = ev["event"]
-        if e in ("stop_to_profit", "pyramid"):
-            await self.send(e, f"{'🔒' if e == 'stop_to_profit' else '➕'} {ev['position'].symbol}", ev["msg"])
+        e, pos = ev["event"], ev["position"]
+        if e not in self.TRADE_UPDATES:
+            return
+        if self.fold:
+            self.trade_notes.setdefault(pos.id, []).append(ev["msg"])
+            self.state.alert("info", f"{pos.symbol}: {ev['msg']}", event=e)
+        elif e in ("stop_to_profit", "pyramid"):
+            await self.send(e, f"{'🔒' if e == 'stop_to_profit' else '➕'} {pos.symbol}", ev["msg"],
+                            reply_to=self.tg_msg.get(pos.id))
 
     async def on_close(self, ev):
         p = ev["position"]
         emoji = "✅" if p.realized > 0 else "❌"
-        await self.send("exit", f"{emoji} {p.symbol} closed", f"{p.strategy} {p.exit_reason} @ {ev['price']}: "
-                                                            f"${p.realized:,.2f} (adds {p.adds}, stage {p.stage})")
+        notes = self.trade_notes.pop(p.id, [])
+        body = f"{p.strategy} {p.exit_reason} @ {ev['price']}: ${p.realized:,.2f}"
+        if notes:
+            body += "\n" + "\n".join(f"· {x}" for x in notes)
+        await self.send("exit", f"{emoji} {p.symbol} closed", body, reply_to=self.tg_msg.pop(p.id, None))
 
     async def on_alert(self, a):
-        await self.send(a.get("event", "kill_switch"), a.get("title", "⚠ Alert"), a["msg"], priority="high", record=False)
+        ev = a.get("event", "kill_switch")
+        if ev in self.digest_events:
+            await self.queue(ev, a.get("title", "Update"), a["msg"])
+            return
+        await self.send(ev, a.get("title", "⚠ Alert"), a["msg"], priority="high", record=False)
+
+
+def _html(x: str) -> str:
+    return str(x).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 # These agents only act when there is something to do (a request, a signal, a notification), so a quiet
