@@ -141,8 +141,13 @@ class OandaFeed:
         names = ",".join(self.syms.values())
         res = await self.c.req("GET", self.c.acct("/instruments"), params={"instruments": names})
         by = {i["name"]: i for i in res.get("instruments", [])}
-        for sym, name in self.syms.items():
+        for sym, name in list(self.syms.items()):
             i = by.get(name)
+            if i is None and self.cfg["instruments"][sym].get("trade", True) is False:
+                log.warning("%s: %s isn't offered on this OANDA account — dropped (it was watch-only)", sym, name)
+                self.cfg["instruments"].pop(sym, None)
+                self.syms.pop(sym, None)
+                continue
             if i is None:
                 raise SystemExit(f"{sym}: instrument {name} is not tradeable on this OANDA account "
                                  f"(available here: {', '.join(sorted(by)) or 'none'})")

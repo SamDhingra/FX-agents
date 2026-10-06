@@ -321,3 +321,15 @@ def test_catch_up_bars_are_backfilled_not_published_as_live():
     assert back and all((fake.now.tz_convert("America/New_York") - x.ts) > pd.Timedelta("10min") for x in back)
     assert live and all((fake.now.tz_convert("America/New_York") - x.ts) <= pd.Timedelta("10min") for x in live)
     assert len(live) <= 10 * len(BASE["instruments"])
+
+
+def test_watch_only_instrument_missing_at_the_broker_is_dropped_not_fatal():
+    cfg, fake, c, st, bus, feed, b = setup()
+    from tests.fake_oanda import SPECS
+    saved = SPECS.pop("AUD_USD")
+    try:
+        assert cfg["instruments"]["AUDUSD"].get("trade") is False
+        run(feed.qualify())
+        assert "AUDUSD" not in cfg["instruments"] and "AUDUSD" not in feed.syms
+    finally:
+        SPECS["AUD_USD"] = saved
