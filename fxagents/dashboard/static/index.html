@@ -541,6 +541,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmt = (x, d=2) => x==null||isNaN(x) ? "—" : Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const fpx = x => fmt(x, x!=null && Math.abs(x) < 20 ? 5 : 2);   // prices: forex needs 5 decimals
 const money = (x, d=2) => x==null ? "—" : (x<0?"−":"") + "$" + fmt(Math.abs(x), d);
 const smoney = (x, d=0) => x==null ? "—" : (x>0?"+":x<0?"−":"") + "$" + fmt(Math.abs(x), d);
 const sPip = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1) + " pips";
@@ -627,12 +628,12 @@ function bias(s){
     const pos = Math.round((b.score+1)/2*100);
     const pd = b.pd_pos==null ? null : Math.round(b.pd_pos*100);
     return `<div class="bias">
-      <div style="display:flex;align-items:center;gap:8px"><div><div class="sym">${sym}</div><div class="px num">${fmt(s.prices[sym]??b.price)}</div></div>
+      <div style="display:flex;align-items:center;gap:8px"><div><div class="sym">${sym}</div><div class="px num">${fpx(s.prices[sym]??b.price)}</div></div>
       <span class="sp" style="flex:1"></span><span class="state ${st}">${esc(b.state)}</span></div>
       <div class="tfs"><div class="tf">Daily${arrow(b.d)}</div><div class="tf">4H${arrow(b.h4)}</div><div class="tf">1H${arrow(b.h1)}</div></div>
       <div class="gauge" title="composite ${b.score}"><i style="left:calc(${pos}% - 2px)"></i></div>
       <div class="pdbar"><span>score <b class="num ${cls(b.score)}">${b.score>0?"+":""}${fmt(b.score,2)}</b></span><span>${pd==null?"":pd>100?"above PDH":pd<0?"below PDL":pd>50?`premium ${pd}%`:`discount ${100-pd}%`}</span></div>
-      <div class="mini"><span>PDH ${fmt(b.pdh)}</span><span>PDL ${fmt(b.pdl)}</span>${b.accuracy!=null?`<span>accuracy ${Math.round(b.accuracy*100)}% (${b.accuracy_n})</span>`:""}${b.audit_p!=null?`<span>Jev audit ${fmt(b.audit_p,2)}</span>`:""}</div>
+      <div class="mini"><span>PDH ${fpx(b.pdh)}</span><span>PDL ${fpx(b.pdl)}</span>${b.accuracy!=null?`<span>accuracy ${Math.round(b.accuracy*100)}% (${b.accuracy_n})</span>`:""}${b.audit_p!=null?`<span>Jev audit ${fmt(b.audit_p,2)}</span>`:""}</div>
     </div>`;
   }).join("");
 }
@@ -653,7 +654,7 @@ function positions(s){
         <i class="rtick" style="left:calc(${x(sR_)}% - 1px);background:var(--warn);width:3px;height:14px;top:-4px" title="stop"></i></div>
       <div class="rlabels"><span>stop ${sR(sR_,1)} ${p.stop_in_profit?"🔒":""}</span><span class="num"><b class="${cls(p.r_now)}">${sR(p.r_now)}</b> now</span><span>step ${p.stage}${p.adds?` · +${p.adds} adds`:""}</span></div>
       <div class="rlabels"><span>stop ${sPip(p.locked_pips)}</span><span class="num"><b class="${cls(p.pips_now)}">${sPip(p.pips_now)}</b></span><span>risk ${fmt(p.stop_pips,0)} pips</span></div>
-      <div class="mini"><span><b>${lots(p.lots)}</b> (${fmt(p.qty,p.qty%1?2:0)} units)</span><span>avg ${fmt(p.avg_entry)}</span><span>stop ${fmt(p.stop)}</span><span>Jev ${fmt(p.jev_quality,2)}/${fmt(p.jev_confidence,2)}</span>${p.risk_mult<1?`<span>size ×${p.risk_mult}</span>`:""}</div>
+      <div class="mini"><span><b>${lots(p.lots)}</b> (${fmt(p.qty,p.qty%1?2:0)} units)</span><span>avg ${fpx(p.avg_entry)}</span><span>stop ${fpx(p.stop)}</span><span>Jev ${fmt(p.jev_quality,2)}/${fmt(p.jev_confidence,2)}</span>${p.risk_mult<1?`<span>size ×${p.risk_mult}</span>`:""}</div>
     </div>`;
   }).join("");
 }
@@ -821,7 +822,7 @@ function renderTrades(){
   }
   $("#trades").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Bias</th><th class=r>Lots</th><th class=r>Entry</th><th class=r>Exit</th><th class=r>Pips</th><th class=r>R</th><th class=r>P&amp;L</th><th>Exit</th></tr>` +
     rows.map((t,i)=>`<tr class="row" data-i="${i}"><td class="mut">${md(t.closed)} ${hm(t.closed)}</td><td><b>${t.symbol}</b></td><td><span class="side ${t.side[0]}">${t.side}</span></td>
-      <td>${esc(t.strategy)}</td><td class="mut">${esc(t.bias_mode||"")}</td><td class="r num">${fmt(t.lots,2)}${t.lots_max>t.lots?`<small class="mut">→${fmt(t.lots_max,2)}</small>`:""}</td><td class="r num">${fmt(t.entry)}</td><td class="r num">${fmt(t.exit_price)}</td>
+      <td>${esc(t.strategy)}</td><td class="mut">${esc(t.bias_mode||"")}</td><td class="r num">${fmt(t.lots,2)}${t.lots_max>t.lots?`<small class="mut">→${fmt(t.lots_max,2)}</small>`:""}</td><td class="r num">${fpx(t.entry)}</td><td class="r num">${fpx(t.exit_price)}</td>
       <td class="r num ${cls(t.pips)}">${sPip(t.pips)}</td><td class="r num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</td><td class="r num ${cls(t.realized)}"><b>${smoney(t.realized)}</b></td><td class="mut">${esc(t.exit_reason)}</td></tr>`).join("") + `</table>`
     : `<div class="empty">No trades match.</div>`;
   $$("#trades tr.row").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));

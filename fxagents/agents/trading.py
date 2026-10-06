@@ -428,6 +428,9 @@ class RiskAgent(Agent):
             pos.meta.update(no_pyramid=True, full_exit=True, max_hold=30)
         if gate.get("rr"):
             pos.rr = gate["rr"]
+        if pb.get("mgmt") == "trend":            # trend exit profile: first target 2R, no adds, up to 8 hours
+            pos.meta.update(no_pyramid=True, max_hold=480)
+            pos.rr = max(pos.rr, 2.0)
         try:
             px = await self.ctx.broker.open(pos, qty, price)
         except OrderRejected as e:

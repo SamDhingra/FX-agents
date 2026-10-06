@@ -58,7 +58,11 @@ class Policy:
         # 60% rule: estimates of 0.60–0.65 realised ~0.45 in walk-forward (winners regress), so index
         # cells need heavier shrinkage and more trades before their estimate is believed
         "NDQ": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
-        "US30": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30)})
+        "US30": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
+        # forex majors: gold-like selection, one position each (they all move with the dollar → max_open caps the total)
+        "EURUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
+        "GBPUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
+        "AUDUSD": InstrumentRule("core", 0.50, 0.02, 4, 1)})
     index_group: tuple = ("NDQ", "US30")
     index_group_max: int = 1          # NDQ / US30 move together: one index position at a time
     max_open: int = 3
@@ -291,14 +295,14 @@ def params_of(setup: str, variant: str) -> dict:
     raise KeyError(f"{setup}: unknown variant {variant}")
 
 
-SYM_TAG = {"XAUUSD": "xau", "NDQ": "ndq", "US30": "us30", "SPX": "spx"}
+SYM_TAG = {"XAUUSD": "xau", "NDQ": "ndq", "US30": "us30", "SPX": "spx", "EURUSD": "eu", "GBPUSD": "gu", "AUDUSD": "au"}
 
 
 def cell_id(setup: str, tf: str, variant: str, mgmt: str, sym: str = "") -> str:
     import hashlib
     tag = "d" if variant == "default" else hashlib.sha1(variant.encode()).hexdigest()[:4]
     st = SYM_TAG.get(sym, sym.lower()[:4])
-    return f"{setup}:{TF_MIN[tf]}m@pb{'-' + st if st else ''}-{tag}{'-scalp' if mgmt == 'scalp' else ''}"
+    return f"{setup}:{TF_MIN[tf]}m@pb{'-' + st if st else ''}-{tag}{'-' + mgmt if mgmt in ('scalp', 'trend') else ''}"
 
 
 def cells_json(sel: pd.DataFrame) -> list[dict]:

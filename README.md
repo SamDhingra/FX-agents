@@ -252,6 +252,16 @@ days (default 365) of OANDA history, plus the weekly playbook selection replayed
 Writes `data/year_test/<N>d/report.md`, `cells.csv` and `summary.json`, and publishes them to the
 `results` branch on GitHub every 10 minutes and at the end (one-time `./fx.sh publish-setup` creates a
 deploy key with push access to this repo only), so the report can be read without copying it off the server.
+Options: `--tfs 15min 30min 1h`, `--costs raw|both` (raw = an ECN account's 0.0–1 pip spreads plus ~$7/lot
+commission, `research.RAW_SPREAD`), `--classes`, `--symbols`, `--tag`. Watch-only instruments are tested too.
+
+**Trend day trades** (`fxagents/strategies/trend.py`): the 1-hour trend (EMA20/50 or structure) sets the
+direction; `trend_pullback` buys the first dip to the entry-timeframe EMA that closes back above it,
+`trend_breakout` buys a close above the previous N bars' high. 15m/30m/1h only. Every setup on 15m+ is
+also tested with the `trend` exit profile: first target 2R (half banked), the rest trailed, up to 8 hours.
+
+**Forex** (EURUSD, GBPUSD, AUDUSD — USD-quoted, so sizing is the same as gold's): in config as watch-only
+(`trade: false`) until the year test supports them. 1 pip = 0.0001, 1 lot = 100,000 units.
 
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,

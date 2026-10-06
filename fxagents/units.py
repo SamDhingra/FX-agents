@@ -4,13 +4,14 @@ way of reading the same numbers.
 Conventions (override per instrument in config: `pip_size`, `lot_units`):
   XAUUSD  1 pip = $0.10 of price (MT4/MT5 convention, 1 point of gold = 10 pips); 1 lot = 100 oz
           (OANDA units are ounces, so 10 units = 0.10 lot; one IBKR MGC contract = 10 oz = 0.10 lot)
+  forex   1 pip = 0.0001; 1 lot = 100,000 units
   indices 1 pip = 1 index point; 1 lot = $1 per point (one OANDA unit of US30/NAS100/SPX500; one MES
           contract = $5/pt = 5 lots)
 Lots = units × contract multiplier ÷ lot size, so the same position reads the same on either broker."""
 from __future__ import annotations
 
-PIP = {"XAUUSD": 0.1, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0}
-LOT = {"XAUUSD": 100.0, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0}
+PIP = {"XAUUSD": 0.1, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "EURUSD": 0.0001, "GBPUSD": 0.0001, "AUDUSD": 0.0001}
+LOT = {"XAUUSD": 100.0, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "EURUSD": 100000.0, "GBPUSD": 100000.0, "AUDUSD": 100000.0}
 
 
 def pip_size(cfg, sym: str) -> float:

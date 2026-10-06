@@ -39,8 +39,13 @@ log = logging.getLogger("research")
 TFS = ["1min", "3min", "5min", "15min", "30min", "1h"]
 SCALP_TFS = {"1min", "3min", "5min"}
 PEERS = {"NDQ": ["US30"], "US30": ["NDQ"], "XAUUSD": []}
-DEFAULT_SPREAD = {"XAUUSD": 0.40, "SPX": 0.50, "NDQ": 1.50, "US30": 2.50}
-NOT_ON = {"ict_silver_bullet": {"30min", "1h"}, "smt_divergence": set()}   # SB needs bars inside one hour
+DEFAULT_SPREAD = {"XAUUSD": 0.40, "SPX": 0.50, "NDQ": 1.50, "US30": 2.50,
+                  "EURUSD": 0.00014, "GBPUSD": 0.00020, "AUDUSD": 0.00016}
+# A raw-spread ECN account (0.0–1 pip + ~$7 per lot round turn), as an all-in spread per round trip:
+# FX 0.2–0.3 pip raw + 0.7 pip commission; gold 0.12 + 0.07; indices typically commission-free.
+RAW_SPREAD = {"XAUUSD": 0.20, "NDQ": 1.00, "US30": 1.60, "EURUSD": 0.00009, "GBPUSD": 0.00010, "AUDUSD": 0.00010}
+NOT_ON = {"ict_silver_bullet": {"30min", "1h"}, "smt_divergence": set(),
+          "trend_pullback": {"1min", "3min", "5min"}, "trend_breakout": {"1min", "3min", "5min"}}   # SB needs bars inside one hour
 
 
 def research_dir(cfg) -> Path:
@@ -76,6 +81,11 @@ def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
     if tf in SCALP_TFS:
         out["scalp"] = Mgmt(rr=1.0, partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r, pyramid=False,
                             max_adds=0, add_frac=0.0, max_hold_bars=max(2, int(30 / bm)),
+                            min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
+    if bm >= 15:
+        # trend profile: first target 2R (half banked), the rest trailed 1R at a time, no adds, held up to 8 h
+        out["trend"] = Mgmt(rr=2.0, partial=0.5, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r,
+                            pyramid=False, max_adds=0, add_frac=0.0, max_hold_bars=max(2, int(480 / bm)),
                             min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
     return out
 
@@ -325,7 +335,7 @@ def run_job(args) -> list[dict]:
                 keep = [(s, j0) for s, j0 in keep if verify_live_window(st, df, s.i, s.side)]
             for pname, m in profiles.items():
                 busy_until = -1
-                max_hold = 30.0 if pname == "scalp" else float(s_cfg["max_hold_minutes"])
+                max_hold = 30.0 if pname == "scalp" else 480.0 if pname == "trend" else float(s_cfg["max_hold_minutes"])
                 for s, j0 in keep:
                     if j0 <= busy_until:
                         continue

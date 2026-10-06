@@ -20,6 +20,9 @@ SPECS = {
     "SPX500_USD": {"displayPrecision": 1, "tradeUnitsPrecision": 1, "minimumTradeSize": "0.1", "marginRate": "0.05", "px": 6600.0},
     "NAS100_USD": {"displayPrecision": 1, "tradeUnitsPrecision": 1, "minimumTradeSize": "0.1", "marginRate": "0.05", "px": 24500.0},
     "US30_USD": {"displayPrecision": 1, "tradeUnitsPrecision": 1, "minimumTradeSize": "0.1", "marginRate": "0.05", "px": 46500.0},
+    "EUR_USD": {"displayPrecision": 5, "tradeUnitsPrecision": 0, "minimumTradeSize": "1", "marginRate": "0.02", "px": 1.10},
+    "GBP_USD": {"displayPrecision": 5, "tradeUnitsPrecision": 0, "minimumTradeSize": "1", "marginRate": "0.0333", "px": 1.30},
+    "AUD_USD": {"displayPrecision": 5, "tradeUnitsPrecision": 0, "minimumTradeSize": "1", "marginRate": "0.0333", "px": 0.66},
 }
 
 

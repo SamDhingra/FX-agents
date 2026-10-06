@@ -56,11 +56,11 @@ def cell_table(t: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict | None, days: int, cfg) -> str:
+def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict | None, days: int, cfg, label: str = "") -> str:
     L = []
     t = t.copy()
     t["ts"] = pd.to_datetime(t["ts"])
-    L.append(f"# Strategy test — {days} days\n")
+    L.append(f"# Strategy test — {label or f'{days} days'}\n")
     L.append(f"Created {pd.Timestamp.now(tz=cfg['timezone']):%Y-%m-%d %H:%M} NY · trades {t['ts'].min():%Y-%m-%d} → "
              f"{t['ts'].max():%Y-%m-%d} · {len(t):,} simulated trades · {len(cells):,} cells\n")
     L.append("R is per trade in units of its own risk, after spread. Quarters split the period in four equal parts; "
@@ -106,18 +106,19 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
     L.append("")
 
     # 3 · each setup, overall
-    L.append("## 3 · Every setup, overall (default variant, standard exits, all timeframes but 1m)\n")
-    d = t[(t["variant"] == "default") & (t["mgmt"] == "std") & (t["tf"] != "1min")]
+    L.append("## 3 · Every setup, overall (default variant, all timeframes but 1m; std = 1R first target, "
+             "trend = 2R first target, 15m+ only)\n")
+    d = t[(t["variant"] == "default") & (t["mgmt"].isin(["std", "trend"])) & (t["tf"] != "1min")]
     if len(d):
         mid = d["ts"].sort_values().iloc[len(d) // 2]
         rows = []
-        for (setup, sym), g in d.groupby(["setup", "sym"]):
-            rows.append((setup, sym, len(g), (g.r > 0).mean(), g.r.mean(), g[g.ts < mid].r.mean(), g[g.ts >= mid].r.mean()))
-        rows.sort(key=lambda x: (x[0], x[1]))
-        L.append("| setup | sym | trades | win | avg R | first half | second half |")
-        L.append("|---|---|---|---|---|---|---|")
-        for setup, sym, n, w, a, h1, h2 in rows:
-            L.append(f"| {setup} | {sym} | {n} | {w:.0%} | {a:+.3f} | {_fmt(float(h1))} | {_fmt(float(h2))} |")
+        for (setup, sym, mg), g in d.groupby(["setup", "sym", "mgmt"]):
+            rows.append((setup, sym, mg, len(g), (g.r > 0).mean(), g.r.mean(), g[g.ts < mid].r.mean(), g[g.ts >= mid].r.mean()))
+        rows.sort(key=lambda x: (x[0], x[1], x[2]))
+        L.append("| setup | sym | exit | trades | win | avg R | first half | second half |")
+        L.append("|---|---|---|---|---|---|---|---|")
+        for setup, sym, mg, n, w, a, h1, h2 in rows:
+            L.append(f"| {setup} | {sym} | {mg} | {n} | {w:.0%} | {a:+.3f} | {_fmt(float(h1))} | {_fmt(float(h2))} |")
     L.append("")
 
     # 4 · best per setup
@@ -133,19 +134,12 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
     return txt
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("days", nargs="?", type=int, default=365)
-    ap.add_argument("--symbols", nargs="*")
-    ap.add_argument("--classes", nargs="*")
-    ap.add_argument("--workers", type=int, default=1)
-    ap.add_argument("--report-only", action="store_true", help="rebuild the report from an earlier run's trades")
-    a = ap.parse_args()
+def run_one(a, costs: str, tag: str) -> None:
     from . import playbook, research
     from .setup_report import fetch_long
     cfg = load_config()
     base = history_dir(cfg)
-    out = base.parent / "year_test" / f"{a.days}d"
+    out = base.parent / "year_test" / (f"{a.days}d" + (f"_{tag}" if tag else ""))
     out.mkdir(parents=True, exist_ok=True)
     status = out / "status.json"
     t0 = time.time()
@@ -156,6 +150,13 @@ def main() -> int:
         print(f"[{(time.time() - t0) / 60:5.1f} min] {s}", flush=True)
 
     syms = a.symbols or list(cfg["instruments"])
+    for s in syms:                                  # watch-only instruments are tested too (that's the point)
+        cfg["instruments"][s]["trade"] = True
+    if costs == "raw":
+        sc = cfg.setdefault("shadow", {})
+        sc["spread"] = {**(sc.get("spread") or {}), **research.RAW_SPREAD}
+    if a.tfs:
+        cfg.setdefault("playbook", {})["tfs"] = [t for t in a.tfs if t != "1min"] or a.tfs
     cfg["history_dir"] = str(base)
     if not a.report_only:
         stage("fetching history")
@@ -166,7 +167,7 @@ def main() -> int:
     cfg["storage"] = {**cfg["storage"], "db_path": str(out / "journal.sqlite")}   # playbook.json goes here, not live
     if not a.report_only:
         stage("research grid (every setup × variant × instrument × timeframe)")
-        research.run_all(cfg, syms, None, a.classes, a.workers)
+        research.run_all(cfg, syms, a.tfs, a.classes, a.workers)
     t = pd.read_pickle(out / "trades.pkl")
     stage("playbook walk-forward", trades=len(t))
     summary = None
@@ -177,9 +178,31 @@ def main() -> int:
     stage("report")
     cells = cell_table(t)
     cells.round(4).to_csv(out / "cells.csv", index=False)
-    write_report(out, t, cells, summary, a.days, cfg)
+    (out / "run.json").write_text(json.dumps({"days": a.days, "costs": costs, "tfs": a.tfs, "classes": a.classes,
+                                              "symbols": syms, "spreads": (cfg.get("shadow") or {}).get("spread")}, indent=1))
+    write_report(out, t, cells, summary, a.days, cfg, label=f"{a.days} days · costs {costs}"
+                 + (f" · {' '.join(a.tfs)}" if a.tfs else "") + (f" · {tag}" if tag else ""))
     stage("done", trades=len(t), cells=len(cells))
     print((out / "report.md").read_text()[:3000])
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("days", nargs="?", type=int, default=365)
+    ap.add_argument("--symbols", nargs="*")
+    ap.add_argument("--classes", nargs="*")
+    ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--tfs", nargs="*", help="entry timeframes (default: all)")
+    ap.add_argument("--costs", choices=["oanda", "raw", "both"], default="oanda",
+                    help="raw = an ECN account: 0.0–1 pip spreads + ~$7/lot commission (research.RAW_SPREAD); "
+                         "both = run twice, folders <tag>_oanda and <tag>_raw")
+    ap.add_argument("--tag", default="", help="name for this run's folder, e.g. trend_raw → data/year_test/365d_trend_raw")
+    ap.add_argument("--report-only", action="store_true", help="rebuild the report from an earlier run's trades")
+    a = ap.parse_args()
+    costs = ["oanda", "raw"] if a.costs == "both" else [a.costs]
+    for c in costs:
+        tag = "_".join(x for x in (a.tag, c if a.costs == "both" else "") if x)
+        run_one(a, c, tag)
     return 0
 
 

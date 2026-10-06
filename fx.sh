@@ -63,14 +63,15 @@ case "${1:-help}" in
                [[ -f data/backup.sqlite ]] && mv data/backup.sqlite "backups/$j-$ts.sqlite"
              done; ls -lh backups | tail -6 ;;
   yeartest)  # every setup on N days of OANDA history + the weekly playbook replayed on it; publishes the report
-             #   ./fx.sh yeartest [days=365]      (background, ≈1 h; progress published every 10 min)
+             #   ./fx.sh yeartest [days=365] [--tfs 15min 1h] [--costs raw] [--classes …] [--symbols …] [--tag name]
+             #   (background, ≈1 h for everything; progress published every 10 min)
              need_env; days="${2:-365}"; mkdir -p logs; lf="logs/yeartest-$(date +%Y%m%d-%H%M%S).log"
              [[ -f "$HOME/.ssh/fx_results" ]] || echo "note: results won't be published until you run ./fx.sh publish-setup once"
              echo "Building image (quiet)..."; BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/yeartest-build.log 2>&1 || { echo "build failed — see logs/yeartest-build.log"; exit 1; }
              nohup bash -c "
                $DC run -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python -m fxagents.year_test $days ${*:3} </dev/null &
-               pid=\$!; while kill -0 \$pid 2>/dev/null; do sleep 600; ./fx.sh publish $days >/dev/null 2>&1; done
-               wait \$pid; ./fx.sh publish $days" >"$lf" 2>&1 &
+               pid=\$!; while kill -0 \$pid 2>/dev/null; do sleep 600; ./fx.sh publish >/dev/null 2>&1; done
+               wait \$pid; ./fx.sh publish" >"$lf" 2>&1 &
              echo "Started ($days days). Log: tail -f $lf"
              echo "The report is published to GitHub (branch 'results') as it progresses and when it finishes." ;;
   publish-setup) # one-time: a deploy key that can push ONLY to this repo, used to publish test reports
@@ -79,20 +80,22 @@ case "${1:-help}" in
              url=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
              echo; echo "Add this key at https://github.com/$url/settings/keys/new"
              echo "  Title: fx-agents results · tick 'Allow write access' · Add key"; echo; cat "$KEY.pub"; echo ;;
-  publish)   # push data/year_test/<days>d/{report.md,status.json,cells.csv,summary.json} to the 'results' branch
-             days="${2:-365}"; src="data/year_test/${days}d"; KEY="$HOME/.ssh/fx_results"; R="$HOME/fx-results"
+  publish)   # push every data/year_test/<run>/{report.md,status.json,run.json,cells.csv,summary.json} to the 'results' branch
+             KEY="$HOME/.ssh/fx_results"; R="$HOME/fx-results"
              [[ -f "$KEY" ]] || { echo "run ./fx.sh publish-setup first"; exit 1; }
-             [[ -d "$src" ]] || { echo "nothing in $src yet"; exit 1; }
+             ls -d data/year_test/*/ >/dev/null 2>&1 || { echo "no test results yet"; exit 1; }
              url=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
              export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
              if [[ ! -d "$R/.git" ]]; then git init -q -b results "$R"; git -C "$R" remote add origin "git@github.com:$url.git"; fi
              git -C "$R" fetch -q origin results 2>/dev/null && git -C "$R" reset -q --hard origin/results || true
-             mkdir -p "$R/year_test/${days}d"
-             for f in report.md status.json cells.csv summary.json; do [[ -f "$src/$f" ]] && cp "$src/$f" "$R/year_test/${days}d/"; done
-             ls -t logs/yeartest-*.log 2>/dev/null | head -1 | xargs -r tail -n 80 > "$R/year_test/${days}d/log_tail.txt"
+             for d in data/year_test/*/; do                        # every run folder (365d, 365d_trend_raw, …)
+               n=$(basename "$d"); mkdir -p "$R/year_test/$n"
+               for f in report.md status.json run.json cells.csv summary.json; do [[ -f "$d$f" ]] && cp "$d$f" "$R/year_test/$n/"; done
+             done
+             ls -t logs/yeartest-*.log 2>/dev/null | head -1 | xargs -r tail -n 80 > "$R/year_test/log_tail.txt"
              git -C "$R" add -A
-             git -C "$R" -c user.name="fx-server" -c user.email="fx-server@localhost" commit -qm "year test ${days}d $(date '+%F %R')" || true
-             git -C "$R" push -q origin HEAD:results && echo "published: https://github.com/$url/tree/results/year_test/${days}d" ;;
+             git -C "$R" -c user.name="fx-server" -c user.email="fx-server@localhost" commit -qm "test results $(date '+%F %R')" || true
+             git -C "$R" push -q origin HEAD:results && echo "published: https://github.com/$url/tree/results/year_test" ;;
   setup-test) # backtest one setup on the cached history (own folder; research + playbook untouched)
              #   ./fx.sh setup-test london_breakout XAUUSD [--tfs 5min 15min]
              need_env; mkdir -p logs; echo "Building image (quiet)..."
@@ -109,7 +112,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] | publish-setup | publish [days] | pause | resume | flatten | vnc
+        yeartest [days] [opts] | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

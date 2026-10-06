@@ -259,7 +259,7 @@ def test_poll_publishes_only_new_completed_bars_in_order():
         n = await feed.poll_once()
         return n
     n = run(go())
-    assert n == 3 * 3                                            # 3 new minutes × 3 symbols
+    assert n == 3 * len(BASE["instruments"])                    # 3 new minutes × every symbol
     ndq = [x.ts for x in bars if x.symbol == "NDQ"]
     assert ndq == sorted(ndq) and len(set(ndq)) == 3
 
@@ -320,4 +320,4 @@ def test_catch_up_bars_are_backfilled_not_published_as_live():
     run(go())
     assert back and all((fake.now.tz_convert("America/New_York") - x.ts) > pd.Timedelta("10min") for x in back)
     assert live and all((fake.now.tz_convert("America/New_York") - x.ts) <= pd.Timedelta("10min") for x in live)
-    assert len(live) <= 10 * 4
+    assert len(live) <= 10 * len(BASE["instruments"])
