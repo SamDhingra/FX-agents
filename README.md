@@ -263,6 +263,11 @@ also tested with the `trend` exit profile: first target 2R (half banked), the re
 **Forex** (EURUSD, GBPUSD, AUDUSD — USD-quoted, so sizing is the same as gold's): in config as watch-only
 (`trade: false`) until the year test supports them. 1 pip = 0.0001, 1 lot = 100,000 units.
 
+**Bollinger trend continuation** (`fxagents/bb_trend.py`, `./fx.sh bbtest`): a posted NQ strategy coded
+exactly as written — 1m close beyond ≥2 of the 5m/15m/1h BB(20,2) taken from closed candles, stop at the
+5m basis, 1R target, 08:00–12:00 NY, 10-candle cooldown — with OANDA-style fills and spread. Its own
+backtester (not the research grid), so none of the bot's extra filters change the rules.
+
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
 30-minute hold). It runs on the cached OANDA history with the live rules: session windows, the hard

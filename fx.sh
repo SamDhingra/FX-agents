@@ -74,6 +74,16 @@ case "${1:-help}" in
                wait \$pid; ./fx.sh publish" >"$lf" 2>&1 &
              echo "Started ($days days). Log: tail -f $lf"
              echo "The report is published to GitHub (branch 'results') as it progresses and when it finishes." ;;
+  bbtest)    # Bollinger trend-continuation rules on 365 days (needs data/history_365d from ./fx.sh yeartest), both stop
+             # readings × OANDA/raw costs; reports published to GitHub.   ./fx.sh bbtest [symbols…] (default NDQ US30 XAUUSD)
+             need_env; syms="${*:2}"; syms="${syms:-NDQ US30 XAUUSD}"; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/bbtest-build.log 2>&1 || { echo "build failed — see logs/bbtest-build.log"; exit 1; }
+             for mode in fixed trail; do for c in oanda raw; do
+               extra=""; [[ $mode == trail ]] && extra="--trail-basis"
+               $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.bb_trend $syms --days 365 --costs $c $extra \
+                 --out "data/year_test/bb_${mode}_${c}" </dev/null | sed -n '/^## /,/^- no costs/p'
+             done; done
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   publish-setup) # one-time: a deploy key that can push ONLY to this repo, used to publish test reports
              KEY="$HOME/.ssh/fx_results"
              [[ -f "$KEY" ]] || ssh-keygen -q -t ed25519 -N "" -C "fx-agents results ($(hostname))" -f "$KEY"
@@ -112,7 +122,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
