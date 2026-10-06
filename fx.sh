@@ -26,8 +26,12 @@ case "${1:-help}" in
              #   ./fx.sh localize /tmp/server-config.yaml
              [[ -f "${2:-}" ]] || { echo "usage: ./fx.sh localize <copy of your full config.yaml>"; exit 1; }
              [[ -f config.local.yaml ]] && { echo "config.local.yaml already exists — edit it instead"; exit 1; }
-             $DC build fxagents >/dev/null && $DC run --rm --no-deps -T -e FX_NO_LOCAL_CONFIG=1 -v "$(realpath "$2")":/tmp/mine.yaml:ro \
-               fxagents python -m fxagents.config diff /tmp/mine.yaml > config.local.yaml
+             echo "Building image (quiet)..."; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/localize-build.log 2>&1 || { echo "build failed — see logs/localize-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_NO_LOCAL_CONFIG=1 -v "$(realpath "$2")":/tmp/mine.yaml:ro \
+               fxagents python -m fxagents.config diff /tmp/mine.yaml </dev/null > config.local.yaml.tmp \
+               || { rm -f config.local.yaml.tmp; echo "could not compare the configs (see above)"; exit 1; }
+             mv config.local.yaml.tmp config.local.yaml
              echo "Wrote config.local.yaml:"; echo; cat config.local.yaml ;;
   test)      $DC build fxagents && $DC run --rm --no-deps -e FX_NO_LOCAL_CONFIG=1 fxagents python -m pytest -q -p no:cacheprovider ;;
   check)     # read-only broker connection check (OANDA): account, instruments, prices. No orders.
