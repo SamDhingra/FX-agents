@@ -109,13 +109,13 @@ async def build(cfg, args):
         await news.refresh(state.now)
     ctx = Ctx(cfg, bus, state, store, broker, journal, jev, book, news)
     ctx.oracle = getattr(feed, "oracle", None)          # replays: precomputed per-bar signals
-    from fxagents.agents.setup_first import SetupFirstTrader, build_shadow
+    from fxagents.agents.setup_first import SetupFirstTrader, build_shadow, shadow_modes
     from fxagents.agents.playbook_trader import PlaybookAgent, PlaybookHolder, PlaybookTrader
     sel_mode = cfg["selector"].get("mode", "hourly_pick")
-    sc0 = cfg.get("shadow", {}) or {}
+    sh_modes = shadow_modes(cfg)
     ctx.playbook = PlaybookHolder()
     playbook_agent = None
-    if "playbook" in (sel_mode, sc0.get("mode") if sc0.get("enabled") else None):
+    if "playbook" in (sel_mode, *sh_modes):
         playbook_agent = PlaybookAgent(ctx, ctx.playbook)
     if sel_mode == "playbook":
         trader = PlaybookTrader(ctx)
@@ -137,34 +137,41 @@ async def build(cfg, args):
     else:
         ctx.setup_map_agent = SetupMapAgent(ctx, ctx.setup_map, feed if cfg["mode"] != "sim" else None)
         ctx.setup_map_agent.start()
-    # shadow book: same live bars, the other selection mode, virtual fills only (never sends orders)
-    ctx.shadow = None
-    ctx.shadow_info = {"enabled": False}
+    # shadow books: same live bars, other selection modes, virtual fills only (never send orders)
+    ctx.shadow, ctx.shadows = None, {}
+    ctx.book_key = "live"
+    ctx.shadow_info = {"enabled": False, "books": []}
     sc = cfg.get("shadow", {}) or {}
-    if sc.get("enabled"):
-        sc.setdefault("mode", "hourly_pick" if sel_mode != "hourly_pick" else "setup_first")
-        sctx, sagents, sfeed = build_shadow(ctx, state.equity)
+    for i, mode in enumerate(sh_modes):
+        sctx, sagents, sfeed = build_shadow(ctx, state.equity, mode, first=(i == 0))
         sctx.oracle = ctx.oracle
         for a in sagents:
             a.start()
         sfeed.start()                      # after MarketData, so each bar is already stored
-        ctx.shadow = sctx
+        ctx.shadows[mode] = sctx
         sctx.setup_map = ctx.setup_map
         sctx.is_shadow = True
-        sctx.shadow = None
-        info = {"enabled": True, "mode": sc["mode"], "live_mode": sel_mode}
-        ctx.shadow_info = sctx.shadow_info = info
+        sctx.shadow, sctx.shadows = None, {}
         if sc.get("notify_trades"):
-            async def _sh_open(p):
-                await notifier.send("entry", f"Shadow {'LONG' if p.side > 0 else 'SHORT'} {p.symbol}",
-                                    f"{p.strategy}: {p.initial_qty:g} @ {p.entry} SL {p.stop}", record=False)
-            async def _sh_close(ev):
-                p = ev["position"]
-                await notifier.send("exit", f"Shadow {p.symbol} closed",
-                                    f"{p.strategy} {p.exit_reason}: ${p.realized:,.2f}", record=False)
-            sctx.bus.subscribe("position_opened", _sh_open)
-            sctx.bus.subscribe("position_closed", _sh_close)
-        log.info("shadow book: %s (virtual fills, journal %s)", sc["mode"], sctx.journal.path if hasattr(sctx.journal, "path") else "")
+            def _hooks(sctx=sctx, mode=mode):
+                tag = {"setup_first": "setup-first", "hourly_pick": "hourly pick"}.get(mode, mode)
+                async def _sh_open(p):
+                    await notifier.send("entry", f"Shadow ({tag}) {'LONG' if p.side > 0 else 'SHORT'} {p.symbol}",
+                                        f"{p.strategy}: {p.initial_qty:g} @ {p.entry} SL {p.stop}", record=False)
+                async def _sh_close(ev):
+                    p = ev["position"]
+                    await notifier.send("exit", f"Shadow ({tag}) {p.symbol} closed",
+                                        f"{p.strategy} {p.exit_reason}: ${p.realized:,.2f}", record=False)
+                sctx.bus.subscribe("position_opened", _sh_open)
+                sctx.bus.subscribe("position_closed", _sh_close)
+            _hooks()
+        log.info("shadow book: %s (virtual fills, journal %s)", mode, getattr(sctx.journal, "path", ""))
+    if ctx.shadows:
+        ctx.shadow = next(iter(ctx.shadows.values()))      # the first one: what older code paths mean by "shadow"
+        info = {"enabled": True, "mode": next(iter(ctx.shadows)), "books": list(ctx.shadows), "live_mode": sel_mode}
+        ctx.shadow_info = info
+        for sctx in ctx.shadows.values():
+            sctx.shadow_info = info
     ctx.oanda = oanda
     return ctx, feed, agents, ib
 
@@ -191,7 +198,7 @@ async def main(args, cfg=None):
     strategist = next(a for a in agents if a.name == "strategist")
     log.info("mode=%s  broker=%s  selection=%s  shadow=%s  strategies=%d  jev=%s", cfg["mode"],
              "paper-sim" if cfg["mode"] == "sim" else cfg["broker"], ctx.selection_mode,
-             ctx.shadow.selection_mode if ctx.shadow else "off", len(ctx.book.live()), ctx.jev.source)
+             "+".join(ctx.shadows) or "off", len(ctx.book.live()), ctx.jev.source)
 
     bias_agent = next(a for a in agents if a.name == "bias")
     await bias_agent.update_all(ctx.state.now)   # HTF bias before anything can trade
@@ -235,10 +242,10 @@ async def main(args, cfg=None):
         await ctx.bus.publish("flatten_all", "end of simulation")
         s = ctx.journal.summary()
         log.info("SIM DONE: %s | equity $%.2f", s, await ctx.broker.equity())
-        if ctx.shadow:
-            await ctx.shadow.bus.publish("flatten_all", "end of simulation")
-            log.info("SHADOW (%s): %s | equity $%.2f", ctx.shadow.selection_mode, ctx.shadow.journal.summary(),
-                     await ctx.shadow.broker.equity())
+        for sh in ctx.shadows.values():
+            await sh.bus.publish("flatten_all", "end of simulation")
+            log.info("SHADOW (%s): %s | equity $%.2f", sh.selection_mode, sh.journal.summary(),
+                     await sh.broker.equity())
         if server is not None and not args.exit_after_sim:
             log.info("replay finished — dashboard still serving (Ctrl-C to exit)")
             stop = asyncio.Event()

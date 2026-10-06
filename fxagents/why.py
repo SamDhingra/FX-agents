@@ -87,15 +87,13 @@ def main() -> None:
     ap.add_argument("days", nargs="?", type=int, default=2)
     a = ap.parse_args()
     cfg = load_config()
+    from .agents.setup_first import shadow_db_for, shadow_modes
     main_db = cfg["storage"]["db_path"]
-    sc = cfg.get("shadow") or {}
-    p = Path(main_db)
-    shadow_db = sc.get("db_path") or str(p.with_name(p.stem + "_shadow" + (p.suffix or ".sqlite")))
     print(f"Window {a.start}–{a.end} New York, last {a.days} day(s). Entry windows in config: "
           + ", ".join("–".join(w) for w in cfg["sessions"]["entry_windows"]))
     report(main_db, f"REAL book ({cfg['selector'].get('mode', 'hourly_pick')})", a.start, a.end, a.days)
-    if sc.get("enabled"):
-        report(shadow_db, f"SHADOW book ({sc.get('mode', 'setup_first')})", a.start, a.end, a.days)
+    for i, mode in enumerate(shadow_modes(cfg)):
+        report(shadow_db_for(cfg, mode, i == 0), f"SHADOW book ({mode})", a.start, a.end, a.days)
 
 
 if __name__ == "__main__":

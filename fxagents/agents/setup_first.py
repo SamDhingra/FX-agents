@@ -282,13 +282,45 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-def shadow_db_path(main_path: str) -> str:
+MODES = ("hourly_pick", "setup_first", "playbook")
+
+
+def shadow_db_path(main_path: str, mode: str | None = None) -> str:
+    """journal_shadow.sqlite for the first (or only) shadow book, journal_<mode>.sqlite for the others."""
     p = Path(main_path)
-    return str(p.with_name(p.stem + "_shadow" + (p.suffix or ".sqlite")))
+    return str(p.with_name(p.stem + "_" + (mode or "shadow") + (p.suffix or ".sqlite")))
 
 
-def build_shadow(main: Ctx, equity: float):
-    """Create the shadow book. Returns (shadow_ctx, [agents]) — agents are started by the caller."""
+def shadow_modes(cfg) -> list[str]:
+    """The shadow books to run, in order. `shadow.modes: [playbook, setup_first]` runs several side by side;
+    the older single `shadow.mode` still works. The real book's own mode is never duplicated as a shadow."""
+    sc = cfg.get("shadow") or {}
+    if not sc.get("enabled"):
+        return []
+    live = cfg["selector"].get("mode", "hourly_pick")
+    want = sc.get("modes") or [sc.get("mode") or ("hourly_pick" if live != "hourly_pick" else "setup_first")]
+    out = []
+    for m in want:
+        m = str(m).strip()
+        if m not in MODES:
+            log.warning("shadow mode %r ignored (use one of %s)", m, ", ".join(MODES))
+        elif m != live and m not in out:
+            out.append(m)
+    return out
+
+
+def shadow_db_for(cfg, mode: str, first: bool) -> str:
+    sc = cfg.get("shadow") or {}
+    paths = sc.get("db_paths") or {}
+    if paths.get(mode):
+        return paths[mode]
+    if first and sc.get("db_path"):
+        return sc["db_path"]
+    return shadow_db_path(cfg["storage"]["db_path"], None if first else mode)
+
+
+def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool = True):
+    """Create one shadow book. Returns (shadow_ctx, [agents], feed) — agents are started by the caller."""
     from ..bus import Bus
     cfg = main.cfg
     sc = cfg.get("shadow", {}) or {}
@@ -298,9 +330,9 @@ def build_shadow(main: Ctx, equity: float):
     broker = ShadowBroker(cfg, st, bus, {k: float(v) for k, v in (sc.get("spread") or {}).items()})
     broker.cash = float(equity)
     st.equity = st.equity_peak = st.day_start_equity = float(equity)
-    journal = Journal(sc.get("db_path") or shadow_db_path(cfg["storage"]["db_path"]))
+    mode = mode or (shadow_modes(cfg) or ["setup_first"])[0]
+    journal = Journal(shadow_db_for(cfg, mode, first))
     sctx = Ctx(cfg, bus, st, main.store, broker, journal, main.jev, main.book, main.news)
-    mode = sc.get("mode", "setup_first")
     if mode == "playbook":
         from .playbook_trader import PlaybookHolder, PlaybookTrader
         sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
@@ -310,4 +342,5 @@ def build_shadow(main: Ctx, equity: float):
     agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), JournalAgent(sctx), MonitorAgent(sctx)]
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
+    sctx.book_key = mode
     return sctx, agents, feed

@@ -250,8 +250,7 @@ class MonitorAgent(Agent):
             self.summary_sent = now.date()
             s = self.ctx.journal.summary(since=now.normalize().isoformat())
             msg = f"{s['trades']} trades, P&L ${s['pnl']:,.2f}, win {s['win_rate']:.0%}, {s['sum_r']:+.2f}R"
-            sh = getattr(self.ctx, "shadow", None)
-            if sh is not None:
+            for sh in (getattr(self.ctx, "shadows", None) or {}).values():
                 t = sh.journal.summary(since=now.normalize().isoformat())
                 msg += (f"\nShadow ({sh.selection_mode}): {t['trades']} trades, {t['sum_r']:+.2f}R, "
                         f"P&L ${t['pnl']:,.2f}")

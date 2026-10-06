@@ -49,7 +49,8 @@ def round_step(x: float, step: float) -> float:
 def signal_tfs(cfg) -> list[str]:
     """Entry timeframes to fan out: the strategy book's, plus the playbook's when a book runs it."""
     tfs = [str(t) for t in cfg["timeframes"]["entry"]]
-    modes = {cfg["selector"].get("mode", "hourly_pick"), ((cfg.get("shadow") or {}).get("mode") if (cfg.get("shadow") or {}).get("enabled") else None)}
+    from .setup_first import shadow_modes
+    modes = {cfg["selector"].get("mode", "hourly_pick"), *shadow_modes(cfg)}
     if "playbook" in modes:
         from ..playbook import policy_from_cfg
         for t in policy_from_cfg(cfg).tfs:

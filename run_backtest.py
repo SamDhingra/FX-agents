@@ -68,6 +68,10 @@ def prepare(args) -> tuple[dict, Path, dict]:
     cfg["starting_equity"] = equity
     cfg["storage"]["db_path"] = str(out / "journal.sqlite")
     (cfg.setdefault("shadow", {}))["enabled"] = not args.no_shadow
+    modes = cfg["shadow"].pop("modes", None)          # a backtest report compares the real book with ONE shadow
+    if modes and not cfg["shadow"].get("mode"):
+        cfg["shadow"]["mode"] = modes[0]
+    cfg["shadow"].pop("db_paths", None)
     cfg["shadow"]["db_path"] = str(out / "journal_shadow.sqlite")
     cfg["shadow"]["notify_trades"] = False
     cfg["jev"]["enabled"] = args.jev == "live"

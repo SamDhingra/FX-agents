@@ -56,15 +56,25 @@ def snapshot(ctx) -> dict:
         "registry": st.strategy_registry, "jev_live": ctx.jev.live,
         "bias": st.bias, "news": st.news[:40], "news_source": st.news_source, "news_block": st.news_block,
         "min_align": cfg["bias"]["min_align"],
-        "book": "shadow" if getattr(ctx, "is_shadow", False) else "live",
+        "book": getattr(ctx, "book_key", "shadow") if getattr(ctx, "is_shadow", False) else "live",
         "selection_mode": getattr(ctx, "selection_mode", "hourly_pick"),
         "shadow": getattr(ctx, "shadow_info", None),
     }
 
 
-def compare_start(ctx) -> str | None:
-    """When the shadow book started recording (first thing it journaled) — comparisons start there."""
-    sh = getattr(ctx, "shadow", None)
+def shadow_of(ctx, name: str | None):
+    """'shadow' (older links) → the first shadow book; a mode name → that book; anything else → None."""
+    shs = getattr(ctx, "shadows", None) or {}
+    if not name or name == "live":
+        return None
+    if name == "shadow":
+        return getattr(ctx, "shadow", None)
+    return shs.get(name)
+
+
+def compare_start(ctx, sh=None) -> str | None:
+    """When a shadow book started recording (first thing it journaled) — comparisons start there."""
+    sh = sh if sh is not None else getattr(ctx, "shadow", None)
     if sh is None:
         return None
     row = sh.journal.db.execute("SELECT MIN(t) FROM (SELECT MIN(ts) t FROM signals UNION ALL "
@@ -72,13 +82,37 @@ def compare_start(ctx) -> str | None:
     return row[0] if row and row[0] else None
 
 
-def compare(ctx, rng: str) -> dict:
-    sh = ctx.shadow
+def _range_since(now, rng: str) -> str | None:
+    import pandas as pd
+    if now is None:
+        return None
+    return {"today": now.normalize().isoformat(), "week": (now.normalize() - pd.Timedelta(days=6)).isoformat()}.get(rng)
+
+
+def league(ctx, rng: str) -> dict:
+    """Every book (real + each shadow) over the SAME period: from the range start or the youngest shadow
+    book's first record, whichever is later — so a book that started yesterday isn't compared on a week."""
+    shs = getattr(ctx, "shadows", None) or {}
+    since = _range_since(ctx.state.now, rng)
+    for sh in shs.values():
+        st = compare_start(ctx, sh)
+        if st and (since is None or st > since):
+            since = st
+    rows = []
+    for key, c in (("live", ctx), *shs.items()):
+        sm = c.journal.summary(since=since)
+        rows.append({"book": key, "mode": getattr(c, "selection_mode", ""), "trades": sm["trades"],
+                     "wins": round(sm["trades"] * sm["win_rate"]), "win_rate": sm["win_rate"], "sum_r": sm["sum_r"],
+                     "avg_r": sm.get("avg_r", 0.0), "pnl": sm["pnl"],
+                     "open": sum(1 for p in c.state.positions.values() if p.status == "open")})
+    return {"since": since, "rows": rows}
+
+
+def compare(ctx, rng: str, sh=None) -> dict:
+    sh = sh if sh is not None else ctx.shadow
     now = ctx.state.now
-    start = compare_start(ctx)
-    since = {"today": now.normalize().isoformat() if now is not None else None,
-             "week": (now.normalize() - __import__("pandas").Timedelta(days=6)).isoformat() if now is not None else None,
-             "all": None}.get(rng)
+    start = compare_start(ctx, sh)
+    since = _range_since(now, rng)
     if start and (since is None or start > since):
         since = start
     books = {}
@@ -105,17 +139,16 @@ def compare(ctx, rng: str) -> dict:
         rows.append(row)
     for k in books:
         books[k].pop("days")
-    return {"range": rng, "since": since, "started": start, "books": books, "days": rows[::-1], "curve": curve}
+    return {"range": rng, "since": since, "started": start, "books": books, "days": rows[::-1], "curve": curve,
+            "vs": getattr(sh, "book_key", "shadow"), "league": league(ctx, rng)}
 
 
 def build_app(ctx) -> FastAPI:
     app = FastAPI(title="FX-Agents", docs_url=None, redoc_url=None)
 
     def bk(request):
-        """?book=shadow → the shadow book's context (same endpoints, same shapes)."""
-        if request.query_params.get("book") == "shadow" and getattr(ctx, "shadow", None) is not None:
-            return ctx.shadow
-        return ctx
+        """?book=<mode> (or the older ?book=shadow) → that shadow book's context (same endpoints, same shapes)."""
+        return shadow_of(ctx, request.query_params.get("book")) or ctx
     token = (ctx.cfg["dashboard"].get("token") or "").strip()
     tv_secret = (ctx.cfg["tradingview"].get("webhook_secret") or "").strip()
 
@@ -232,7 +265,7 @@ def build_app(ctx) -> FastAPI:
             w.writeheader(); w.writerows(rows)
         return PlainTextResponse(buf.getvalue(), media_type="text/csv",
                                  headers={"Content-Disposition": "attachment; filename="
-                                          + ("journal_shadow.csv" if c is not ctx else "journal.csv")})
+                                          + (f"journal_{getattr(c, 'book_key', 'shadow')}.csv" if c is not ctx else "journal.csv")})
 
     @app.post("/api/trades/{trade_id}/note")
     async def note(trade_id: str, request: Request):
@@ -276,7 +309,7 @@ def build_app(ctx) -> FastAPI:
         if not authed(t):
             await websocket.close(code=4401)
             return
-        c = ctx.shadow if websocket.query_params.get("book") == "shadow" and getattr(ctx, "shadow", None) else ctx
+        c = shadow_of(ctx, websocket.query_params.get("book")) or ctx
         await websocket.accept()
         try:
             while True:
@@ -327,7 +360,7 @@ def build_app(ctx) -> FastAPI:
 
     def _real(sid, since):
         n, tot = 0, 0.0
-        for j in [ctx.journal] + ([ctx.shadow.journal] if getattr(ctx, "shadow", None) else []):
+        for j in [ctx.journal] + [sh.journal for sh in (getattr(ctx, "shadows", None) or {}).values()]:
             s_ = j.live_stats(strategy=sid, since=since)
             n += s_["n"]; tot += s_["n"] * s_["expectancy"]
         return {"n": n, "expectancy": round(tot / n, 3) if n else 0.0}
@@ -386,7 +419,7 @@ def build_app(ctx) -> FastAPI:
         out["ready"] = True
         # how the playbook has done since it went live (whichever book runs it)
         live = {}
-        for name, c in (("live", ctx), ("shadow", getattr(ctx, "shadow", None))):
+        for name, c in (("live", ctx), *(("shadow", sh) for sh in (getattr(ctx, "shadows", None) or {}).values())):
             if c is None or getattr(c, "selection_mode", "") != "playbook":
                 continue
             rows = [t for t in c.journal.trades(limit=2000) if t.get("status") == "closed" and "@pb-" in (t.get("strategy") or "")]
@@ -431,11 +464,13 @@ def build_app(ctx) -> FastAPI:
         return JSONResponse(json.loads(p.read_text()))
 
     @app.get("/api/compare")
-    async def api_compare(request: Request, range: str = "week"):
+    async def api_compare(request: Request, range: str = "week", vs: str = "shadow"):
         need(request)
         if getattr(ctx, "shadow", None) is None:
             return {"enabled": False}
-        return {"enabled": True, **compare(ctx, range if range in ("today", "week", "all") else "week")}
+        sh = shadow_of(ctx, vs) or ctx.shadow
+        return {"enabled": True, "book_list": list(getattr(ctx, "shadows", {}) or {}),
+                **compare(ctx, range if range in ("today", "week", "all") else "week", sh)}
 
     @app.get("/healthz")
     async def health():

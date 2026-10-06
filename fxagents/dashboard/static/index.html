@@ -377,7 +377,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
       <span class="chip hide-m" id="mode">SIM</span>
       <span class="chip hide-m num" id="clock">—</span>
       <span class="sp"></span>
-      <div class="seg" id="bookSeg" hidden><button data-b="live" class="on">Live</button><button data-b="shadow" class="ghost">Shadow</button></div>
+      <div class="seg" id="bookSeg" hidden><button data-b="live" class="on">Live</button></div>
       <button class="btn icon" id="theme" title="Theme"><svg><use href="#i-sun"/></svg></button>
       <button class="btn icon" id="pause" title="Pause / resume"><svg><use href="#i-pause"/></svg></button>
       <button class="btn red" id="flatten">Flatten</button>
@@ -428,8 +428,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <section class="page" id="p-compare">
       <div class="filters" style="align-items:center">
         <div class="seg" id="cmpSeg"><button data-r="today">Today</button><button data-r="week" class="on">7 days</button><button data-r="all">Since start</button></div>
+        <div class="seg" id="cmpVs" hidden></div>
         <span class="sp" style="flex:1"></span>
-        <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
+        <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" id="shCsv" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
       </div>
       <div id="cmpBody"><div class="card"><div class="empty">Loading…</div></div></div>
     </section>
@@ -545,7 +546,7 @@ const cls = x => x>0 ? "up" : x<0 ? "down" : "";
 const hm = iso => iso ? iso.slice(11,16) : "";
 const md = iso => iso ? new Date(iso.slice(0,10)+"T12:00").toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "";
 let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = null;
-const q = path => BOOK === "shadow" ? path + (path.includes("?") ? "&" : "?") + "book=shadow" : path;
+const q = path => BOOK !== "live" ? path + (path.includes("?") ? "&" : "?") + "book=" + encodeURIComponent(BOOK) : path;
 
 /* ── navigation ── */
 const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
@@ -901,11 +902,17 @@ function renderAgents(s){
 /* ── compare (live vs shadow) ── */
 const modeName = m => m === "setup_first" ? "setup-first" : m === "playbook" ? "playbook" : "hourly pick";
 const ModeName = m => { const x = modeName(m); return x.charAt(0).toUpperCase() + x.slice(1); };
-let cmpRange = "week", CMP = null;
+let cmpRange = "week", CMP = null, cmpVs = null;
 $$("#cmpSeg button").forEach(b => b.onclick = () => { cmpRange = b.dataset.r;
   $$("#cmpSeg button").forEach(x => x.classList.toggle("on", x === b)); loadCompare(); });
 async function loadCompare(){
-  try{ CMP = await (await fetch("api/compare?range="+cmpRange,{credentials:"same-origin"})).json(); }catch(e){ CMP = null; }
+  try{ CMP = await (await fetch("api/compare?range="+cmpRange+(cmpVs?"&vs="+encodeURIComponent(cmpVs):""),{credentials:"same-origin"})).json(); }catch(e){ CMP = null; }
+  const bs = (CMP && CMP.book_list) || [];
+  if(CMP && CMP.vs) cmpVs = CMP.vs;
+  const vsEl = $("#cmpVs"); vsEl.hidden = bs.length < 2;
+  vsEl.innerHTML = bs.map(b => `<button data-v="${b}" class="ghost ${b===cmpVs?"on":""}">vs ${modeName(b)}</button>`).join("");
+  vsEl.querySelectorAll("button").forEach(x => x.onclick = () => { cmpVs = x.dataset.v; loadCompare(); });
+  if(cmpVs) $("#shCsv").href = "api/journal.csv?book=" + encodeURIComponent(cmpVs);
   renderCompare();
 }
 function renderCompare(){
@@ -914,6 +921,14 @@ function renderCompare(){
   if(!CMP.enabled){ el.innerHTML = `<div class="card"><div class="empty">The shadow book is off. Set <code>shadow.enabled: true</code> in config.yaml and restart.</div></div>`; return; }
   const L = CMP.books.live, G = CMP.books.shadow;
   const nl = `Live · ${modeName(L.mode)}`, ng = `Shadow · ${modeName(G.mode)}`;
+  const LG = CMP.league && CMP.league.rows || [];
+  const bestR = Math.max(...LG.map(r=>r.sum_r)), anyT = LG.some(r=>r.trades);
+  const league = LG.length > 2 ? `<div class="card c12"><h3>All books <span class="sp"></span><span class="mut" style="font-weight:500">same period for every book${CMP.league.since ? " · since " + md(CMP.league.since) + " " + hm(CMP.league.since) + " NY" : ""}</span></h3>
+    <div class="tbl"><table><tr><th>Book</th><th class="r">Trades</th><th class="r">Winners</th><th class="r">Win rate</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r">P&amp;L</th><th class="r hide-m">Open</th></tr>
+    ${LG.map(r => `<tr><td><b>${r.book==="live"?"Live":"Shadow"}</b> <span class="tag ${r.book==="live"?"acc":"gh"}">${modeName(r.mode)}</span>${anyT && r.sum_r===bestR ? ` <span class="mut" title="most R">●</span>` : ""}</td>
+      <td class="r num">${r.trades}</td><td class="r num">${r.wins}</td><td class="r num">${r.trades?Math.round(r.win_rate*100)+"%":"—"}</td>
+      <td class="r num ${cls(r.sum_r)}"><b>${sR(r.sum_r)}</b></td><td class="r num hide-m ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num ${cls(r.pnl)}">${smoney(r.pnl)}</td><td class="r num hide-m">${r.open}</td></tr>`).join("")}</table></div>
+    <div class="mut" style="font-size:12px;margin-top:8px">Judge on total R and trade count together — a book with a handful of trades can lead by luck. Under ~20 trades each, it's too early to switch.</div></div>` : "";
   const diff = +(G.sum_r - L.sum_r).toFixed(2), few = Math.min(L.trades, G.trades) < 20;
   let verdict;
   if(!L.trades && !G.trades) verdict = `<b>No closed trades yet</b><span class="mut">The comparison fills in as trades close in either book.</span>`;
@@ -946,7 +961,7 @@ function renderCompare(){
     return `<tr><td>${md(d.date)}</td><td class="r num hide-m">${d.live.trades}</td><td class="r num ${cls(d.live.r)}">${sR(d.live.r)}</td><td class="r num ${cls(d.live.pnl)} hide-m">${smoney(d.live.pnl)}</td>
       <td class="r num hide-m">${d.shadow.trades}</td><td class="r num ${cls(d.shadow.r)}">${sR(d.shadow.r)}</td><td class="r num ${cls(d.shadow.pnl)} hide-m">${smoney(d.shadow.pnl)}</td><td class="r">${better}</td></tr>`; }).join("");
   el.innerHTML = `
-    <div class="grid">
+    <div class="grid">${league}
       <div class="card c12"><div class="verdict">${verdict}</div>
         <div class="mut" style="font-size:12px;margin-top:6px">${CMP.started ? "Shadow started " + md(CMP.started) + " " + hm(CMP.started) + " NY · " : ""}both books trade the same live bars; shadow fills are simulated with an estimated spread.</div></div>
       <div class="card c5"><h3>Head to head</h3><table class="vs"><tr><th></th><th class="r l">${nl}</th><th class="r g">${ng}</th></tr>${vs}</table></div>
@@ -1005,7 +1020,7 @@ function renderSetupMap(){
   $$("#smSym .fchip").forEach(b => b.onclick = () => { sm.sym = b.dataset.v; loadSetupMap(); });
   const st = SM && SM.status ? SM.status : {state:"missing"};
   $("#smState").textContent = st.state === "building" ? `building… started ${hm(st.started)}` : st.state === "error" ? `last build failed: ${st.error||""}` : "";
-  $("#smRebuild").disabled = st.state === "building" || BOOK === "shadow";
+  $("#smRebuild").disabled = st.state === "building" || BOOK !== "live";
   $("#smMeta").textContent = st.built_at ? `${Math.round(st.days)} days · ${fmt(st.trades,0)} backtested trades · built ${md(st.built_at)}` : "";
   if(!SM || !SM.grid){
     $("#hm").innerHTML = `<div class="empty">${st.state === "building" ? "Building the setup map from 90 days of history… this takes a few minutes. Trading carries on meanwhile." : st.state === "error" ? "The last build failed — try Rebuild." : "No setup map yet. It builds automatically in the background."}</div>`;
@@ -1359,11 +1374,11 @@ function renderReport(){
 let lastAlert = null;
 function render(s){
   S = s;
-  const sh = s.shadow && s.shadow.enabled;
-  $("#bookSeg").hidden = !sh;
-  if(!sh && BOOK === "shadow") setBook("live");
-  if(sh) $("#shtext").textContent = `Shadow book · ${modeName(s.shadow.mode)} on the same live bars — virtual fills, no orders are sent`;
-  $("#mode").textContent = s.book === "shadow" ? "SHADOW" : s.mode.toUpperCase();
+  const sh = s.shadow && s.shadow.enabled, books = sh ? (s.shadow.books || [s.shadow.mode]) : [];
+  bookButtons(books);
+  if(BOOK !== "live" && !books.includes(BOOK)) setBook(BOOK !== "live" && books.length ? books[0] : "live");
+  if(sh && BOOK !== "live") $("#shtext").textContent = `Shadow book · ${modeName(BOOK)} on the same live bars — virtual fills, no orders are sent`;
+  $("#mode").textContent = s.book !== "live" ? "SHADOW" : s.mode.toUpperCase();
   const st = $("#status"); st.className = "chip " + (s.trading_enabled?"live":"halt"); st.textContent = s.trading_enabled ? "Trading" : "Halted";
   st.title = s.halt_reason || "";
   $("#pause").innerHTML = `<svg><use href="#i-${s.trading_enabled?"pause":"play"}"/></svg>`;
@@ -1401,20 +1416,27 @@ function connect(){
   ws.onmessage = e => { if(ws === WS) render(JSON.parse(e.data)); };
   ws.onclose = () => { if(ws === WS) setTimeout(connect, 2000); };
 }
+let BOOKS_SIG = "";
+function bookButtons(books){
+  // Live + one button per shadow book ("Shadow" when there's only one, the mode's name when there are several)
+  const sig = books.join(","); if(sig === BOOKS_SIG) return; BOOKS_SIG = sig;
+  const el = $("#bookSeg"); el.hidden = !books.length;
+  el.innerHTML = `<button data-b="live">Live</button>` + books.map(b => `<button data-b="${b}" class="ghost">${books.length > 1 ? ModeName(b) : "Shadow"}</button>`).join("");
+  el.querySelectorAll("button").forEach(x => { x.classList.toggle("on", x.dataset.b === BOOK); x.onclick = () => setBook(x.dataset.b); });
+}
 function setBook(b){
   if(b === BOOK) return;
   BOOK = b;
   try{ localStorage.setItem("fx-book", b); }catch(e){}
   $$("#bookSeg button").forEach(x => x.classList.toggle("on", x.dataset.b === b));
-  document.body.classList.toggle("shadow", b === "shadow");
+  document.body.classList.toggle("shadow", b !== "live");
   const old = WS; WS = null; if(old) old.close();
   connect();
   fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
   if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades();
 }
 $$("#bookSeg button").forEach(x => x.onclick = () => setBook(x.dataset.b));
-try{ const b = localStorage.getItem("fx-book"); if(b === "shadow"){ BOOK = "shadow"; document.body.classList.add("shadow");
-  $$("#bookSeg button").forEach(x => x.classList.toggle("on", x.dataset.b === "shadow")); } }catch(e){}
+try{ const b = localStorage.getItem("fx-book"); if(b && b !== "live"){ BOOK = b; document.body.classList.add("shadow"); } }catch(e){}
 fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
 connect();
 setInterval(()=>{ if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades(); if(page==="compare") loadCompare(); }, 15000);

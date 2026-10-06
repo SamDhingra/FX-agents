@@ -167,9 +167,9 @@ class StrategistAgent(Agent):
             self.log.warning("forward record: %s", e)
 
     def real_stats(self, sid: str, since: str | None) -> dict:
-        """Actual trades of this version: the account's journal + the shadow book's journal."""
+        """Actual trades of this version: the account's journal + every shadow book's journal."""
         n, tot, w = 0, 0.0, 0.0
-        books = [self.ctx.journal] + ([self.ctx.shadow.journal] if getattr(self.ctx, "shadow", None) else [])
+        books = [self.ctx.journal] + [sh.journal for sh in (getattr(self.ctx, "shadows", None) or {}).values()]
         for j in books:
             s = j.live_stats(strategy=sid, since=since)
             n += s["n"]; tot += s["n"] * s["expectancy"]; w += s["n"] * s["win_rate"]
