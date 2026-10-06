@@ -1,0 +1,8 @@
+ Container fx-agents-fxagents-run-fbea8c498f89 Creating 
+ Container fx-agents-fxagents-run-fbea8c498f89 Created 
+[  0.0 min] fetching history
+  pulling 365 days of NDQ 1-minute candles from OANDA …
+    354,099 bars, 2025-10-06 → 2026-10-06
+  pulling 365 days of US30 1-minute candles from OANDA …
+    353,919 bars, 2025-10-06 → 2026-10-06
+[  0.6 min] research grid (every setup × variant × instrument × timeframe)
