@@ -62,6 +62,37 @@ case "${1:-help}" in
                $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
                [[ -f data/backup.sqlite ]] && mv data/backup.sqlite "backups/$j-$ts.sqlite"
              done; ls -lh backups | tail -6 ;;
+  yeartest)  # every setup on N days of OANDA history + the weekly playbook replayed on it; publishes the report
+             #   ./fx.sh yeartest [days=365]      (background, ≈1 h; progress published every 10 min)
+             need_env; days="${2:-365}"; mkdir -p logs; lf="logs/yeartest-$(date +%Y%m%d-%H%M%S).log"
+             [[ -f "$HOME/.ssh/fx_results" ]] || echo "note: results won't be published until you run ./fx.sh publish-setup once"
+             echo "Building image (quiet)..."; BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/yeartest-build.log 2>&1 || { echo "build failed — see logs/yeartest-build.log"; exit 1; }
+             nohup bash -c "
+               $DC run -T --rm --no-deps -e FX_MODE=sim fxagents nice -n 15 python -m fxagents.year_test $days ${*:3} </dev/null &
+               pid=\$!; while kill -0 \$pid 2>/dev/null; do sleep 600; ./fx.sh publish $days >/dev/null 2>&1; done
+               wait \$pid; ./fx.sh publish $days" >"$lf" 2>&1 &
+             echo "Started ($days days). Log: tail -f $lf"
+             echo "The report is published to GitHub (branch 'results') as it progresses and when it finishes." ;;
+  publish-setup) # one-time: a deploy key that can push ONLY to this repo, used to publish test reports
+             KEY="$HOME/.ssh/fx_results"
+             [[ -f "$KEY" ]] || ssh-keygen -q -t ed25519 -N "" -C "fx-agents results ($(hostname))" -f "$KEY"
+             url=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
+             echo; echo "Add this key at https://github.com/$url/settings/keys/new"
+             echo "  Title: fx-agents results · tick 'Allow write access' · Add key"; echo; cat "$KEY.pub"; echo ;;
+  publish)   # push data/year_test/<days>d/{report.md,status.json,cells.csv,summary.json} to the 'results' branch
+             days="${2:-365}"; src="data/year_test/${days}d"; KEY="$HOME/.ssh/fx_results"; R="$HOME/fx-results"
+             [[ -f "$KEY" ]] || { echo "run ./fx.sh publish-setup first"; exit 1; }
+             [[ -d "$src" ]] || { echo "nothing in $src yet"; exit 1; }
+             url=$(git remote get-url origin | sed -E 's#https://github.com/##; s#git@github.com:##; s#\.git$##')
+             export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+             if [[ ! -d "$R/.git" ]]; then git init -q -b results "$R"; git -C "$R" remote add origin "git@github.com:$url.git"; fi
+             git -C "$R" fetch -q origin results 2>/dev/null && git -C "$R" reset -q --hard origin/results || true
+             mkdir -p "$R/year_test/${days}d"
+             for f in report.md status.json cells.csv summary.json; do [[ -f "$src/$f" ]] && cp "$src/$f" "$R/year_test/${days}d/"; done
+             ls -t logs/yeartest-*.log 2>/dev/null | head -1 | xargs -r tail -n 80 > "$R/year_test/${days}d/log_tail.txt"
+             git -C "$R" add -A
+             git -C "$R" -c user.name="fx-server" -c user.email="fx-server@localhost" commit -qm "year test ${days}d $(date '+%F %R')" || true
+             git -C "$R" push -q origin HEAD:results && echo "published: https://github.com/$url/tree/results/year_test/${days}d" ;;
   setup-test) # backtest one setup on the cached history (own folder; research + playbook untouched)
              #   ./fx.sh setup-test london_breakout XAUUSD [--tfs 5min 15min]
              need_env; mkdir -p logs; echo "Building image (quiet)..."
@@ -77,7 +108,8 @@ case "${1:-help}" in
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
-        backup | why [from] [to] [days] | setup-test <setup> [symbols] | pause | resume | flatten | vnc
+        backup | why [from] [to] [days] | setup-test <setup> [symbols]
+        yeartest [days] | publish-setup | publish [days] | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

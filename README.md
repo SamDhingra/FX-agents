@@ -247,6 +247,12 @@ playbook are untouched. `--days 365` first pulls a year of 1-minute history from
 `data/history_365d` (reused for a day). Prints every variant × timeframe × exit profile with both halves
 of the period, then the latest trades.
 
+**Testing everything on a year** (`./fx.sh yeartest [days]`, `fxagents/year_test.py`): every setup on N
+days (default 365) of OANDA history, plus the weekly playbook selection replayed over it on unseen weeks.
+Writes `data/year_test/<N>d/report.md`, `cells.csv` and `summary.json`, and publishes them to the
+`results` branch on GitHub every 10 minutes and at the end (one-time `./fx.sh publish-setup` creates a
+deploy key with push access to this repo only), so the report can be read without copying it off the server.
+
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
 30-minute hold). It runs on the cached OANDA history with the live rules: session windows, the hard
