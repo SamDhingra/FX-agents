@@ -361,3 +361,17 @@ def test_last_pivot_uses_only_swings_confirmed_after_the_first_target(tmp_path):
     assert pm.last_pivot(pos) == 12.5                                   # 10.5 then 12.5: the rising chain's top
     pos.meta["t1"] = (t0 + pd.Timedelta(minutes=12)).isoformat()        # 10.5 confirmed (min 10) before t1
     assert pm.last_pivot(pos) == 12.5
+
+
+def test_pinned_cells_join_the_weekly_selection():
+    cfg = copy.deepcopy(CFG)
+    cfg["playbook"] = {"pinned": [{"setup": "london_breakout", "sym": "XAUUSD", "tf": "5min",
+                                   "params": {"min_body_atr": 0.5}, "win_rate": 0.6, "exp_r": 0.14},
+                                  {"setup": "nope", "sym": "XAUUSD", "tf": "5min"}]}
+    pins = P.pinned_cells(cfg)
+    assert len(pins) == 1 and pins[0]["variant"] == "default" and pins[0]["id"] == "london_breakout:5m@pb-xau-d"
+    data = P.with_pinned(cfg, {"cells": []})
+    assert [c["id"] for c in data["cells"]] == ["london_breakout:5m@pb-xau-d"]
+    assert P.with_pinned(cfg, data)["cells"] == data["cells"]            # never twice
+    from fxagents.agents.playbook_trader import Cell
+    assert Cell(data["cells"][0]).st.params["min_body_atr"] == 0.5

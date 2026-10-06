@@ -350,6 +350,34 @@ def select_asof(cfg, day, pol: Policy | None = None) -> dict:
             "cells": cells_json(sel), "policy": pol.to_json()}
 
 
+def pinned_cells(cfg) -> list[dict]:
+    """`playbook.pinned`: cells traded every week whether or not the weekly selection picks them
+    (a setup you've decided to run on its measured record). Same shape as selected cells."""
+    out = []
+    for c in ((cfg.get("playbook") or {}).get("pinned") or []):
+        try:
+            sym, tf, setup = c["sym"], c["tf"], c["setup"]
+            from .strategies import ALL
+            base = ALL[setup].default_params
+            params = {k: v for k, v in (c.get("params") or {}).items() if base.get(k) != v}   # same id as research's
+            variant = ",".join(f"{k}={v}" for k, v in sorted(params.items())) or "default"
+            mgmt = c.get("mgmt", "std")
+            out.append({"id": cell_id(setup, tf, variant, mgmt, sym), "sym": sym, "tf": tf, "setup": setup,
+                        "variant": variant, "params": params, "mgmt": mgmt, "pinned": True,
+                        "n": int(c.get("n", 0)), "win_rate": float(c.get("win_rate", 0.5)),
+                        "p": float(c.get("p", c.get("win_rate", 0.5))), "exp_r": float(c.get("exp_r", 0.0)),
+                        "e": float(c.get("exp_r", 0.0))})
+        except (KeyError, TypeError, ValueError) as e:
+            log.warning("playbook.pinned entry %r skipped: %s", c, e)
+    return out
+
+
+def with_pinned(cfg, data: dict) -> dict:
+    have = {c["id"] for c in data.get("cells", [])}
+    extra = [c for c in pinned_cells(cfg) if c["id"] not in have]
+    return {**data, "cells": list(data.get("cells", [])) + extra} if extra else data
+
+
 def playbook_path(cfg) -> Path:
     return Path(cfg["storage"]["db_path"]).parent / "playbook.json"
 
