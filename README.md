@@ -232,15 +232,13 @@ First measurement (64 days, XAUUSD/NDQ/US30, all timeframes): DTFX at 50% won 48
 41% on 40% fewer trades, the 50–70% zone won 45% on 4× the trades; two agreeing zones won 44% (the zones
 alone: 41–47%), three agreeing 38%. Agreement is not confirmation on this data.
 
-From ThinkMarkets' "Gold trading strategy 2026" (`fxagents/strategies/article_setups.py`):
-- **London breakout** (`london_breakout`): Asian box 20:00→03:00 NY (04:00 variant), first close outside
-  it before 08:00 NY, stop 1.5 ATR beyond the breakout candle. Entries still respect the bot's windows, so
-  in practice 03:00–05:00 NY. First measurement on gold: 57% win, +0.09R (65 trades); with a decisive
-  breakout body ≥0.5 ATR, 60% win, +0.14R, positive in both halves — small sample, left to the weekly selection.
-- **RSI extreme fade** (`rsi_extreme_fade`): RSI past 80/20, entry when it re-enters 70/30. Negative on
-  all three instruments overall (gold +0.25R in the first half, −0.04R in the second).
-The article's EMA 20/50 trend trade (H4/daily, held for days) and daily swing trade don't fit an
-intraday bot that is flat by 15:50; its break-and-retest entry is already smc_bos_retest / sr_rejection.
+From ThinkMarkets' "Gold trading strategy 2026": the **London breakout** (`london_breakout`,
+`fxagents/strategies/article_setups.py`) — Asian box 20:00→03:00 NY, first close outside it with a body
+≥0.5 ATR before 08:00 NY, stop 1.5 ATR beyond the breakout candle (entries still inside the bot's windows,
+so 03:00–05:00 NY). On gold 5m it won 60%, +0.14R/trade, positive in both halves (Jul–Oct 2026, small
+sample), so it is **pinned**: `playbook.pinned` in config.yaml trades it every week regardless of the
+weekly selection (per-instrument caps still apply). The article's RSI-extreme fade lost on all three
+instruments and was removed; its EMA trend and daily swing trades don't fit an intraday bot.
 
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
