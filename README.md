@@ -240,6 +240,12 @@ sample), so it is **pinned**: `playbook.pinned` in config.yaml trades it every w
 weekly selection (per-instrument caps still apply). The article's RSI-extreme fade lost on all three
 instruments and was removed; its EMA trend and daily swing trades don't fit an intraday bot.
 
+**Testing one setup** (`./fx.sh setup-test <setup> [symbols] [--days N] [--tfs …]`, `fxagents/setup_report.py`):
+the research engine for a single setup, written to `data/research_one/` so the weekly research and the
+playbook are untouched. `--days 365` first pulls a year of 1-minute history from OANDA into
+`data/history_365d` (reused for a day). Prints every variant × timeframe × exit profile with both halves
+of the period, then the latest trades.
+
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
 30-minute hold). It runs on the cached OANDA history with the live rules: session windows, the hard
