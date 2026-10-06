@@ -20,9 +20,16 @@ case "${1:-help}" in
   logs)      $DC logs -f --tail=200 "${2:-fxagents}" ;;
   status)    $DC ps; echo; curl -fsS localhost:8088/healthz && echo " ← app healthy" || echo "app not answering on :8088" ;;
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
-             [[ -d .git ]] && git pull --ff-only || true
+             if [[ -d .git ]]; then git pull --ff-only || { echo; echo "git pull failed — nothing rebuilt (fix the above first)"; exit 1; }; fi
              $DC build fxagents && $DC up -d fxagents ;;
-  test)      $DC build fxagents && $DC run --rm --no-deps fxagents python -m pytest -q -p no:cacheprovider ;;
+  localize)  # one-time: turn a full, hand-edited config into config.local.yaml (only your differences)
+             #   ./fx.sh localize /tmp/server-config.yaml
+             [[ -f "${2:-}" ]] || { echo "usage: ./fx.sh localize <copy of your full config.yaml>"; exit 1; }
+             [[ -f config.local.yaml ]] && { echo "config.local.yaml already exists — edit it instead"; exit 1; }
+             $DC build fxagents >/dev/null && $DC run --rm --no-deps -T -e FX_NO_LOCAL_CONFIG=1 -v "$(realpath "$2")":/tmp/mine.yaml:ro \
+               fxagents python -m fxagents.config diff /tmp/mine.yaml > config.local.yaml
+             echo "Wrote config.local.yaml:"; echo; cat config.local.yaml ;;
+  test)      $DC build fxagents && $DC run --rm --no-deps -e FX_NO_LOCAL_CONFIG=1 fxagents python -m pytest -q -p no:cacheprovider ;;
   check)     # read-only broker connection check (OANDA): account, instruments, prices. No orders.
              need_env; $DC build fxagents && $DC run --rm --no-deps fxagents python check_oanda.py "${@:2}" ;;
   sim)       # quick end-to-end check without a broker (separate throwaway container)
@@ -60,7 +67,7 @@ case "${1:-help}" in
   vnc)       echo "On your Mac:  ssh -i ~/.ssh/LightsailDefaultKey-ca-central-1.pem -L 5900:localhost:5900 ubuntu@<server-ip>"
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
-./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days] | backtest [days] [opts] | research
+./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE

@@ -37,10 +37,40 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+def deep_merge(base: dict, over: dict) -> dict:
+    """`over` wins; nested dicts merge key by key, anything else (lists included) is replaced whole."""
+    out = dict(base)
+    for k, v in (over or {}).items():
+        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def diff(base: dict, mine: dict) -> dict:
+    """Only what `mine` changes relative to `base` — the minimal config.local.yaml."""
+    out = {}
+    for k, v in mine.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            d = diff(base[k], v)
+            if d:
+                out[k] = d
+        elif k not in base or base[k] != v:
+            out[k] = v
+    return out
+
+
+LOCAL_NAME = "config.local.yaml"
+
+
 def load_config(path: str | Path = "config.yaml") -> Config:
+    """config.yaml (from git) with config.local.yaml (this machine's settings, never committed) on top.
+    FX_NO_LOCAL_CONFIG=1 skips the local file (the test suite runs on the repo defaults)."""
     path = Path(path)
     _load_dotenv(path.parent / ".env")
-    cfg = Config(yaml.safe_load(path.read_text()))
+    raw = yaml.safe_load(path.read_text()) or {}
+    local = path.parent / LOCAL_NAME
+    if local.exists() and path.name == "config.yaml" and not os.environ.get("FX_NO_LOCAL_CONFIG"):
+        raw = deep_merge(raw, yaml.safe_load(local.read_text()) or {})
+    cfg = Config(raw)
     # secrets from the environment win over the file
     env_map = {
         "notifications.telegram_bot_token": "TELEGRAM_BOT_TOKEN",
@@ -87,3 +117,15 @@ def apply_broker(cfg: Config) -> Config:
                 ic[k] = v
     cfg["_broker_applied"] = True
     return cfg
+
+
+if __name__ == "__main__":
+    # python -m fxagents.config diff OLD_FULL_CONFIG.yaml  →  prints the minimal config.local.yaml
+    import sys
+    if len(sys.argv) != 3 or sys.argv[1] != "diff":
+        sys.exit("usage: python -m fxagents.config diff <your full config.yaml copy>")
+    base = yaml.safe_load(Path("config.yaml").read_text()) or {}
+    mine = yaml.safe_load(Path(sys.argv[2]).read_text()) or {}
+    d = diff(base, mine)
+    print("# This machine's settings on top of config.yaml (git). Not committed — edit freely.")
+    print(yaml.safe_dump(d, sort_keys=False, default_flow_style=None, width=120) if d else "{}")
