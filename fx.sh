@@ -51,6 +51,8 @@ case "${1:-help}" in
                $DC exec -T fxagents python -c "import os,sqlite3; p='/app/data/$j.sqlite'; os.path.exists(p) or exit(); s=sqlite3.connect(p); d=sqlite3.connect('/app/data/backup.sqlite'); s.backup(d); d.close()"
                [[ -f data/backup.sqlite ]] && mv data/backup.sqlite "backups/$j-$ts.sqlite"
              done; ls -lh backups | tail -6 ;;
+  why)       # what each book saw and why it did/didn't trade in a time window (NY):  ./fx.sh why 20:00 23:59 2
+             $DC exec -T fxagents python -m fxagents.why "${@:2}" ;;
   pause)     curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/pause; echo ;;
   resume)    curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/resume; echo ;;
   flatten)   read -rp "Flatten ALL positions and halt trading? [y/N] " a; [[ "$a" == y ]] || exit 0
@@ -59,7 +61,7 @@ case "${1:-help}" in
              echo "then open vnc://localhost:5900 (needs VNC_SERVER_PASSWORD set in .env and ./fx.sh restart ib-gateway)" ;;
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | test | check | sim [days] | backtest [days] [opts] | research
-        backup | pause | resume | flatten | vnc
+        backup | why [from] [to] [days] | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

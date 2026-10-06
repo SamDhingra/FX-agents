@@ -182,9 +182,20 @@ tr.row{cursor:pointer} tr.row:hover td{background:var(--card-2)}
 .tc .rw{display:flex;align-items:center;gap:8px;min-width:0}.tc .rw+.rw{margin-top:4px}
 .tc .rw .sp{flex:1}.tc .rw .ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc .pl{font-size:15px}.tc .s2{font-size:12.5px;color:var(--muted)}.tc .s3{font-size:12px;color:var(--muted)}
-.ps{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}.ps:last-child{border-bottom:0}
-.ps .sp{flex:1}.ps small{color:var(--muted)}
-table.pips tr:last-child td{border-bottom:0}
+.pt-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}.pt-head h3{margin:0}.pt-head small{color:var(--muted);font-size:12px}
+.ptg{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.pt{padding:14px;border-radius:14px;background:var(--card-2);border:1px solid var(--line);display:flex;flex-direction:column;gap:10px;min-width:0}
+.pt-h{display:flex;align-items:center;gap:8px}.pt-h b{font-size:15px}.pt-h .sp{flex:1}.pt-h .num{font-weight:700;font-size:13px}
+.pt-net{display:flex;align-items:baseline;gap:8px}.pt-net .num{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1}.pt-net small{color:var(--muted);font-size:12px}
+.pt-bar{display:flex;gap:3px;height:8px;border-radius:99px;overflow:hidden;background:var(--card)}
+.pt-bar i{display:block;min-width:0}.pt-bar i.w{background:var(--up)}.pt-bar i.l{background:var(--down)}
+.pt-wl{display:flex;justify-content:space-between;gap:10px}.pt-wl>div{display:flex;flex-direction:column;gap:1px}
+.pt-wl small{color:var(--muted);font-size:11px}.pt-wl b{font-size:15px}
+.pt-f{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding-top:10px;border-top:1px solid var(--line)}.pt-f>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pt-f>div:nth-child(2){align-items:center}.pt-f>div.r{align-items:flex-end}.pt-f small{color:var(--muted);font-size:11px}.pt-f b{font-size:13px;font-weight:600;white-space:nowrap}
+@media (max-width:760px){.pt-head small{display:none}
+  .ptg{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -14px;padding:0 14px 4px;scroll-padding:0 14px;scrollbar-width:none}.ptg::-webkit-scrollbar{display:none}
+  .ptg .pt{flex:0 0 84%;scroll-snap-align:start}.ptg .pt:only-child{flex-basis:100%}}
 .fi .when{color:var(--muted);font-size:12px;min-width:74px;font-family:var(--mono)}
 details summary{cursor:pointer;color:var(--accent-2);font-size:12px;margin-top:4px}
 pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(--mono);background:var(--card-2);padding:10px;border-radius:10px;max-height:240px;overflow:auto;margin:6px 0 0}
@@ -409,7 +420,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <!-- TRADES -->
     <section class="page" id="p-trades">
       <div class="filters grouped" id="tfilters"></div>
-      <div class="card" style="margin-bottom:12px"><div class="tbl" id="pipsum"></div></div>
+      <div class="card" style="margin-bottom:12px"><div id="pipsum"></div></div>
       <div class="card"><div class="tbl" id="trades"></div></div>
     </section>
 
@@ -814,20 +825,23 @@ const EXIT_LABEL = {breakeven_plus_stop: "locked stop", trail_stop: "trail stop"
   max_hold: "time limit", target: "target", stop: "stop"};
 const exitLabel = r => EXIT_LABEL[r] || (r||"").replace(/_/g," ");
 function pipSummary(rows){
-  // pips aren't comparable across instruments (a gold pip ≠ an index point), so one line per symbol
+  // pips aren't comparable across instruments (a gold pip ≠ an index point), so one tile per instrument
   const by = {}; rows.forEach(t => { if(t.pips==null) return; (by[t.symbol] = by[t.symbol] || []).push(t); });
-  const lines = Object.entries(by).map(([sym, ts]) => {
+  const pp = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1);
+  const tiles = Object.entries(by).sort((a,b)=>b[1].length-a[1].length).map(([sym, ts]) => {
     const w = ts.filter(t=>t.realized>0), l = ts.filter(t=>t.realized<=0), avg = a => a.length ? a.reduce((x,t)=>x+t.pips,0)/a.length : null;
-    const net = ts.reduce((x,t)=>x+t.pips,0), lt = ts.reduce((x,t)=>x+(t.lots||0),0)/ts.length;
-    const pp = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1);
-    const pl = (n, w) => `${n} ${w}${n===1?"":"s"}`;
-    if(matchMedia("(max-width:760px)").matches)
-      return `<div class="ps"><div><b>${sym}</b><br><small>${pl(ts.length,"trade")} · ${w.length} won <span class="up">${pp(avg(w))}</span> · ${l.length} lost <span class="down">${pp(avg(l))}</span></small></div>
-        <span class="sp"></span><div class="r"><b class="num ${cls(net)}">${pp(net)}</b><br><small>net pips</small></div></div>`;
-    return `<tr><td><b>${sym}</b><br><small class="mut">${pl(ts.length,"trade")}</small></td><td class="r num up">${pp(avg(w))}<br><small class="mut">${w.length} won</small></td><td class="r num down">${pp(avg(l))}<br><small class="mut">${l.length} lost</small></td><td class="r num ${cls(net)}"><b>${pp(net)}</b></td><td class="r num hide-m">${lots(lt)}</td></tr>`; });
-  if(lines.length && matchMedia("(max-width:760px)").matches)
-    return `<div class="s3 mut" style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px">Pips by instrument · avg per trade</div>${lines.join("")}`;
-  return lines.length ? `<table class="pips"><tr><th>Pips</th><th class=r>Avg win</th><th class=r>Avg loss</th><th class=r>Net</th><th class="r hide-m">Avg size</th></tr>${lines.join("")}</table>` : "";
+    const aw = avg(w), al = avg(l), net = ts.reduce((x,t)=>x+t.pips,0), usd = ts.reduce((x,t)=>x+(t.realized||0),0);
+    const lt = ts.reduce((x,t)=>x+(t.lots||0),0)/ts.length, wr = w.length/ts.length;
+    const mw = Math.abs(aw||0), ml = Math.abs(al||0), tot = mw + ml || 1;
+    const payoff = aw!=null && al ? mw/ml : null;
+    return `<div class="pt">
+      <div class="pt-h"><b>${sym}</b><span class="tag">${ts.length} trade${ts.length===1?"":"s"}</span><span class="sp"></span><span class="num ${cls(usd)}">${smoney(usd)}</span></div>
+      <div class="pt-net"><span class="num ${cls(net)}">${pp(net)}</span><small>net pips</small></div>
+      <div class="pt-bar" title="average win vs average loss, in pips"><i class="w" style="flex:${mw/tot}"></i><i class="l" style="flex:${ml/tot}"></i></div>
+      <div class="pt-wl"><div><small>Avg win</small><b class="num up">${pp(aw)}</b><small>${w.length} won</small></div>
+        <div class="r"><small>Avg loss</small><b class="num down">${pp(al)}</b><small>${l.length} lost</small></div></div>
+      <div class="pt-f"><div><small>Win rate</small><b class="num">${fmt(wr*100,0)}%</b></div><div><small>Payoff</small><b class="num">${payoff==null?"—":fmt(payoff,2)+"×"}</b></div><div class="r"><small>Avg size</small><b class="num">${lots(lt)}</b></div></div></div>`; });
+  return tiles.length ? `<div class="pt-head"><h3>Pips by instrument</h3><small>average per trade · a gold pip is $0.10/oz, an index pip is 1 point, so compare within an instrument</small></div><div class="ptg">${tiles.join("")}</div>` : "";
 }
 function openTrade(t){
   const ev = t.events || [];
