@@ -177,6 +177,14 @@ tr.row{cursor:pointer} tr.row:hover td{background:var(--card-2)}
 .fchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .feed{display:grid;gap:2px;max-height:460px;overflow:auto}
 .fi{display:flex;gap:10px;overflow-wrap:anywhere;padding:10px 4px;border-bottom:1px solid var(--line);font-size:13px}
+.filters.grouped{gap:18px}.fgroup{display:flex;gap:8px;flex-wrap:wrap}
+.tc{padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer}.tc:last-child{border-bottom:0}
+.tc .rw{display:flex;align-items:center;gap:8px;min-width:0}.tc .rw+.rw{margin-top:4px}
+.tc .rw .sp{flex:1}.tc .rw .ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc .pl{font-size:15px}.tc .s2{font-size:12.5px;color:var(--muted)}.tc .s3{font-size:12px;color:var(--muted)}
+.ps{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}.ps:last-child{border-bottom:0}
+.ps .sp{flex:1}.ps small{color:var(--muted)}
+table.pips tr:last-child td{border-bottom:0}
 .fi .when{color:var(--muted);font-size:12px;min-width:74px;font-family:var(--mono)}
 details summary{cursor:pointer;color:var(--accent-2);font-size:12px;margin-top:4px}
 pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(--mono);background:var(--card-2);padding:10px;border-radius:10px;max-height:240px;overflow:auto;margin:6px 0 0}
@@ -296,6 +304,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   .card{padding:14px;border-radius:14px}
   .c3{grid-column:span 12}
   .filters{flex-wrap:nowrap;overflow-x:auto;margin:0 -14px 12px;padding:0 14px;scrollbar-width:none} .fchip{flex:none}
+  .filters.grouped{flex-direction:column;gap:8px;overflow:visible;margin:0 0 12px;padding:0}
+  .filters.grouped .fgroup{flex-wrap:nowrap;overflow-x:auto;margin:0 -14px;padding:0 14px;scrollbar-width:none}
+  .filters.grouped .fgroup::-webkit-scrollbar{display:none}
   .msum{grid-template-columns:1fr 1fr}.msum .card:first-child{grid-column:span 2}
   .cal{gap:5px;grid-template-columns:repeat(5,minmax(0,1fr))} .cal .wk,.cal .dow.we{display:none}
   .calhead{flex-wrap:nowrap} .calhead h2{font-size:17px;min-width:0;white-space:nowrap}.day{min-height:62px;padding:6px;border-radius:9px}.day .pl{font-size:10.5px;letter-spacing:-.3px;white-space:nowrap}.day .tc{display:none}.day .dn{font-size:11px}
@@ -397,7 +408,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
     <!-- TRADES -->
     <section class="page" id="p-trades">
-      <div class="filters" id="tfilters"></div>
+      <div class="filters grouped" id="tfilters"></div>
       <div class="card" style="margin-bottom:12px"><div class="tbl" id="pipsum"></div></div>
       <div class="card"><div class="tbl" id="trades"></div></div>
     </section>
@@ -769,7 +780,12 @@ async function loadTrades(){
   renderTrades();
 }
 function chips(el, groups){
-  el.innerHTML = groups.map(([key, vals]) => vals.map(v => `<button class="fchip ${tf[key]===v?"on":""}" data-k="${key}" data-v="${v}">${v}</button>`).join("")).join(`<span style="width:10px"></span>`);
+  // row 1: symbols · row 2: result + timeframe (each row scrolls sideways on a phone if it's too long)
+  const btn = (key, v) => `<button class="fchip ${tf[key]===v?"on":""}" data-k="${key}" data-v="${v}">${
+    v==="ALL" ? (key==="sym"?"All symbols":key==="res"?"All results":"All TFs") : v}</button>`;
+  const [first, ...rest] = groups;
+  el.innerHTML = `<div class="fgroup">${first[1].map(v => btn(first[0], v)).join("")}</div>` +
+    `<div class="fgroup">${rest.map(([k, vals]) => vals.map(v => btn(k, v)).join("")).join(`<span style="width:6px;flex:none"></span>`)}</div>`;
   el.querySelectorAll(".fchip").forEach(b => b.onclick = () => { tf[b.dataset.k] = b.dataset.v; renderTrades(); renderBoard(S); });
 }
 function renderTrades(){
@@ -779,12 +795,12 @@ function renderTrades(){
   const rows = tradeRows.filter(t => (tf.sym==="ALL"||t.symbol===tf.sym) && (tf.res==="ALL"||(tf.res==="Winners"?t.realized>0:t.realized<=0)) && (tf.tf==="ALL"||t.tf===tf.tf));
   const ps = pipSummary(rows); $("#pipsum").innerHTML = ps; $("#pipsum").parentElement.style.display = ps ? "" : "none";
   if(matchMedia("(max-width:760px)").matches){   // phone: tappable cards instead of a wide table
-    $("#trades").innerHTML = rows.length ? rows.map((t,i)=>`<div class="fi" style="cursor:pointer" data-i="${i}"><span class="when">${md(t.closed)}<br>${hm(t.closed)}</span>
-      <div style="flex:1;min-width:0"><div><span class="side ${t.side[0]}">${t.side}</span> <b>${t.symbol}</b> <span class="tag">${t.tf||""}</span></div>
-      <small class="mut">${esc(t.strategy.split(":")[0])} · ${lots(t.lots)} · ${esc(t.exit_reason)}${t.adds?` · +${t.adds} adds`:""}</small></div>
-      <div class="r"><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b><br><small class="num ${cls(t.pips)}">${sPip(t.pips)}</small><br><small class="num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</small></div></div>`).join("")
+    $("#trades").innerHTML = rows.length ? rows.map((t,i)=>`<div class="tc" data-i="${i}">
+      <div class="rw"><span class="side ${t.side[0]}">${t.side}</span><b>${t.symbol}</b>${t.tf?`<span class="tag">${t.tf}</span>`:""}<span class="sp"></span><b class="num pl ${cls(t.realized)}">${smoney(t.realized)}</b></div>
+      <div class="rw s2"><span class="ell">${esc(t.strategy.split(":")[0])} · ${esc(exitLabel(t.exit_reason))}</span><span class="sp"></span><span class="num ${cls(t.pips)}" style="white-space:nowrap">${sPip(t.pips)} · ${sR(t.r_multiple)}</span></div>
+      <div class="rw s3"><span class="num">${md(t.closed)} · ${hm(t.closed)}</span><span class="sp"></span><span class="num">${lots(t.lots)}${t.lots_max>t.lots?` → ${fmt(t.lots_max,2)}`:""}${t.adds?` · +${t.adds} add${t.adds>1?"s":""}`:""}</span></div></div>`).join("")
       : `<div class="empty">No trades match.</div>`;
-    $$("#trades .fi").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
+    $$("#trades .tc").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
     return;
   }
   $("#trades").innerHTML = rows.length ? `<table><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Bias</th><th class=r>Lots</th><th class=r>Entry</th><th class=r>Exit</th><th class=r>Pips</th><th class=r>R</th><th class=r>P&amp;L</th><th>Exit</th></tr>` +
@@ -794,6 +810,9 @@ function renderTrades(){
     : `<div class="empty">No trades match.</div>`;
   $$("#trades tr.row").forEach(r => r.onclick = () => openTrade(rows[+r.dataset.i]));
 }
+const EXIT_LABEL = {breakeven_plus_stop: "locked stop", trail_stop: "trail stop", session_flat: "session close",
+  max_hold: "time limit", target: "target", stop: "stop"};
+const exitLabel = r => EXIT_LABEL[r] || (r||"").replace(/_/g," ");
 function pipSummary(rows){
   // pips aren't comparable across instruments (a gold pip ≠ an index point), so one line per symbol
   const by = {}; rows.forEach(t => { if(t.pips==null) return; (by[t.symbol] = by[t.symbol] || []).push(t); });
@@ -801,7 +820,13 @@ function pipSummary(rows){
     const w = ts.filter(t=>t.realized>0), l = ts.filter(t=>t.realized<=0), avg = a => a.length ? a.reduce((x,t)=>x+t.pips,0)/a.length : null;
     const net = ts.reduce((x,t)=>x+t.pips,0), lt = ts.reduce((x,t)=>x+(t.lots||0),0)/ts.length;
     const pp = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1);
-    return `<tr><td><b>${sym}</b><br><small class="mut">${ts.length} trades</small></td><td class="r num up">${pp(avg(w))}<br><small class="mut">${w.length} won</small></td><td class="r num down">${pp(avg(l))}<br><small class="mut">${l.length} lost</small></td><td class="r num ${cls(net)}"><b>${pp(net)}</b></td><td class="r num hide-m">${lots(lt)}</td></tr>`; });
+    const pl = (n, w) => `${n} ${w}${n===1?"":"s"}`;
+    if(matchMedia("(max-width:760px)").matches)
+      return `<div class="ps"><div><b>${sym}</b><br><small>${pl(ts.length,"trade")} · ${w.length} won <span class="up">${pp(avg(w))}</span> · ${l.length} lost <span class="down">${pp(avg(l))}</span></small></div>
+        <span class="sp"></span><div class="r"><b class="num ${cls(net)}">${pp(net)}</b><br><small>net pips</small></div></div>`;
+    return `<tr><td><b>${sym}</b><br><small class="mut">${pl(ts.length,"trade")}</small></td><td class="r num up">${pp(avg(w))}<br><small class="mut">${w.length} won</small></td><td class="r num down">${pp(avg(l))}<br><small class="mut">${l.length} lost</small></td><td class="r num ${cls(net)}"><b>${pp(net)}</b></td><td class="r num hide-m">${lots(lt)}</td></tr>`; });
+  if(lines.length && matchMedia("(max-width:760px)").matches)
+    return `<div class="s3 mut" style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px">Pips by instrument · avg per trade</div>${lines.join("")}`;
   return lines.length ? `<table class="pips"><tr><th>Pips</th><th class=r>Avg win</th><th class=r>Avg loss</th><th class=r>Net</th><th class="r hide-m">Avg size</th></tr>${lines.join("")}</table>` : "";
 }
 function openTrade(t){
