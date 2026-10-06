@@ -235,9 +235,10 @@ alone: 41–47%), three agreeing 38%. Agreement is not confirmation on this data
 From ThinkMarkets' "Gold trading strategy 2026": the **London breakout** (`london_breakout`,
 `fxagents/strategies/article_setups.py`) — Asian box 20:00→03:00 NY, first close outside it with a body
 ≥0.5 ATR before 08:00 NY, stop 1.5 ATR beyond the breakout candle (entries still inside the bot's windows,
-so 03:00–05:00 NY). On gold 5m it won 60%, +0.14R/trade, positive in both halves (Jul–Oct 2026, small
-sample), so it is **pinned**: `playbook.pinned` in config.yaml trades it every week regardless of the
-weekly selection (per-instrument caps still apply). The article's RSI-extreme fade lost on all three
+so 03:00–05:00 NY). On 64 days it looked good (gold 5m: 12 trades, 67% win, +0.16R) and was pinned;
+over a full year it did not hold (gold 5m: 46 trades, 50% win, −0.13R; every timeframe between −0.13R and
++0.13R), so it was unpinned and stays in the research grid like any other setup. `playbook.pinned` in
+config.yaml remains available to force a cell into the playbook. The article's RSI-extreme fade lost on all three
 instruments and was removed; its EMA trend and daily swing trades don't fit an intraday bot.
 
 **Testing one setup** (`./fx.sh setup-test <setup> [symbols] [--days N] [--tfs …]`, `fxagents/setup_report.py`):

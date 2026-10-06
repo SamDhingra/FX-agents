@@ -235,10 +235,9 @@ playbook:
   tfs: [3min, 5min, 15min, 30min, 1h]   # 1m excluded: the spread is 13–30% of a 1-minute bar
   window_days: 60
   volume: false                 # true = also trade the volume cells (RVOL variants, VWAP); researched either way
-  pinned:                       # always traded, whatever the weekly selection picks (still capped per instrument)
-    # London-open breakout of the Asian range (ThinkMarkets gold 2026), decisive close ≥0.5 ATR.
-    # Measured Jul–Oct 2026: gold, all timeframes, 60 trades, 60% win, +0.14R; gold 5m alone 12 trades, 67%, +0.16R.
-    - {setup: london_breakout, sym: XAUUSD, tf: 5min, params: {min_body_atr: 0.5}, n: 12, win_rate: 0.67, exp_r: 0.16}
+  pinned: []                    # cells always traded, whatever the weekly selection picks (still capped per instrument), e.g.
+    # - {setup: london_breakout, sym: XAUUSD, tf: 5min, params: {min_body_atr: 0.5}, n: 46, win_rate: 0.50, exp_r: -0.13}
+    # (London breakout was pinned on 64 days of data, then unpinned: over a year on gold 5m it lost −0.13R/trade.)
   # instruments:                       # per-instrument overrides, e.g.
   #   XAUUSD: {max_positions: 2, max_cells: 10, min_p: 0.45}
   #   NDQ:    {min_p: 0.60, k_p: 40, min_n: 30}
