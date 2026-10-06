@@ -237,8 +237,8 @@ playbook:
   volume: false                 # true = also trade the volume cells (RVOL variants, VWAP); researched either way
   pinned:                       # always traded, whatever the weekly selection picks (still capped per instrument)
     # London-open breakout of the Asian range (ThinkMarkets gold 2026), decisive close ≥0.5 ATR.
-    # Measured Jul–Oct 2026 on gold 5m: 60% win, +0.14R/trade, positive in both halves (small sample).
-    - {setup: london_breakout, sym: XAUUSD, tf: 5min, params: {min_body_atr: 0.5}, win_rate: 0.60, exp_r: 0.14}
+    # Measured Jul–Oct 2026: gold, all timeframes, 60 trades, 60% win, +0.14R; gold 5m alone 12 trades, 67%, +0.16R.
+    - {setup: london_breakout, sym: XAUUSD, tf: 5min, params: {min_body_atr: 0.5}, n: 12, win_rate: 0.67, exp_r: 0.16}
   # instruments:                       # per-instrument overrides, e.g.
   #   XAUUSD: {max_positions: 2, max_cells: 10, min_p: 0.45}
   #   NDQ:    {min_p: 0.60, k_p: 40, min_n: 30}

@@ -468,7 +468,7 @@ def build(cfg, robustness: bool = True) -> dict:
     periods = json.loads(tt[tt["mgmt"] == "std"].groupby(["sym", "_oos"])[val].mean().round(4).unstack("_oos")
                          .rename(columns={False: "in_sample", True: "out_of_sample"}).reset_index().to_json(orient="records"))
     asof = (pd.Timestamp(days[-1]) + pd.Timedelta(days=1)).date()
-    current = select_asof(cfg, asof, pol)
+    current = with_pinned(cfg, select_asof(cfg, asof, pol))
     # watchlist: index cells closest to the 60% bar
     st = score(cube.window(len(days) - pol.window_days, len(days)), pol)
     idx = st[st["sym"].map(lambda s: _rule(pol, s).role == "selective") & (st["n"] >= 15) & st["tf"].isin(pol.tfs)]

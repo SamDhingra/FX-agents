@@ -1075,7 +1075,7 @@ function renderSetupMap(){
 }
 
 /* ── playbook: research by instrument ── */
-const SETUP_NAMES = {ict_2022:"ICT 2022", ict_silver_bullet:"Silver Bullet", ict_turtle_soup:"Turtle Soup", ict_amd:"AMD (power of 3)",
+const SETUP_NAMES = {london_breakout:"London breakout", zone_confluence:"Zone confluence", ict_2022:"ICT 2022", ict_silver_bullet:"Silver Bullet", ict_turtle_soup:"Turtle Soup", ict_amd:"AMD (power of 3)",
   smt_divergence:"SMT divergence", smc_displacement:"Displacement", smc_bos_retest:"BOS retest", smc_choch:"CHoCH retest", smc_mss:"MSS",
   dtfx_close_fib:"DTFX · close · fib", dtfx_wick_fib:"DTFX · wick · fib", dtfx_close_fib_brk:"DTFX · close · fib (break high)",
   dtfx_close_origin:"DTFX · close · origin zone", dtfx_zone:"DTFX-style (legacy)", ict_fvg_sweep:"FVG sweep (legacy)", ict_ote:"OTE",
@@ -1153,7 +1153,7 @@ function renderResearch(){
 function cellsTable(cells, withSym, role){
   if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the 60% bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
   return `<div class="tbl"><table><tr>${withSym?"<th>Symbol</th>":""}<th>Setup</th><th>TF</th><th class="hide-m">Exit</th><th class="hide-m">Variant</th><th class="r hide-m">Trades</th><th class="r hide-m">Win</th><th class="r">Est. win</th><th class="r">Avg R</th></tr>${
-    cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="scalp"?'<span class="tag gh">scalp</span>':"standard"}</td>
+    cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}${c.pinned?' <span class="tag acc" title="always traded (config playbook.pinned), not chosen by the weekly selection">pinned</span>':""}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="scalp"?'<span class="tag gh">scalp</span>':"standard"}</td>
       <td class="hide-m"><small class="mut">${esc(c.variant)}</small></td><td class="r num hide-m">${c.n}</td><td class="r num hide-m">${Math.round(c.win_rate*100)}%</td>
       <td class="r num">${Math.round(c.p*100)}%</td><td class="r num ${cls(c.exp_r)}">${sR(c.exp_r)}</td></tr>`).join("")}</table></div>`;
 }

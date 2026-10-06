@@ -417,6 +417,14 @@ def build_app(ctx) -> FastAPI:
             return {"ready": False}
         out = json.loads(p.read_text())
         out["ready"] = True
+        # pinned cells (config playbook.pinned) trade every week: show them even if research predates the pin
+        from fxagents import playbook as _pbk
+        if isinstance(out.get("playbook"), dict):
+            out["playbook"] = _pbk.with_pinned(ctx.cfg, out["playbook"])
+            for c in out["playbook"]["cells"]:
+                inst = (out.get("instruments") or {}).get(c["sym"])
+                if c.get("pinned") and inst is not None and not any(x.get("id") == c["id"] for x in inst.get("cells", [])):
+                    inst.setdefault("cells", []).append(c)
         # how the playbook has done since it went live (whichever book runs it)
         live = {}
         for name, c in (("live", ctx), *(("shadow", sh) for sh in (getattr(ctx, "shadows", None) or {}).values())):
