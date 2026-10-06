@@ -49,7 +49,7 @@ class SignalOracle:
                 self.df[(sym, tf)] = df
                 self.ctx[(sym, tf)] = Strategy._context(df)
                 self.pos[(sym, tf)] = {ts: i for i, ts in enumerate(df.index)}
-        peers = {"NDQ": ["US30", "SPX"], "US30": ["NDQ", "SPX"], "SPX": ["NDQ", "US30"]}
+        peers = {"NDQ": ["US30"], "US30": ["NDQ"]}
         for (sym, tf), df in self.df.items():       # correlated indices for SMT divergence
             self.ctx[(sym, tf)]["peers"] = [self.df[(p, tf)].reindex(df.index).ffill()
                                             for p in peers.get(sym, []) if (p, tf) in self.df]

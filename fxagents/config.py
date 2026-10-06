@@ -41,6 +41,8 @@ def deep_merge(base: dict, over: dict) -> dict:
     """`over` wins; nested dicts merge key by key, anything else (lists included) is replaced whole."""
     out = dict(base)
     for k, v in (over or {}).items():
+        if v is None and k in out:
+            continue                    # an emptied section ("instruments:" with nothing under it) changes nothing
         out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
     return out
 
@@ -70,6 +72,11 @@ def load_config(path: str | Path = "config.yaml") -> Config:
     local = path.parent / LOCAL_NAME
     if local.exists() and path.name == "config.yaml" and not os.environ.get("FX_NO_LOCAL_CONFIG"):
         raw = deep_merge(raw, yaml.safe_load(local.read_text()) or {})
+    # an instrument only named in config.local.yaml (e.g. one removed from config.yaml) has no contract spec
+    for sym in [s for s, ic in (raw.get("instruments") or {}).items() if not isinstance(ic, dict) or "multiplier" not in ic]:
+        import logging
+        logging.getLogger("config").warning("instrument %s ignored: not in config.yaml (remove it from %s)", sym, LOCAL_NAME)
+        raw["instruments"].pop(sym)
     cfg = Config(raw)
     # secrets from the environment win over the file
     env_map = {

@@ -24,3 +24,15 @@ def test_local_file_layers_on_top(tmp_path, monkeypatch):
     assert cfg["risk"]["max_open_positions"] == 2
     monkeypatch.setenv("FX_NO_LOCAL_CONFIG", "1")
     assert load_config(tmp_path / "config.yaml")["risk"]["max_open_positions"] == 3
+
+
+def test_local_only_instrument_is_dropped(tmp_path, monkeypatch):
+    """SPX left behind in config.local.yaml after it was removed from config.yaml must not crash startup."""
+    monkeypatch.delenv("FX_NO_LOCAL_CONFIG", raising=False)
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump({"mode": "sim", "instruments": {"NDQ": {"multiplier": 2}}}))
+    (tmp_path / "config.local.yaml").write_text(yaml.safe_dump({"instruments": {"SPX": {"trade": False}}}))
+    assert list(load_config(tmp_path / "config.yaml")["instruments"]) == ["NDQ"]
+
+
+def test_empty_local_section_changes_nothing():
+    assert deep_merge({"instruments": {"NDQ": {"multiplier": 2}}}, {"instruments": None}) == {"instruments": {"NDQ": {"multiplier": 2}}}

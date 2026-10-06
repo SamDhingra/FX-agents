@@ -212,7 +212,11 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
 /* drawer + toast */
 .scrim{position:fixed;inset:0;background:rgb(0 0 0 / .45);opacity:0;pointer-events:none;transition:.2s;z-index:40}
 .scrim.on{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:var(--bg-2);border-left:1px solid var(--line);z-index:41;transform:translateX(100%);transition:transform .25s ease;overflow:auto;padding:22px}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:var(--bg-2);border-left:1px solid var(--line);z-index:41;transform:translateX(100%);transition:transform .25s ease;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 22px calc(22px + env(safe-area-inset-bottom))}
+.drawer .dh{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;margin:0 -22px 4px;padding:calc(14px + env(safe-area-inset-top)) 22px 12px;background:var(--bg-2);border-bottom:1px solid var(--line)}
+.drawer .dh .btn{min-height:40px;padding:8px 14px}
+.drawer .dback{display:block;width:100%;margin-top:18px;min-height:46px}
+body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
 .drawer.on{transform:none}
 .drawer h2{margin:0 0 4px;font-size:20px}
 .tl{position:relative;margin:18px 0 0 8px;padding-left:18px;border-left:2px solid var(--line)}
@@ -846,8 +850,8 @@ function pipSummary(rows){
 }
 function openTrade(t){
   const ev = t.events || [];
-  $("#drawer").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><span class="side ${t.side[0]}">${t.side}</span><h2>${t.symbol}</h2><span class="sp" style="flex:1"></span><button class="btn" id="dclose">Close</button></div>
-    <div class="mut" style="margin-bottom:14px">${esc(t.strategy)} · ${esc(t.reason||"")}</div>
+  $("#drawer").innerHTML = `<div class="dh"><button class="btn" id="dclose" aria-label="Back">‹ Back</button><span class="side ${t.side[0]}">${t.side}</span><h2 style="margin:0">${t.symbol}</h2><span class="sp" style="flex:1"></span><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b></div>
+    <div class="mut" style="margin:10px 0 14px">${esc(t.strategy)} · ${esc(t.reason||"")}</div>
     <div class="hero" style="grid-template-columns:1fr 1fr;gap:10px">
       <div class="card kpi"><div class="l">P&amp;L</div><div class="v num ${cls(t.realized)}">${smoney(t.realized,2)}</div></div>
       <div class="card kpi"><div class="l">R multiple</div><div class="v num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</div></div>
@@ -856,11 +860,28 @@ function openTrade(t){
       <div class="card kpi"><div class="l">Best excursion</div><div class="v num">${sR(t.mfe_r,1)}</div></div>
       <div class="card kpi"><div class="l">Jev grade</div><div class="v num">${fmt(t.jev_quality,2)}</div><div class="s">${esc(t.jev_source||"")} · bias ${esc(t.bias_mode||"")}</div></div></div>
     <div class="tl">${ev.map(e => { const {ts, kind, ...rest} = e; return `<div><span class="k">${kind.replace(/_/g," ")}</span> <span class="mut num">${hm(ts)}</span>
-      <small class="num">${Object.entries(rest).map(([k,v])=>`${k.replace(/_/g," ")}: ${typeof v==="number"?fmt(v, Number.isInteger(v)?0:2):esc(v)}`).join(" · ")}</small></div>`; }).join("")}</div>`;
-  $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
-  $("#dclose").onclick = closeDrawer;
+      <small class="num">${Object.entries(rest).map(([k,v])=>`${k.replace(/_/g," ")}: ${typeof v==="number"?fmt(v, Number.isInteger(v)?0:2):esc(v)}`).join(" · ")}</small></div>`; }).join("")}</div>
+    <button class="btn dback" id="dback">Back to trades</button>`;
+  const d = $("#drawer"); d.scrollTop = 0;
+  if(!d.classList.contains("on")){
+    d.classList.add("on"); $("#scrim").classList.add("on"); document.body.classList.add("noscroll");
+    try{ history.pushState({drawer:1}, ""); }catch(e){}     // phone back button / swipe-back closes the trade, not the app
+  }
+  $("#dclose").onclick = $("#dback").onclick = closeDrawer;
 }
-function closeDrawer(){ $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); }
+function hideDrawer(){ $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); document.body.classList.remove("noscroll"); }
+function closeDrawer(){
+  if(!$("#drawer").classList.contains("on")) return;
+  if(history.state && history.state.drawer) history.back(); else hideDrawer();   // popstate → hideDrawer
+}
+window.addEventListener("popstate", () => { if($("#drawer").classList.contains("on")) hideDrawer(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeDrawer(); });
+(() => { // swipe right on the trade panel to close it
+  let x0 = null, y0 = 0; const d = $("#drawer");
+  d.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, {passive:true});
+  d.addEventListener("touchend", e => { if(x0 == null) return; const dx = e.changedTouches[0].clientX - x0, dy = Math.abs(e.changedTouches[0].clientY - y0);
+    x0 = null; if(dx > 80 && dy < 60) closeDrawer(); }, {passive:true});
+})();
 $("#scrim").onclick = () => { $("#moreSheet").classList.remove("on"); closeDrawer(); };
 
 /* ── strategies ── */

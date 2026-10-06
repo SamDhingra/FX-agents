@@ -122,7 +122,7 @@ def test_policy_from_config_turns_watch_only_instruments_off():
     cfg["playbook"] = {"tfs": ["5min"], "instruments": {"XAUUSD": {"max_positions": 3}}}
     pol = P.policy_from_cfg(cfg)
     assert pol.instruments["NDQ"].role == "off" and pol.instruments["XAUUSD"].max_positions == 3
-    assert pol.tfs == ("5min",) and pol.instruments["SPX"].role == "off"
+    assert pol.tfs == ("5min",) and "SPX" not in pol.instruments
 
 
 # ── live path ────────────────────────────────────────────────────────────────

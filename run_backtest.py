@@ -4,7 +4,7 @@
     python run_backtest.py --days 60 --no-learner       # same period with the learner switched off
     python run_backtest.py --days 30 --jev live         # grade with the real Jev API (slower, uses API calls)
     python run_backtest.py --days 30 --jev live --jev-gate advisory   # Jev grades set size but never block
-    python run_backtest.py --days 60 --no-trade SPX     # SPX watch-only (data, bias and map kept; no entries)
+    python run_backtest.py --days 60 --no-trade US30    # US30 watch-only (data, bias and map kept; no entries)
     python run_backtest.py --days 30 --shadow-mode playbook   # hourly pick vs the playbook, side by side
     ./fx.sh backtest 60 [--no-learner] [--jev live]     # on the server: separate low-priority container
 
@@ -109,7 +109,7 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=60)
     ap.add_argument("--jev", choices=["heuristic", "live"], default="heuristic")
     ap.add_argument("--jev-gate", choices=["enforce", "advisory"], help="override jev.signal_gate for this run")
-    ap.add_argument("--no-trade", nargs="*", metavar="SYM", help="watch-only instruments for this run, e.g. --no-trade SPX")
+    ap.add_argument("--no-trade", nargs="*", metavar="SYM", help="watch-only instruments for this run, e.g. --no-trade US30")
     ap.add_argument("--main-mode", choices=["hourly_pick", "setup_first", "playbook"], help="real book's selection mode")
     ap.add_argument("--shadow-mode", choices=["hourly_pick", "setup_first", "playbook"], help="shadow book's selection mode")
     ap.add_argument("--no-learner", action="store_true")

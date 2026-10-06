@@ -5,7 +5,7 @@ PlaybookAgent   keeps it current: live → re-selects as of today and re-runs th
                 history cache is newer (weekly, low priority); replay → re-selects every Monday as of that
                 day from trades strictly before it, so a replay never sees its own future
 PlaybookTrader  on each bar close, scans the cells for that symbol/timeframe, applies the hard bias rule,
-                instrument capacity (gold up to 2 positions; one index position at a time; SPX watch-only),
+                instrument capacity (gold up to 2 positions; one index position at a time),
                 picks the highest-probability cell, asks Jev for a grade (advisory → size) and hands the
                 entry to Risk with the cell's exit profile.
 """
@@ -27,7 +27,7 @@ from .core import Agent
 from .trading import TraderAgent, jev_gate, jev_gate_why
 
 log = logging.getLogger("playbook")
-PEERS = {"NDQ": ["US30", "SPX"], "US30": ["NDQ", "SPX"], "SPX": ["NDQ", "US30"]}
+PEERS = {"NDQ": ["US30"], "US30": ["NDQ"]}
 
 
 class Cell:

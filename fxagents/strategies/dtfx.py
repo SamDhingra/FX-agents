@@ -47,8 +47,10 @@ class _DTFX(_Fast):
     zone_kind = "fib"       # B
     anchor = "extreme"      # C
     default_params = dict(swing=3, level=0.5, confirm="rejection", sessions="all", mtf="none",
-                          min_leg_atr=1.5, max_age=48, stop_buf_atr=0.1)
-    param_grid = {"swing": [3, 5], "level": [0.3, 0.5, 0.7], "confirm": ["touch", "rejection"],
+                          min_leg_atr=1.5, max_age=48, stop_buf_atr=0.1, band_wait=6)
+    # level "50-70": a pullback ZONE instead of one line — price reaching 50% arms it, and the trade is the
+    # first rejection candle anywhere between 50% and 70% (a close below 70% or `band_wait` bars kills it)
+    param_grid = {"swing": [3, 5], "level": [0.3, 0.5, 0.7, "50-70"], "confirm": ["touch", "rejection"],
                   "mtf": ["none", "1h"], "sessions": ["all", "killzones"]}
 
     @classmethod
@@ -88,14 +90,47 @@ class _DTFX(_Fast):
                 if inval_px[i] < floor or i - zone["start"] > p["max_age"]:
                     zone = None
                     continue
+                band = self.zone_kind == "fib" and isinstance(p["level"], str)
                 if self.zone_kind == "fib":
                     top = zone["ext"] if self.anchor == "extreme" else zone["brk_hi"]
-                    lvl = top - p["level"] * (top - zone["origin"])
+                    if band:
+                        lo_f, hi_f = (int(x) / 100 for x in p["level"].split("-"))
+                        if "armed" not in zone:
+                            zone["lvl"], zone["deep"] = top - lo_f * (top - zone["origin"]), top - hi_f * (top - zone["origin"])
+                        lvl = zone["lvl"]
+                    else:
+                        lvl = top - p["level"] * (top - zone["origin"])
                 else:
                     lvl = zone["zhi"]
+                if band and "armed" in zone:
+                    # inside the 50–70% zone: wait for a bullish rejection close that holds above the deep edge
+                    if C[i] < zone["deep"] or i - zone["armed"] > p["band_wait"]:
+                        zone = None
+                        continue
+                    if not (L[i] <= lvl and C[i] > O[i] and C[i] > zone["deep"]):
+                        continue
+                    if win[i] and (htf is None or htf[i] * v.side > 0):
+                        out.append(RawSignal(i, v.side, v.px(C[i]), v.px(floor - p["stop_buf_atr"] * a[i]),
+                                             f"DTFX {self.name[5:]} {zone['kind']} → {p['level']}% zone rejection",
+                                             structural_target=v.px(zone["ext"]),
+                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i])}))
+                    zone = None
+                    continue
                 if L[i] > lvl:
                     if self.anchor == "extreme":
                         zone["ext"] = max(zone["ext"], H[i])             # the leg is still extending
+                    continue
+                if band:                                                 # first touch arms the zone (same bar can trigger)
+                    zone["armed"] = i
+                    if C[i] < zone["deep"]:
+                        zone = None
+                        continue
+                    if C[i] > O[i] and win[i] and (htf is None or htf[i] * v.side > 0):
+                        out.append(RawSignal(i, v.side, v.px(C[i]), v.px(floor - p["stop_buf_atr"] * a[i]),
+                                             f"DTFX {self.name[5:]} {zone['kind']} → {p['level']}% zone rejection",
+                                             structural_target=v.px(zone["ext"]),
+                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i])}))
+                        zone = None
                     continue
                 # first touch → zone mitigated, trade or not
                 ok = C[i] > floor if p["confirm"] == "touch" else (C[i] > lvl and C[i] > O[i])

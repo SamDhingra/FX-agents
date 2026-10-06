@@ -39,15 +39,6 @@ instruments:
     sim_start_price: 3650
     sim_daily_vol: 0.012
     oanda: {instrument: XAU_USD, multiplier: 1, commission_per_unit: 0, max_units: 200}
-  SPX:
-    contract: {secType: CONTFUT, symbol: MES, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUS500, exchange: SMART}
-    multiplier: 5
-    tick_size: 0.25
-    commission_per_unit: 0.62
-    max_units: 20
-    sim_start_price: 6600
-    sim_daily_vol: 0.010
-    oanda: {instrument: SPX500_USD, multiplier: 1, commission_per_unit: 0, max_units: 50}
   NDQ:
     contract: {secType: CONTFUT, symbol: MNQ, exchange: CME}     # alt CFD: {secType: CFD, symbol: IBUST100, exchange: SMART}
     multiplier: 2
@@ -232,7 +223,6 @@ shadow:
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
   spread:                       # estimated full spread in price points (virtual fills pay half on entry and exit)
     XAUUSD: 0.40
-    SPX: 0.50
     NDQ: 1.50
     US30: 2.50
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal

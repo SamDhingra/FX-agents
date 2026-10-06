@@ -89,7 +89,7 @@ python backtest.py --synthetic        # leaderboard + expectancy by hour
    account ID), plus `TYPESAFE_API_KEY`, `DASHBOARD_TOKEN` and your ntfy or Telegram details.
 3. `python check_oanda.py` is a **read-only** check: account, instruments, precision, prices.
 4. `python main.py --mode paper` trades the practice account. Instruments are the CFDs `XAU_USD`,
-   `SPX500_USD`, `NAS100_USD`, `US30_USD` (set per symbol under `oanda:` in `config.yaml`).
+   `NAS100_USD`, `US30_USD` (set per symbol under `oanda:` in `config.yaml`).
 
 Every entry carries its stop (`stopLossOnFill`), each pyramid add is its own OANDA trade with the
 same stop, and stop fills are picked up by polling open trades every ~15 s. Live: a live token
@@ -215,11 +215,22 @@ A third way to choose trades, built from a research grid instead of hourly ranki
 
 **Setups** (`fxagents/strategies/ict.py`, `structure_setups.py`, `dtfx.py`, on the primitives in
 `fxagents/structure.py`, which define swing, BOS, CHoCH, MSS, displacement, FVG and sweep exactly
-once): ICT 2022, Silver Bullet, Turtle Soup, AMD (power of three), SMT divergence across NDQ/US30/SPX,
+once): ICT 2022, Silver Bullet, Turtle Soup, AMD (power of three), SMT divergence across NDQ/US30,
 displacement, BOS retest, CHoCH retest and MSS. DTFX is formalised as four separate definitions
 wherever the sources conflict (close vs wick breaks, Fibonacci leg vs origin-candle zone, leg-extreme
 vs break-candle anchor). None is labelled canonical. Tests prove every new setup has no look-ahead and
 is long/short symmetric.
+
+Two research candidates added in Oct 2026, kept in the grid so the weekly selection can pick them only
+if they earn it:
+- **DTFX pullback zone** (`level=50-70`): instead of one Fibonacci line, reaching 50% arms the zone and
+  the trade is the first rejection candle anywhere between 50% and 70% (a close below 70% kills it).
+- **Zone confluence** (`zone_confluence`, `fxagents/strategies/confluence.py`): two or more different
+  zone setups (order block, breaker, inverse FVG, FVG after a sweep, OTE) agree in direction within a few
+  bars; stop beyond the farthest of their stops.
+First measurement (64 days, XAUUSD/NDQ/US30, all timeframes): DTFX at 50% won 48% of trades, 70% won
+41% on 40% fewer trades, the 50–70% zone won 45% on 4× the trades; two agreeing zones won 44% (the zones
+alone: 41–47%), three agreeing 38%. Agreement is not confirmation on this data.
 
 **Research** (`python run_research.py`, or `./fx.sh research` on the server, ≈10 min): every setup ×
 variant × instrument × 1m/3m/5m/15m/30m/1h × standard and scalp exits (scalp: all out at 1R, no adds,
@@ -235,7 +246,7 @@ win probability clear its instrument's bar and it was profitable in both halves 
 - XAUUSD is the core instrument: up to 10 cells and 2 positions.
 - NDQ and US30 only trade cells whose estimated win probability is ≥ 60%, with heavier shrinkage, at
   most one index position at a time.
-- SPX is watch-only, and so is any instrument with `trade: false`.
+- Any instrument with `trade: false` is watch-only (data and bias kept, no entries). SPX was removed in Oct 2026 (NDQ covers it).
 
 `walk_forward()` replays that weekly selection over history, scoring only weeks it hadn't seen.
 
@@ -307,7 +318,7 @@ Results — head-to-head metrics (R, win rate, profit factor, P&L, return, max d
 equity curves, monthly/instrument/setup/hour/exit breakdowns, learner activity and the trade list — are
 on the dashboard's **Backtests** page, and in `data/backtests/<run>/report.json`.
 Pick the books' modes with `--main-mode` / `--shadow-mode` (e.g. `--shadow-mode playbook`) and make an
-instrument watch-only for one run with `--no-trade SPX`; the report's instrument chips show one instrument
+instrument watch-only for one run with `--no-trade US30`; the report's instrument chips show one instrument
 at a time. Not replayed: news blackouts (no historical calendar). Fills are simulated: entries at bar
 price ± half-spread, stops triggered on the bid/ask, target exits at market.
 For speed each strategy scans the period once instead of rescanning a window every bar (they agree on

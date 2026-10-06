@@ -55,9 +55,9 @@ def test_stop_can_only_move_toward_profit():
 
 def test_paper_stop_fill_books_loss():
     b, st = _broker()
-    p = Position("SPX", 1, "x", 6590, 6590, 10, 1.0, st.now)
+    p = Position("US30", 1, "x", 6590, 6590, 10, 1.0, st.now)
     asyncio.run(b.open(p, 2, 6600))
-    asyncio.run(b.on_bar(Bar("SPX", st.now, 6598, 6599, 6585, 6588)))
+    asyncio.run(b.on_bar(Bar("US30", st.now, 6598, 6599, 6585, 6588)))
     assert p.open_qty == 0 and p.realized < 0
 
 

@@ -175,3 +175,21 @@ def test_rvol_and_vwap_are_causal():
     rv2, (vw2, sd2) = sx.rvol_tod(df.iloc[:cut]), sx.session_vwap(df.iloc[:cut])
     np.testing.assert_allclose(rv[:cut], rv2, equal_nan=True)
     np.testing.assert_allclose(vw[:cut], vw2, equal_nan=True)
+
+
+@pytest.mark.parametrize("name", ["dtfx_close_fib", "dtfx_wick_fib", "dtfx_close_fib_brk"])
+def test_dtfx_pullback_zone_variant(name):
+    """level='50-70': causal, symmetric, fires, and only enters between the 50% and 70% levels."""
+    df = frame(4, days=20)
+    st = build_strategy({"class": name, "tf": "5min", "params": {"level": "50-70"}})
+    ctx = Strategy._context(df)
+    full = st._scan_full(df, ctx)
+    assert full and all((s.entry - s.stop) * s.side > 0 for s in full)
+    for cut in (900, 1700, len(df) - 50):
+        part = df.iloc[:cut + 1]
+        a = {(s.i, s.side, round(s.stop, 6)) for s in full if s.i <= cut}
+        assert a == {(s.i, s.side, round(s.stop, 6)) for s in st._scan_full(part, Strategy._context(part))}
+    k = 2 * float(df["high"].max())
+    flip = pd.DataFrame({"open": k - df["open"], "high": k - df["low"], "low": k - df["high"],
+                         "close": k - df["close"], "volume": df["volume"]}, index=df.index)
+    assert {(s.i, s.side) for s in full} == {(s.i, -s.side) for s in st._scan_full(flip, Strategy._context(flip))}

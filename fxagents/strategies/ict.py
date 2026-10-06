@@ -280,7 +280,7 @@ class SMTDivergence(_Fast):
     name = "smt_divergence"
     family = "smt"
     needs_peers = True
-    description = ("ICT SMT divergence across correlated indices (NDQ / US30 / SPX — the MNQ/MYM/MES of the "
+    description = ("ICT SMT divergence across correlated indices (NDQ / US30 — the MNQ/MYM of the "
                    "futures world): this index takes its last swing low while a correlated index does NOT take "
                    "its equivalent low. That crack in correlation marks the raid; entry on the change of "
                    "character (or the reclaim of the swept low), stop below the raid.")

@@ -259,7 +259,7 @@ def test_poll_publishes_only_new_completed_bars_in_order():
         n = await feed.poll_once()
         return n
     n = run(go())
-    assert n == 3 * 4                                            # 3 new minutes × 4 symbols
+    assert n == 3 * 3                                            # 3 new minutes × 3 symbols
     ndq = [x.ts for x in bars if x.symbol == "NDQ"]
     assert ndq == sorted(ndq) and len(set(ndq)) == 3
 

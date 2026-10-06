@@ -5,6 +5,7 @@ import pandas as pd
 
 from .base import RawSignal, Strategy
 from .classic import MACDCross, RSIReversion, SRRejection
+from .confluence import ZoneConfluence
 from .dtfx import DTFXCloseFib, DTFXCloseFibBreak, DTFXCloseOrigin, DTFXWickFib
 from .ict import ICT2022, ICTAMD, ICTSilverBullet, ICTTurtleSoup, SMTDivergence
 from .smc import (DTFXZone, ICTFvgSweep, ICTOte, SMCBreaker, SMCInverseFVG, SMCLiquiditySweep,
@@ -20,7 +21,8 @@ BUILTIN: dict[str, type[Strategy]] = {c.name: c for c in
 SETUPS: dict[str, type[Strategy]] = {c.name: c for c in
                                      (ICT2022, ICTSilverBullet, ICTTurtleSoup, ICTAMD, SMTDivergence,
                                       SMCDisplacement, SMCBosRetest, SMCChochRetest, SMCMss,
-                                      DTFXCloseFib, DTFXWickFib, DTFXCloseFibBreak, DTFXCloseOrigin, VWAPSetup)}
+                                      DTFXCloseFib, DTFXWickFib, DTFXCloseFibBreak, DTFXCloseOrigin, VWAPSetup,
+                                      ZoneConfluence)}
 ALL: dict[str, type[Strategy]] = {**BUILTIN, **SETUPS}
 
 

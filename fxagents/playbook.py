@@ -5,7 +5,7 @@ playbook is the set of cells the policy currently allows, re-selected every week
 `window_days` of history, exactly as validated here:
 
   • per-instrument rules — XAUUSD is the core instrument (more cells, more concurrent positions, a lower
-    bar); NDQ / US30 only trade cells whose estimated win probability is ≥ 60%; SPX is watch-only
+    bar); NDQ / US30 only trade cells whose estimated win probability is ≥ 60%
   • a cell's win probability and expectancy are SHRUNK toward its instrument/timeframe pool
     (Bayesian, `k` pseudo-trades), because raw stats over a few dozen trades mostly measure luck
   • a cell must have been positive in both halves of the window (stability), with enough trades
@@ -58,10 +58,9 @@ class Policy:
         # 60% rule: estimates of 0.60–0.65 realised ~0.45 in walk-forward (winners regress), so index
         # cells need heavier shrinkage and more trades before their estimate is believed
         "NDQ": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
-        "US30": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
-        "SPX": InstrumentRule("off", 1.0, 9.0, 0, 0)})
-    index_group: tuple = ("NDQ", "US30", "SPX")
-    index_group_max: int = 1          # NDQ / US30 / SPX move together: one index position at a time
+        "US30": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30)})
+    index_group: tuple = ("NDQ", "US30")
+    index_group_max: int = 1          # NDQ / US30 move together: one index position at a time
     max_open: int = 3
     daily_loss_r: float = 4.0         # -2% day at 0.5% per trade = -4R
     # volume cells (vol=impulse/dry/climax variants, the VWAP setup) are researched and shown, but only

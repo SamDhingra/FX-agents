@@ -38,7 +38,7 @@ log = logging.getLogger("research")
 
 TFS = ["1min", "3min", "5min", "15min", "30min", "1h"]
 SCALP_TFS = {"1min", "3min", "5min"}
-PEERS = {"NDQ": ["US30", "SPX"], "US30": ["NDQ", "SPX"], "SPX": ["NDQ", "US30"], "XAUUSD": []}
+PEERS = {"NDQ": ["US30"], "US30": ["NDQ"], "XAUUSD": []}
 DEFAULT_SPREAD = {"XAUUSD": 0.40, "SPX": 0.50, "NDQ": 1.50, "US30": 2.50}
 NOT_ON = {"ict_silver_bullet": {"30min", "1h"}, "smt_divergence": set()}   # SB needs bars inside one hour
 
