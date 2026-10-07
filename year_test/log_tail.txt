@@ -1,80 +1,16 @@
-
-R is per trade in units of its own risk, after spread. Quarters split the period in four equal parts; an edge worth trading is positive in most quarters, not just on average. 1-minute cells are listed but the playbook doesn't trade 1m (spread is too large a share of the bar).
-
-## 1 · The playbook system, replayed week by week on unseen data
-
-Each week: pick cells from the trailing 60 days, trade them the next week, capacity rules on. This is the number that says whether the approach works.
-
-- trades **612**, win rate **47%**, avg **-0.042R**, total **-25.93R**, profit factor 0.89, worst drawdown -35.89R, t-stat -1.23, chance it's really ≤0: 0.887
-- without the 3 best trades: -33.46R
-- XAUUSD: 429 trades, 47% win, -6.02R
-- GBPUSD: 68 trades, 38% win, -20.77R
-- EURUSD: 63 trades, 44% win, -6.39R
-- NDQ: 52 trades, 64% win, +7.26R
-
-By month (R): 2025-11 -1.1 (5) · 2025-12 -15.7 (57) · 2026-01 -0.7 (18) · 2026-02 -7.6 (29) · 2026-03 -1.9 (48) · 2026-04 +8.2 (55) · 2026-05 -3.4 (65) · 2026-06 +11.7 (149) · 2026-07 -14.8 (81) · 2026-08 -10.2 (64) · 2026-09 +7.2 (36) · 2026-10 +0.0 (5)
-
-Positive weeks: 19 of 45
-
-## 2 · Cells that held up (≥30 trades, positive in both halves and ≥3 of 4 quarters)
-
-| setup | variant | sym | tf | exit | trades | win | avg R | t | H1 | H2 | Q1 | Q2 | Q3 | Q4 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| smc_displacement | disp_k=1.0 | XAUUSD | 15min | std | 67 | 66% | +0.279 | 2.5 | +0.37 | +0.13 | +0.29 | +0.49 | +0.06 | +0.23 |
-| vwap | vol=dry | XAUUSD | 15min | std | 84 | 61% | +0.319 | 2.5 | +0.34 | +0.30 | +0.21 | +0.45 | +0.45 | +0.18 |
-| trend_breakout | vol=impulse | US30 | 15min | trend | 33 | 58% | +0.654 | 2.5 | +0.95 | +0.38 | +1.00 | +0.90 | +0.66 | +0.18 |
-| vwap | vol=dry | NDQ | 30min | std | 30 | 77% | +0.377 | 2.4 | +0.28 | +0.46 | +0.26 | +0.31 | +0.44 | +0.49 |
-| smc_displacement | entry=top | XAUUSD | 15min | trend | 64 | 52% | +0.405 | 2.4 | +0.70 | +0.03 | +0.60 | +0.85 | -0.03 | +0.07 |
-| rsi_pullback | default | XAUUSD | 15min | std | 79 | 63% | +0.255 | 2.4 | +0.26 | +0.25 | +0.35 | +0.12 | -0.20 | +0.75 |
-| smc_displacement | default | XAUUSD | 15min | trend | 49 | 53% | +0.457 | 2.4 | +0.70 | +0.08 | +0.74 | +0.60 | -0.11 | +0.24 |
-| trend_breakout | vol=impulse | US30 | 15min | std | 34 | 71% | +0.413 | 2.3 | +0.47 | +0.36 | +0.64 | +0.31 | +0.46 | +0.28 |
-| smc_displacement | swing=3 | XAUUSD | 15min | std | 45 | 69% | +0.325 | 2.3 | +0.42 | +0.16 | +0.32 | +0.63 | +0.21 | +0.13 |
-| ict_turtle_soup | level=session | US30 | 15min | trend | 62 | 48% | +0.438 | 2.3 | +0.48 | +0.38 | +0.42 | +0.55 | +0.68 | +0.04 |
-| smc_displacement | default | XAUUSD | 15min | std | 49 | 67% | +0.299 | 2.2 | +0.47 | +0.03 | +0.31 | +0.84 | +0.03 | +0.04 |
-| vwap | vol=dry | XAUUSD | 15min | trend | 81 | 46% | +0.335 | 2.1
+ Container fx-agents-fxagents-run-e66ab37b5473 Creating 
+ Container fx-agents-fxagents-run-e66ab37b5473 Created 
 [  0.0 min] fetching history
-[  0.0 min] research grid (every setup × variant × instrument × timeframe)
-[ 18.8 min] playbook walk-forward
-[ 18.9 min] report
-[ 19.1 min] done
-# Strategy test — 365 days · costs raw · 15min 30min 1h · tf15_raw
-
-Created 2026-10-06 21:08 NY · trades 2025-10-06 → 2026-10-06 · 220,349 simulated trades · 5,376 cells
-
-R is per trade in units of its own risk, after spread. Quarters split the period in four equal parts; an edge worth trading is positive in most quarters, not just on average. 1-minute cells are listed but the playbook doesn't trade 1m (spread is too large a share of the bar).
-
-## 1 · The playbook system, replayed week by week on unseen data
-
-Each week: pick cells from the trailing 60 days, trade them the next week, capacity rules on. This is the number that says whether the approach works.
-
-- trades **761**, win rate **46%**, avg **-0.042R**, total **-32.06R**, profit factor 0.89, worst drawdown -41.26R, t-stat -1.31, chance it's really ≤0: 0.903
-- without the 3 best trades: -47.87R
-- XAUUSD: 440 trades, 48% win, -0.88R
-- GBPUSD: 156 trades, 44% win, -23.27R
-- EURUSD: 93 trades, 46% win, -3.14R
-- AUDUSD: 18 trades, 17% win, -6.95R
-- NDQ: 54 trades, 56% win, +2.18R
-
-By month (R): 2025-11 -1.1 (5) · 2025-12 -20.9 (96) · 2026-01 -12.2 (38) · 2026-02 -7.0 (27) · 2026-03 +8.2 (58) · 2026-04 +11.0 (58) · 2026-05 -1.0 (76) · 2026-06 +4.0 (183) · 2026-07 -15.7 (99) · 2026-08 -15.6 (70) · 2026-09 +7.8 (38) · 2026-10 +2.0 (13)
-
-Positive weeks: 18 of 46
-
-## 2 · Cells that held up (≥30 trades, positive in both halves and ≥3 of 4 quarters)
-
-| setup | variant | sym | tf | exit | trades | win | avg R | t | H1 | H2 | Q1 | Q2 | Q3 | Q4 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| smc_displacement | disp_k=1.0 | XAUUSD | 15min | std | 68 | 68% | +0.295 | 2.6 | +0.38 | +0.16 | +0.30 | +0.50 | +0.07 | +0.27 |
-| vwap | vol=dry | XAUUSD | 15min | trend | 83 | 48% | +0.406 | 2.6 | +0.36 | +0.45 | +0.31 | +0.41 | +0.52 | +0.38 |
-| vwap | vol=dry | NDQ | 30min | std | 30 | 77% | +0.386 | 2.5 | +0.29 | +0.47 | +0.28 | +0.31 | +0.45 | +0.50 |
-| vwap | vol=dry | XAUUSD | 15min | std | 85 | 60% | +0.329 | 2.5 | +0.33 | +0.33 | +0.23 | +0.42 | +0.53 | +0.16 |
-| rsi_pullback | default | XAUUSD | 15min | std | 79 | 63% | +0.264 | 2.4 | +0.26 | +0.27 | +0.35 | +0.12 | -0.20 | +0.79 |
-| trend_breakout | vol=impulse | US30 | 15min | trend | 33 | 58% | +0.651 | 2.4 | +0.94 | +0.37 | +1.01 | +0.88 | +0.66 | +0.18 |
-| smc_displacement | swing=3 | XAUUSD | 15min | std | 45 | 69% | +0.340 | 2.4 | +0.43 | +0.18 | +0.33 | +0.64 | +0.24 | +0.14 |
-| smc_displacement | default | XAUUSD | 15min | std | 50 | 68% | +0.316 | 2.4 | +0.48 | +0.07 | +0.31 | +0.86 | +0.05 | +0.10 |
-| smc_displacement | entry=top | XAUUSD | 15min | trend | 65 | 51% | +0.392 | 2.4 | +0.70 | +0.01 | +0.61 | +0.86 | -0.02 | +0.02 |
-| trend_breakout | vol=impulse | US30 | 15min | std | 34 | 71% | +0.417 | 2.3 | +0.48 | +0.35 | +0.66 | +0.32 | +0.44 | +0.29 |
-| ict_turtle_soup | level=session | US30 | 15min | trend | 62 | 48% | +0.443 | 2.3 | +0.48 | +0.40 | +0.41 | +0.55 | +0.69 | +0.05 |
-| smc_displacement | default | XAUUSD | 15m
-On branch results
-nothing to commit, working tree clean
-published: https://github.com/SamDhingra/FX-agents/tree/results/year_test
+  pulling 90 days of XAUUSD 1-minute candles from OANDA …
+    87,912 bars, 2026-07-09 → 2026-10-07
+  pulling 90 days of NDQ 1-minute candles from OANDA …
+    88,079 bars, 2026-07-09 → 2026-10-07
+  pulling 90 days of US30 1-minute candles from OANDA …
+    87,998 bars, 2026-07-09 → 2026-10-07
+  pulling 90 days of EURUSD 1-minute candles from OANDA …
+    91,469 bars, 2026-07-09 → 2026-10-07
+  pulling 90 days of GBPUSD 1-minute candles from OANDA …
+    91,606 bars, 2026-07-09 → 2026-10-07
+  pulling 90 days of AUDUSD 1-minute candles from OANDA …
+    90,890 bars, 2026-07-09 → 2026-10-07
+[  0.5 min] research grid (every setup × variant × instrument × timeframe)
