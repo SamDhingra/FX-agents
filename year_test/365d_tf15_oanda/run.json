@@ -1,0 +1,26 @@
+{
+ "days": 365,
+ "costs": "oanda",
+ "tfs": [
+  "15min",
+  "30min",
+  "1h"
+ ],
+ "classes": null,
+ "symbols": [
+  "XAUUSD",
+  "NDQ",
+  "US30",
+  "EURUSD",
+  "GBPUSD",
+  "AUDUSD"
+ ],
+ "spreads": {
+  "XAUUSD": 0.4,
+  "NDQ": 1.5,
+  "US30": 2.5,
+  "EURUSD": 0.00014,
+  "GBPUSD": 0.0002,
+  "AUDUSD": 0.00016
+ }
+}
