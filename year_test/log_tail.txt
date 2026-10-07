@@ -1,0 +1,50 @@
+ Container fx-agents-fxagents-run-fbea8c498f89 Creating 
+ Container fx-agents-fxagents-run-fbea8c498f89 Created 
+[  0.0 min] fetching history
+  pulling 365 days of NDQ 1-minute candles from OANDA …
+    354,099 bars, 2025-10-06 → 2026-10-06
+  pulling 365 days of US30 1-minute candles from OANDA …
+    353,919 bars, 2025-10-06 → 2026-10-06
+[  0.6 min] research grid (every setup × variant × instrument × timeframe)
+[ 55.0 min] playbook walk-forward
+[ 55.3 min] report
+[ 55.6 min] done
+# Strategy test — 365 days
+
+Created 2026-10-06 15:49 NY · trades 2025-10-06 → 2026-10-06 · 788,198 simulated trades · 3,728 cells
+
+R is per trade in units of its own risk, after spread. Quarters split the period in four equal parts; an edge worth trading is positive in most quarters, not just on average. 1-minute cells are listed but the playbook doesn't trade 1m (spread is too large a share of the bar).
+
+## 1 · The playbook system, replayed week by week on unseen data
+
+Each week: pick cells from the trailing 60 days, trade them the next week, capacity rules on. This is the number that says whether the approach works.
+
+- trades **1454**, win rate **50%**, avg **-0.000R**, total **-0.30R**, profit factor 1.0, worst drawdown -20.18R, t-stat -0.01, chance it's really ≤0: 0.522
+- without the 3 best trades: -13.41R
+- XAUUSD: 1358 trades, 50% win, -10.30R
+- NDQ: 96 trades, 62% win, +9.99R
+
+By month (R): 2025-11 +1.2 (161) · 2025-12 -19.0 (171) · 2026-01 -5.1 (146) · 2026-02 -13.0 (68) · 2026-03 -6.3 (129) · 2026-04 +15.7 (115) · 2026-05 -5.2 (102) · 2026-06 +6.8 (201) · 2026-07 -10.5 (116) · 2026-08 -9.9 (104) · 2026-09 +15.3 (129) · 2026-10 +3.4 (12)
+
+Positive weeks: 23 of 49
+
+## 2 · Cells that held up (≥30 trades, positive in both halves and ≥3 of 4 quarters)
+
+| setup | variant | sym | tf | exit | trades | win | avg R | t | H1 | H2 | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| smc_displacement | disp_k=1.0 | XAUUSD | 15min | std | 67 | 66% | +0.279 | 2.5 | +0.37 | +0.13 | +0.29 | +0.49 | +0.06 | +0.23 |
+| vwap | vol=dry | XAUUSD | 15min | std | 84 | 61% | +0.319 | 2.5 | +0.34 | +0.30 | +0.21 | +0.45 | +0.45 | +0.18 |
+| vwap | vol=dry | NDQ | 30min | std | 30 | 77% | +0.377 | 2.4 | +0.28 | +0.46 | +0.26 | +0.31 | +0.44 | +0.49 |
+| rsi_pullback | default | XAUUSD | 15min | std | 79 | 63% | +0.255 | 2.4 | +0.26 | +0.25 | +0.35 | +0.12 | -0.20 | +0.75 |
+| smc_displacement | swing=3 | XAUUSD | 15min | std | 45 | 69% | +0.325 | 2.3 | +0.42 | +0.16 | +0.32 | +0.63 | +0.21 | +0.13 |
+| dtfx_wick_fib | vol=impulse | XAUUSD | 3min | scalp | 65 | 68% | +0.229 | 2.3 | +0.19 | +0.30 | +0.20 | +0.17 | +0.59 | +0.07 |
+| dtfx_close_fib | vol=impulse | XAUUSD | 3min | scalp | 44 | 70% | +0.268 | 2.3 | +0.29 | +0.23 | +0.54 | +0.04 | +0.55 | -0.02 |
+| dtfx_close_fib | mtf=1h | NDQ | 5min | scalp | 59 | 66% | +0.170 | 2.3 | +0.30 | +0.03 | +0.45 | +0.19 | +0.04 | +0.02 |
+| smc_displacement | default | XAUUSD | 15min | std | 49 | 67% | +0.299 | 2.2 | +0.47 | +0.03 | +0.31 | +0.84 | +0.03 | +0.04 |
+| ict_amd | manip=ny | NDQ | 3min | scalp | 39 | 67% | +0.165 | 2.1 | +0.21 | +0.11 | +0.14 | +0.28 | +0.09 | +0.16 |
+| smc_ifvg | default | XAUUSD | 15min | std | 154 | 60% | +0.161 | 2.1 | +0.10 | +0.22 | -0.01 | +0.21 | +0.26 | +0.18 |
+| smc_displacement | disp_k=1.5 | XAUUSD | 15min | std | 30 | 70% | +0.326 | 2.0 | +0.46 | +0.17 | +0.23 | +1.15 | +0.21 | +0.14 |
+| ict_turtle_soup | level=session | US30 | 15min | std | 62 | 58% | +0.3
+On branch results
+nothing to commit, working tree clean
+published: https://github.com/SamDhingra/FX-agents/tree/results/year_test/365d
