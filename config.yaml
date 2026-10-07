@@ -249,7 +249,8 @@ setup_first:
 shadow:
   enabled: true
   mode: playbook                # what the shadow book runs (default: setup_first if the real book is hourly_pick)
-  modes: [playbook, setup_first]  # several shadow books side by side (overrides `mode`); each gets its own journal:
+  modes: [playbook]             # shadow books (overrides `mode`); several run side by side, each with its own journal.
+                                  # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
   spread:                       # estimated full spread in price points (virtual fills pay half on entry and exit)
