@@ -1,0 +1,26 @@
+{
+ "days": 365,
+ "costs": "raw",
+ "tfs": [
+  "15min",
+  "30min",
+  "1h"
+ ],
+ "classes": null,
+ "symbols": [
+  "XAUUSD",
+  "NDQ",
+  "US30",
+  "EURUSD",
+  "GBPUSD",
+  "AUDUSD"
+ ],
+ "spreads": {
+  "XAUUSD": 0.2,
+  "NDQ": 1.0,
+  "US30": 1.6,
+  "EURUSD": 9e-05,
+  "GBPUSD": 0.0001,
+  "AUDUSD": 0.0001
+ }
+}
