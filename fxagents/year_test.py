@@ -121,6 +121,18 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
             L.append(f"| {setup} | {sym} | {mg} | {n} | {w:.0%} | {a:+.3f} | {_fmt(float(h1))} | {_fmt(float(h2))} |")
     L.append("")
 
+    # 3b · exit management compared on the same signals
+    ex = t[(t["variant"] == "default") & (t["tf"] != "1min")]
+    if ex["mgmt"].nunique() > 1:
+        L.append("## 3b · Exits compared (same signals, default variants, all instruments, 15m+ for trend)\n")
+        L.append("std = 1R first target, half banked, runner trailed (the bot today) · scalp = all out at 1R, 30-min cap (≤5m) · "
+                 "trend = 2R first target + runner · tpX = all out at X R, no runner\n")
+        L.append("| exit | trades | win | avg R | total R | per symbol (avg R) |")
+        L.append("|---|---|---|---|---|---|")
+        for mg, g in ex.groupby("mgmt"):
+            per = " · ".join(f"{s} {x.r.mean():+.3f}" for s, x in g.groupby("sym"))
+            L.append(f"| {mg} | {len(g)} | {(g.r > 0).mean():.0%} | {g.r.mean():+.3f} | {g.r.sum():+.0f} | {per} |")
+        L.append("")
     # 4 · best per setup
     L.append(f"## 4 · Best cell per setup (≥{MIN_N} trades, by t-stat)\n")
     if len(c):
@@ -155,6 +167,10 @@ def run_one(a, costs: str, tag: str) -> None:
     if costs == "raw":
         sc = cfg.setdefault("shadow", {})
         sc["spread"] = {**(sc.get("spread") or {}), **research.RAW_SPREAD}
+    if a.exits:
+        cfg.setdefault("research", {})["exit_profiles"] = list(a.exits)
+    if a.window:
+        cfg.setdefault("playbook", {})["window_days"] = int(a.window)
     if a.tfs:
         cfg.setdefault("playbook", {})["tfs"] = [t for t in a.tfs if t != "1min"] or a.tfs
     cfg["history_dir"] = str(base)
@@ -179,6 +195,7 @@ def run_one(a, costs: str, tag: str) -> None:
     cells = cell_table(t)
     cells.round(4).to_csv(out / "cells.csv", index=False)
     (out / "run.json").write_text(json.dumps({"days": a.days, "costs": costs, "tfs": a.tfs, "classes": a.classes,
+                                              "exits": a.exits, "window": a.window,
                                               "symbols": syms, "spreads": (cfg.get("shadow") or {}).get("spread")}, indent=1))
     write_report(out, t, cells, summary, a.days, cfg, label=f"{a.days} days · costs {costs}"
                  + (f" · {' '.join(a.tfs)}" if a.tfs else "") + (f" · {tag}" if tag else ""))
@@ -198,6 +215,9 @@ def main() -> int:
                          "both = run twice, folders <tag>_oanda and <tag>_raw")
     ap.add_argument("--tag", default="", help="name for this run's folder, e.g. trend_raw → data/year_test/365d_trend_raw")
     ap.add_argument("--report-only", action="store_true", help="rebuild the report from an earlier run's trades")
+    ap.add_argument("--exits", nargs="*", default=[],
+                    help="extra fixed take-profit exits to compare with the runner management, e.g. tp1 tp1.5 tp2")
+    ap.add_argument("--window", type=int, help="playbook selection window in days (default config, 60); use ~30 on a 90-day test")
     a = ap.parse_args()
     costs = ["oanda", "raw"] if a.costs == "both" else [a.costs]
     for c in costs:

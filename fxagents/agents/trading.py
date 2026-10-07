@@ -431,6 +431,9 @@ class RiskAgent(Agent):
         if pb.get("mgmt") == "trend":            # trend exit profile: first target 2R, no adds, up to 8 hours
             pos.meta.update(no_pyramid=True, max_hold=480)
             pos.rr = max(pos.rr, 2.0)
+        if str(pb.get("mgmt", "")).startswith("tp"):   # fixed take-profit: all out at the target (tp1, tp1.5, tp2 …)
+            pos.meta.update(no_pyramid=True, full_exit=True)
+            pos.rr = float(str(pb["mgmt"])[2:])
         try:
             px = await self.ctx.broker.open(pos, qty, price)
         except OrderRejected as e:

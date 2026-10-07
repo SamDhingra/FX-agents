@@ -177,11 +177,64 @@ class StrategistAgent(Agent):
 
     # ── pooled helpers ────────────────────────────────────────────────────
     def _pooled(self, st: Strategy, frames, part: str) -> dict:
+        return stats(self._pooled_trades(st, frames, part))
+
+    def _pooled_trades(self, st: Strategy, frames, part: str) -> list[dict]:
         tr = []
         for (sym, tf), item in frames.items():
             if tf == st.tf:
                 tr += self._bt(st, item, part)
-        return stats(tr)
+        return tr
+
+    def real_hours(self, sid_base: str) -> dict[int, list[float]]:
+        """Real results (account + shadow books) of every version of this strategy, by NY entry hour."""
+        out: dict[int, list[float]] = {}
+        books = [self.ctx.journal] + [sh.journal for sh in (getattr(self.ctx, "shadows", None) or {}).values()]
+        for j in books:
+            try:
+                rows = j.db.execute("SELECT hour, r_multiple FROM trades WHERE status='closed' AND r_multiple IS NOT NULL "
+                                    "AND strategy LIKE ?", (sid_base + "@%",)).fetchall()
+            except Exception:  # noqa: BLE001
+                continue
+            for h, r in rows:
+                if h is not None:
+                    out.setdefault(int(h), []).append(float(r))
+        return out
+
+    def context_filter(self, st: Strategy, trades: list[dict]) -> dict | None:
+        """Learn when NOT to trade a strategy: hours (and a losing direction) where its in-sample record —
+        shrunk toward its overall record, and backed by real trades where they exist — is clearly negative.
+        Returns the parameter change, or None. The caller validates it on the out-of-sample third."""
+        if len(trades) < 25:
+            return None
+        k, r_all = 10.0, float(np.mean([t["r"] for t in trades]))
+        by_h: dict[int, list[float]] = {}
+        for t in trades:
+            by_h.setdefault(int(t["hour"]), []).append(float(t["r"]))
+        real = self.real_hours(st.id.split("@")[0])
+        block = set(int(h) for h in (st.params.get("block_hours") or []))
+        for h, rs in by_h.items():
+            shr = (len(rs) * np.mean(rs) + k * r_all) / (len(rs) + k)
+            rr = real.get(h, [])
+            if len(rs) >= 6 and shr < -0.10 and not (len(rr) >= 5 and np.mean(rr) > 0):
+                block.add(h)                                   # backtest says no, real trades don't disagree
+            elif len(rr) >= 6 and np.mean(rr) < -0.35 and shr < 0:
+                block.add(h)                                   # real trades lose here and the backtest agrees
+        if len(block) > 12:                                    # never switch a strategy off by the back door
+            return None
+        change: dict = {}
+        if block != set(st.params.get("block_hours") or []):
+            change["block_hours"] = sorted(block)
+        if (st.params.get("sides") or "both") == "both":
+            lo = [t["r"] for t in trades if t["side"] > 0]
+            sh = [t["r"] for t in trades if t["side"] < 0]
+            if len(lo) >= 15 and len(sh) >= 15:
+                ml, ms = float(np.mean(lo)), float(np.mean(sh))
+                if ml < -0.05 and ms - ml > 0.15:
+                    change["sides"] = "short"
+                elif ms < -0.05 and ml - ms > 0.15:
+                    change["sides"] = "long"
+        return change or None
 
     def _search(self, frames, live: list[Strategy]) -> list[dict]:
         """CPU-heavy part, runs in a worker thread. Returns proposals for the async review step."""
@@ -209,6 +262,16 @@ class StrategistAgent(Agent):
                           "spec": {"class": st.name, "params": cand.params, "rr": rr, "tf": st.tf},
                           "change": {**params, **({"rr": rr} if rr != st.rr else {})},
                           "is": best_is, "oos": oos_c, "incumbent_oos": oos_i, "incumbent_is": base_is})
+        # context filters: hours / direction where a strategy keeps losing (learned in-sample, validated out of sample)
+        for st in [x for x in live if not isinstance(x, Confluence)]:
+            ch = self.context_filter(st, self._pooled_trades(st, frames, "is"))
+            if not ch:
+                continue
+            cand = build_strategy({"class": st.name, "params": {**st.params, **ch}, "rr": st.rr, "tf": st.tf})
+            props.append({"kind": "filter", "parent": st.id,
+                          "spec": {"class": st.name, "params": cand.params, "rr": st.rr, "tf": st.tf},
+                          "change": ch, "is": self._pooled(cand, frames, "is"), "oos": self._pooled(cand, frames, "oos"),
+                          "incumbent_oos": self._pooled(st, frames, "oos"), "incumbent_is": self._pooled(st, frames, "is")})
         # confluence creation
         ranked = sorted([x for x in live if not isinstance(x, Confluence)],
                         key=lambda x: -self._pooled(x, frames, "full")["expectancy"])[:3]

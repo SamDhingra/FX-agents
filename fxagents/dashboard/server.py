@@ -471,6 +471,87 @@ def build_app(ctx) -> FastAPI:
             raise HTTPException(404, "no report yet")
         return JSONResponse(json.loads(p.read_text()))
 
+    # ── strategy lab: candidates are tested before they reach the playbook ──
+    lab_proc: dict = {}
+
+    @app.get("/api/lab")
+    async def api_lab(request: Request):
+        need(request)
+        from fxagents import lab
+        from fxagents.strategies import ALL, SETUPS
+        p = lab_proc.get("p")
+        running = lab_proc.get("id") if p is not None and p.returncode is None else None
+        pine = {x.stem for x in (Path(__file__).resolve().parents[2] / "pine").glob("*.pine")}
+        return {"candidates": lab.load(ctx.cfg), "pins": lab.lab_pinned(ctx.cfg), "criteria": lab.CRITERIA,
+                "running": running, "symbols": list(ctx.cfg["instruments"]), "pine": sorted(pine),
+                "setups": {n: {"params": c.default_params, "grid": getattr(c, "param_grid", {}),
+                               "description": c.description, "playbook": n in SETUPS} for n, c in sorted(ALL.items())}}
+
+    @app.post("/api/lab")
+    async def api_lab_add(request: Request):
+        need(request, always=True)
+        from fxagents import lab
+        b = await request.json()
+        try:
+            c = lab.add(ctx.cfg, b.get("setup", ""), b.get("params") or {}, b.get("symbols") or None,
+                        b.get("tfs") or None, str(b.get("note") or "")[:200])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return c
+
+    @app.post("/api/lab/{cid}/{action}")
+    async def api_lab_action(cid: str, action: str, request: Request):
+        need(request, always=True)
+        from fxagents import lab
+        if not cid.isalnum() or lab.get(ctx.cfg, cid) is None:
+            raise HTTPException(404, "no such candidate")
+        b = {}
+        try:
+            b = await request.json()
+        except Exception:  # noqa: BLE001
+            pass
+        if action == "run":
+            p = lab_proc.get("p")
+            if p is not None and p.returncode is None:
+                raise HTTPException(409, "a lab test is already running")
+            import sys
+            args = ["nice", "-n", "15", sys.executable, "-m", "fxagents.lab", "run", cid]
+            if b.get("days"):
+                args += ["--days", str(int(b["days"]))]
+            lab.update(ctx.cfg, cid, status="testing", error=None)
+            import os
+            logf = lab.lab_dir(ctx.cfg) / f"{cid}.log"
+            fh = open(logf, "wb")
+            env = {**os.environ, "FX_DB_PATH": str(ctx.cfg["storage"]["db_path"])}   # same lab folder as this app
+            proc = await asyncio.create_subprocess_exec(*args, stdout=fh, stderr=asyncio.subprocess.STDOUT, env=env)
+            lab_proc.update(id=cid, p=proc)
+
+            async def watch():
+                rc = await proc.wait()
+                fh.close()
+                c = lab.get(ctx.cfg, cid)
+                if c and c.get("status") == "testing":
+                    tail = logf.read_text(errors="replace")[-400:] if logf.exists() else ""
+                    lab.update(ctx.cfg, cid, status="error", error=f"test stopped (exit {rc}): {tail}")
+            asyncio.ensure_future(watch())
+            return {"ok": True, "running": cid}
+        try:
+            if action == "promote":
+                return lab.promote(ctx.cfg, cid, b.get("cells") or None)
+            if action == "reject":
+                return lab.unpromote(ctx.cfg, cid)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        raise HTTPException(404, "unknown action")
+
+    @app.get("/api/pine/{name}")
+    async def api_pine(name: str, request: Request):
+        need(request)
+        p = Path(__file__).resolve().parents[2] / "pine" / f"{name}.pine"
+        if not name.replace("_", "").isalnum() or not p.exists():
+            raise HTTPException(404, "no Pine script for that setup yet")
+        return PlainTextResponse(p.read_text(), headers={"Content-Disposition": f"attachment; filename={name}.pine"})
+
     @app.get("/api/compare")
     async def api_compare(request: Request, range: str = "week", vs: str = "shadow"):
         need(request)

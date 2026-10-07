@@ -52,7 +52,8 @@ def test_selection_respects_instrument_rules():
     rows += trades_for("XAUUSD", "5min", "smc_bos_retest", 0.62, 0.62)             # good gold cell
     rows += trades_for("XAUUSD", "5min", "ict_ote", 0.75, 0.20)                    # one good half only → out
     rows += trades_for("XAUUSD", "5min", "smc_mss", 0.40, 0.40)                    # pool filler (drags p0 down)
-    rows += trades_for("NDQ", "5min", "ict_silver_bullet", 0.62, 0.62)             # 62% raw: not enough evidence
+    rows += trades_for("NDQ", "5min", "ict_silver_bullet", 0.62, 0.62)             # 62% raw: clears the 50% bar
+    rows += trades_for("NDQ", "5min", "ict_turtle_soup", 0.50, 0.50)               # coin flip: shrunk below 50% → out
     rows += trades_for("NDQ", "5min", "smc_mss", 0.40, 0.40)
     rows += trades_for("US30", "5min", "dtfx_close_fib", 0.95, 0.95, n_per_day=2)  # overwhelming evidence → in
     rows += trades_for("US30", "5min", "smc_mss", 0.40, 0.40)
@@ -64,10 +65,10 @@ def test_selection_respects_instrument_rules():
     got = {(r.sym, r.setup) for r in sel.itertuples()}
     assert ("XAUUSD", "smc_bos_retest") in got
     assert ("XAUUSD", "ict_ote") not in got and ("XAUUSD", "smc_choch") not in got
-    assert ("NDQ", "ict_silver_bullet") not in got
+    assert ("NDQ", "ict_silver_bullet") in got and ("NDQ", "ict_turtle_soup") not in got
     assert ("US30", "dtfx_close_fib") in got
     assert not any(s == "SPX" for s, _ in got)
-    assert (sel["p"][sel["sym"] != "XAUUSD"] >= 0.60).all()
+    assert (sel["p"][sel["sym"] != "XAUUSD"] >= 0.50).all()
 
 
 def test_weekly_reselection_never_sees_the_week_it_trades():

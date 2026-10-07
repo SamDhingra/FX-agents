@@ -196,6 +196,12 @@ tr.row{cursor:pointer} tr.row:hover td{background:var(--card-2)}
 @media (max-width:760px){.pt-head small{display:none}
   .ptg{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -14px;padding:0 14px 4px;scroll-padding:0 14px;scrollbar-width:none}.ptg::-webkit-scrollbar{display:none}
   .ptg .pt{flex:0 0 84%;scroll-snap-align:start}.ptg .pt:only-child{flex-basis:100%}}
+.labform{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.labform label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+.labform .wide{grid-column:1/-1}.labform>*{min-width:0}.labform select,.labform textarea,.labform input:not([type=checkbox]){width:100%;box-sizing:border-box}.labform small{overflow-wrap:anywhere;font-weight:500}.labform select,.labform textarea,.labform input:not([type=checkbox]){font:13px var(--mono);padding:8px 10px;border-radius:10px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text)}
+.labform .chk{flex-direction:row;align-items:center;gap:5px;font-weight:500;color:var(--text-2)}
+.labc{padding:12px 2px;border-top:1px solid var(--line)}.labc .rw{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.labc .rw .sp{flex:1}
+.labbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.labbtns .btn{padding:6px 10px;font-size:12px}.labbtns .btn[disabled]{opacity:.45;cursor:default}
+@media (max-width:760px){.labform{grid-template-columns:1fr}}
 .fi .when{color:var(--muted);font-size:12px;min-width:74px;font-family:var(--mono)}
 details summary{cursor:pointer;color:var(--accent-2);font-size:12px;margin-top:4px}
 pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(--mono);background:var(--card-2);padding:10px;border-radius:10px;max-height:240px;overflow:auto;margin:6px 0 0}
@@ -441,6 +447,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
     <!-- BACKTESTS -->
     <section class="page" id="p-backtests">
+      <div class="card" style="margin-bottom:16px" id="labCard"><h3>Strategy lab <span class="sp"></span><span class="mut" style="font-weight:500" id="labCrit"></span></h3>
+        <div class="mut" style="font-size:12.5px;margin:-4px 0 12px">New and enhanced strategies are tested here first. Nothing in the lab trades until you promote it; promoted cells join the playbook (its caps still apply).</div>
+        <details id="labAddBox"><summary>Add a candidate</summary><div class="labform">
+          <label>Setup<select id="labSetup"></select></label>
+          <label class="wide">Parameters (JSON)<textarea id="labParams" rows="3" spellcheck="false"></textarea><small class="mut" id="labGrid"></small></label>
+          <label>Instruments<div class="fgroup" id="labSyms"></div></label>
+          <label>Timeframes<div class="fgroup" id="labTfs"></div></label>
+          <label class="wide">Note<input id="labNote" maxlength="200" placeholder="what's different about this version"></label>
+          <div><button class="btn" id="labAdd">Add to lab</button> <span class="mut" id="labMsg"></span></div></div></details>
+        <div id="labList" style="margin-top:12px"><div class="empty">Loading…</div></div></div>
       <div class="grid">
         <div class="card c8"><h3>Runs <span class="sp"></span><span class="mut" style="font-weight:500">full-system replays on real OANDA history</span></h3><div class="tbl" id="btRuns"><div class="empty">Loading…</div></div></div>
         <div class="card c4"><h3>Start a run</h3><div class="t2" style="font-size:13px;line-height:1.6">
@@ -1076,7 +1092,7 @@ function renderSetupMap(){
 }
 
 /* ── playbook: research by instrument ── */
-const SETUP_NAMES = {london_breakout:"London breakout", zone_confluence:"Zone confluence", ict_2022:"ICT 2022", ict_silver_bullet:"Silver Bullet", ict_turtle_soup:"Turtle Soup", ict_amd:"AMD (power of 3)",
+const SETUP_NAMES = {london_breakout:"London breakout", trend_pullback:"Trend pullback", trend_breakout:"Trend breakout", zone_confluence:"Zone confluence", ict_2022:"ICT 2022", ict_silver_bullet:"Silver Bullet", ict_turtle_soup:"Turtle Soup", ict_amd:"AMD (power of 3)",
   smt_divergence:"SMT divergence", smc_displacement:"Displacement", smc_bos_retest:"BOS retest", smc_choch:"CHoCH retest", smc_mss:"MSS",
   dtfx_close_fib:"DTFX · close · fib", dtfx_wick_fib:"DTFX · wick · fib", dtfx_close_fib_brk:"DTFX · close · fib (break high)",
   dtfx_close_origin:"DTFX · close · origin zone", dtfx_zone:"DTFX-style (legacy)", ict_fvg_sweep:"FVG sweep (legacy)", ict_ote:"OTE",
@@ -1109,7 +1125,7 @@ function pbStats(w){
 }
 function roleBadge(role){
   return role === "core" ? `<span class="role core">Core · priority &amp; capacity</span>`
-    : role === "selective" ? `<span class="role selective">Selective · ≥60% win probability only</span>` : `<span class="role off">Watch-only</span>`;
+    : role === "selective" ? `<span class="role selective">Selective · ≥50% win probability only</span>` : `<span class="role off">Watch-only</span>`;
 }
 function ruleText(inst, pol){
   const r = inst.rule;
@@ -1152,9 +1168,9 @@ function renderResearch(){
   });
 }
 function cellsTable(cells, withSym, role){
-  if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the 60% bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
+  if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the 50% bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
   return `<div class="tbl"><table><tr>${withSym?"<th>Symbol</th>":""}<th>Setup</th><th>TF</th><th class="hide-m">Exit</th><th class="hide-m">Variant</th><th class="r hide-m">Trades</th><th class="r hide-m">Win</th><th class="r">Est. win</th><th class="r">Avg R</th></tr>${
-    cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}${c.pinned?' <span class="tag acc" title="always traded (config playbook.pinned), not chosen by the weekly selection">pinned</span>':""}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="scalp"?'<span class="tag gh">scalp</span>':"standard"}</td>
+    cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}${c.pinned?' <span class="tag acc" title="always traded (config playbook.pinned), not chosen by the weekly selection">pinned</span>':""}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="std"||!c.mgmt?"standard":`<span class="tag gh">${esc(c.mgmt)}</span>`}</td>
       <td class="hide-m"><small class="mut">${esc(c.variant)}</small></td><td class="r num hide-m">${c.n}</td><td class="r num hide-m">${Math.round(c.win_rate*100)}%</td>
       <td class="r num">${Math.round(c.p*100)}%</td><td class="r num ${cls(c.exp_r)}">${sR(c.exp_r)}</td></tr>`).join("")}</table></div>`;
 }
@@ -1202,9 +1218,9 @@ function pbInstrument(sym){
       <div class="hmleg"><span>${legend}</span><span><i class="thin"></i> under 15 trades</span><span><i style="display:inline-block;width:14px;height:12px;border-radius:3px;outline:2px solid var(--accent);outline-offset:-2px"></i> in the playbook now</span>
         <span>· in-sample ${md(RS.data.from)}–${md(RS.data.oos_from)}, out-of-sample after</span></div></div>
     <div class="card ${inst.role==="selective"?"c7":"c12"}"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">${cells.length} cell${cells.length===1?"":"s"} · as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(cells, false, inst.role)}</div>
-    ${inst.role==="selective" ? `<div class="card c5"><h3>Watchlist · closest to 60%</h3>${watch.length ? `<div class="tbl"><table><tr><th>Setup</th><th>TF</th><th class="r">Trades</th><th class="r">Raw win</th><th class="r">Est.</th></tr>${
+    ${inst.role==="selective" ? `<div class="card c5"><h3>Watchlist · closest to 50%</h3>${watch.length ? `<div class="tbl"><table><tr><th>Setup</th><th>TF</th><th class="r">Trades</th><th class="r">Raw win</th><th class="r">Est.</th></tr>${
         watch.slice(0,8).map(w => `<tr><td>${esc(sname(w.setup))}${w.mgmt==="scalp"?' <span class="tag gh">scalp</span>':""}</td><td>${tfl(w.tf)}</td><td class="r num">${w.n}</td><td class="r num">${Math.round(w.win_rate*100)}%</td><td class="r num ${w.eligible?"ok":"no"}">${Math.round(w.p*100)}%</td></tr>`).join("")}</table></div>` : `<div class="empty">Nothing close yet.</div>`}
-      <div class="mut" style="font-size:12px;margin-top:10px">“Est.” is the shrunk win probability the 60% rule uses. A raw 70% over 30 trades isn't enough: combinations chosen for a high win rate tend to fall back toward average on the following weeks (see the calibration table under All).</div></div>` : ""}
+      <div class="mut" style="font-size:12px;margin-top:10px">“Est.” is the shrunk win probability the 50% rule uses. A raw 70% over 30 trades isn't enough: combinations chosen for a high win rate tend to fall back toward average on the following weeks (see the calibration table under All).</div></div>` : ""}
     <div class="card c5"><h3>Costs &amp; size per timeframe</h3><div class="tbl"><table><tr><th>Timeframe</th><th class="r">Spread (R)</th><th class="r">Size taken</th></tr>${
       PB_TFS.map(tf => { const c = costs.find(x => x.tf === tf); return c ? `<tr><td>${tfl(tf)}${tf==="1min"?' <span class="mut">(not traded)</span>':""}</td><td class="r num down">${sR(-c.cost_r)}</td><td class="r num">${c.size!=null && c.size<=1 ? Math.round(c.size*100)+"%" : "—"}</td></tr>` : ""; }).join("")}</table></div>
       <div class="mut" style="font-size:12px;margin-top:10px">Spread: average paid per trade, in units of the trade's risk. Size taken: the average share of the 0.5% risk budget Risk can really use. Tight stops hit the 25% margin cap per position, so small-timeframe trades are sized down.</div></div>
@@ -1228,7 +1244,7 @@ function pbAll(){
   const liveTxt = Object.entries(live).map(([b,x]) => `${b === "shadow" ? "Shadow" : "Live"} book since it started: <b>${x.trades}</b> trades · ${Math.round(x.win_rate*100)}% win · <b class="${cls(x.sum_r)}">${sR(x.sum_r)}</b>`).join("<br>");
   return `<div class="grid">${pbVerdict()}
     <div class="card c5"><h3>The playbook <span class="sp"></span><span class="mut" style="font-weight:500">${(RS.playbook.cells||[]).length} cells now</span></h3>
-      <div class="rule">Cells are setup × instrument × timeframe × exit, re-chosen every week from the last ${pol.window_days} days of research. Gold is the core instrument; NDQ and US30 only trade cells whose estimated win probability is ≥ 60%; SPX is watch-only. Your bias rule, Jev (advisory sizing) and every risk limit apply as usual.</div>
+      <div class="rule">Cells are setup × instrument × timeframe × exit, re-chosen every week from the last ${pol.window_days} days of research. Gold is the core instrument; NDQ and US30 only trade cells whose estimated win probability is ≥ 50%. Your bias rule, Jev (advisory sizing) and every risk limit apply as usual.</div>
       ${pbStats(wf.summary)}
       <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward ${md(RS.data.walk_forward_from)} → ${md(RS.data.to)}: each week traded with cells chosen only from earlier data.</div>
       ${liveTxt ? `<div class="t2" style="font-size:12.5px;margin-top:10px">${liveTxt}</div>` : ""}</div>
@@ -1241,7 +1257,7 @@ function pbAll(){
     <div class="card c12"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(RS.playbook.cells||[], true)}</div>
     <div class="card c6"><h3>Is the win-probability estimate honest?</h3><div class="tbl"><table><tr><th>Estimate</th><th class="r">Trades</th><th class="r">Estimated</th><th class="r">Actual win</th><th class="r">Avg R</th></tr>${
       (RS.calibration||[]).map(c => `<tr><td>${esc(c.bucket)}</td><td class="r num">${c.n}</td><td class="r num">${Math.round(c.p_est*100)}%</td><td class="r num">${Math.round(c.win_rate*100)}%</td><td class="r num ${cls(c.avg_r)}">${sR(c.avg_r)}</td></tr>`).join("")}</table></div>
-      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward trades grouped by the estimate made the week before. If the estimate were informative, the actual win rate would rise with it. Small groups are noisy. Cells picked for a high win rate tend to fall back toward average, so the 60% rule for indices demands much more evidence than a raw win rate.</div></div>
+      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward trades grouped by the estimate made the week before. If the estimate were informative, the actual win rate would rise with it. Small groups are noisy. Cells picked for a high win rate tend to fall back toward average, so the 50% rule for indices demands much more evidence than a raw win rate.</div></div>
     <div class="card c6"><h3>Robustness <span class="sp"></span><span class="mut" style="font-weight:500">${pos} of ${rob.length} settings positive</span></h3>
       <div class="pbnote">The same walk-forward with ${rob.length} alternative settings: window 30/45/60 days, minimum trades 20/25/35, 5 or 10 gold cells, gold win estimate ≥45% or ≥50%. ${pos} ended positive, median ${med==null?"—":sR(med)}. The most favourable still had a ${rob.length ? Math.round(Math.min(...rob.map(r=>r.p_boot==null?1:r.p_boot))*100) : "—"}% chance of being luck.</div>
       <div class="tbl" style="max-height:260px;overflow:auto;margin-top:10px"><table><tr><th>Window</th><th>Min n</th><th>Gold cells</th><th>Gold p</th><th class="r">Trades</th><th class="r">Total</th><th class="r">DD</th></tr>${
@@ -1294,7 +1310,63 @@ function renderLearner(){
 
 /* ── backtests ── */
 let BT = null, BTR = null, btSel = null, btBook = "main", btTimer = null; let btSym = "ALL";
+/* ── strategy lab ── */
+let LAB = null, labTimer = null, labOpen = null;
+const TFS_ALL = ["1min","3min","5min","15min","30min","1h"];
+async function loadLab(){
+  try{ LAB = await (await fetch("api/lab",{credentials:"same-origin"})).json(); }catch(e){ LAB = null; }
+  renderLab();
+  clearTimeout(labTimer);
+  if(LAB && (LAB.running || LAB.candidates.some(c => c.status === "testing")) && page === "backtests") labTimer = setTimeout(loadLab, 8000);
+}
+async function labPost(url, body){
+  const r = await fetch(url, {method:"POST", credentials:"same-origin", headers:{"content-type":"application/json"}, body: JSON.stringify(body||{})});
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ toast((j && j.detail) || `Failed (${r.status})`); return null; }
+  return j;
+}
+function renderLab(){
+  if(!LAB){ $("#labList").innerHTML = `<div class="empty">Couldn't load the lab.</div>`; return; }
+  $("#labCrit").textContent = `pass = ≥${LAB.criteria.min_n} trades, positive avg R and both halves positive, t ≥ ${LAB.criteria.min_t}`;
+  const sel = $("#labSetup");
+  if(!sel.options.length){
+    sel.innerHTML = Object.keys(LAB.setups).map(n => `<option value="${n}">${esc(sname(n))} (${n})</option>`).join("");
+    const fill = () => { const s = LAB.setups[sel.value]; $("#labParams").value = JSON.stringify(s.params);
+      $("#labGrid").textContent = Object.keys(s.grid||{}).length ? "values the research tries: " + Object.entries(s.grid).map(([k,v]) => `${k} ${JSON.stringify(v)}`).join(" · ") : ""; };
+    sel.onchange = fill; fill();
+    $("#labSyms").innerHTML = LAB.symbols.map(s => `<label class="chk"><input type="checkbox" value="${s}" ${["XAUUSD","NDQ","US30"].includes(s)?"checked":""}>${s}</label>`).join("");
+    $("#labTfs").innerHTML = TFS_ALL.map(t => `<label class="chk"><input type="checkbox" value="${t}" ${["5min","15min","30min","1h"].includes(t)?"checked":""}>${tfl(t)}</label>`).join("");
+    $("#labAdd").onclick = async () => {
+      let params; try{ params = JSON.parse($("#labParams").value || "{}"); }catch(e){ $("#labMsg").textContent = "Parameters aren't valid JSON."; return; }
+      const base = LAB.setups[sel.value].params; Object.keys(params).forEach(k => { if(JSON.stringify(params[k]) === JSON.stringify(base[k])) delete params[k]; });
+      const c = await labPost("api/lab", {setup: sel.value, params, note: $("#labNote").value,
+        symbols: $$("#labSyms input:checked").map(x => x.value), tfs: $$("#labTfs input:checked").map(x => x.value)});
+      if(c){ $("#labMsg").textContent = "Added — press Run to test it."; $("#labNote").value = ""; loadLab(); }
+    };
+  }
+  const st = s => `<span class="tag ${s==="passed"||s==="promoted"?"acc":s==="failed"||s==="error"||s==="rejected"?"":"gh"}">${s}</span>`;
+  const cells = c => { const R = (c.results||{}).cells || []; return R.length ? `<div class="tbl"><table><tr><th></th><th>Symbol</th><th>TF</th><th>Exit</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Avg R</th><th class="r hide-m">Total</th><th class="r">t</th><th class="r hide-m">1st half</th><th class="r hide-m">2nd half</th></tr>${
+    R.map(r => `<tr><td>${r.pass?'<span class="tag acc">pass</span>':""}</td><td><b>${r.sym}</b></td><td>${tfl(r.tf)}</td><td class="mut">${r.mgmt}</td><td class="r num">${r.n}</td><td class="r num">${Math.round(r.win*100)}%</td>
+      <td class="r num ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num hide-m ${cls(r.sum_r)}">${sR(r.sum_r,1)}</td><td class="r num">${fmt(r.t,1)}</td><td class="r num hide-m ${cls(r.h1)}">${r.h1==null?"—":sR(r.h1)}</td><td class="r num hide-m ${cls(r.h2)}">${r.h2==null?"—":sR(r.h2)}</td></tr>`).join("")}</table></div>` : `<div class="empty">${c.status==="error" ? esc(c.error||"error") : c.status==="testing" ? "Testing… (a few minutes)" : "Not tested yet."}</div>`; };
+  $("#labList").innerHTML = LAB.candidates.length ? LAB.candidates.map(c => { const R = c.results||{}, best = (R.cells||[])[0];
+    const busy = LAB.running === c.id || c.status === "testing";
+    return `<div class="labc" data-id="${c.id}"><div class="rw"><b>${esc(sname(c.setup))}</b> ${st(c.status)} <small class="mut num">${esc(Object.keys(c.params).length ? JSON.stringify(c.params) : "default parameters")}</small><span class="sp"></span>
+      ${best ? `<small class="mut num">best ${best.sym} ${tfl(best.tf)} ${best.mgmt}: <b class="${cls(best.avg_r)}">${sR(best.avg_r)}</b> over ${best.n}, t ${fmt(best.t,1)}${R.days?` · ${R.days==="cache"?"90":R.days} days`:""}</small>` : ""}</div>
+      <div class="rw s3"><small class="mut">${esc(c.note||"")}${c.note?" · ":""}${c.symbols.join(", ")} · ${c.tfs.map(tfl).join(" ")}</small></div>
+      <div class="labbtns"><button class="btn" data-a="run" ${busy||LAB.running?"disabled":""}>${busy?"Testing…":"Test 90 days"}</button><button class="btn" data-a="run365" ${busy||LAB.running?"disabled":""}>Test 365 days</button>
+        <button class="btn" data-a="promote" ${c.status==="passed"?"":"disabled"} title="pin its passing cells into the playbook">Promote to playbook</button><button class="btn" data-a="reject" ${c.status==="new"||c.status==="testing"?"disabled":""}>${c.status==="promoted"?"Unpromote":"Reject"}</button>
+        ${LAB.pine.includes(c.setup) ? `<a class="btn" href="api/pine/${c.setup}" download>Pine script</a>` : ""}<button class="btn" data-a="more">${labOpen===c.id?"Hide":"Details"}</button></div>
+      ${labOpen===c.id ? cells(c) : ""}</div>`; }).join("") : `<div class="empty">No candidates yet. Add one above, or from the server: <code>./fx.sh lab add trend_pullback --params '{"ema": 50}'</code></div>`;
+  $$("#labList .labc button").forEach(b => b.onclick = async () => {
+    const id = b.closest(".labc").dataset.id, a = b.dataset.a;
+    if(a === "more"){ labOpen = labOpen === id ? null : id; return renderLab(); }
+    if(a === "run" || a === "run365"){ if(await labPost(`api/lab/${id}/run`, a === "run365" ? {days:365} : {})){ labOpen = id; toast("Lab test started"); } }
+    else if(await labPost(`api/lab/${id}/${a}`)) toast(a === "promote" ? "Promoted — the playbook picks it up within 5 minutes" : "Done");
+    loadLab();
+  });
+}
 async function loadBacktests(){
+  loadLab();
   try{ BT = await (await fetch("api/backtests",{credentials:"same-origin"})).json(); }catch(e){ BT = null; }
   if(BT && BT.runs.length && !btSel){ const d = BT.runs.find(r => r.has_report); if(d) btSel = d.id; }
   renderRuns();

@@ -82,6 +82,13 @@ def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
         out["scalp"] = Mgmt(rr=1.0, partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r, pyramid=False,
                             max_adds=0, add_frac=0.0, max_hold_bars=max(2, int(30 / bm)),
                             min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
+    # fixed take-profit profiles (opt-in: research.exit_profiles: [tp1, tp1.5, tp2]): all out at the target, no runner,
+    # no adds — to compare a hard TP against the runner management
+    for name in ((cfg.get("research") or {}).get("exit_profiles") or []):
+        if str(name).startswith("tp"):
+            out[str(name)] = Mgmt(rr=float(str(name)[2:]), partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r,
+                                  trail_gap_r=0.0, pyramid=False, max_adds=0, add_frac=0.0, max_hold_bars=std.max_hold_bars,
+                                  min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
     if bm >= 15:
         # trend profile: first target 2R (half banked), the rest trailed 1R at a time, no adds, held up to 8 h
         out["trend"] = Mgmt(rr=2.0, partial=0.5, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r,
@@ -311,7 +318,8 @@ def run_job(args) -> list[dict]:
             continue
         if not getattr(cls, "fast", False) and tf == "1min":
             continue          # legacy setups need a live-window re-check per signal; 1m isn't traded anyway
-        for change in variants(cls):
+        only = ((cfg.get("research") or {}).get("only_params") or {})
+        for change in ([only[cname]] if cname in only else variants(cls)):
             st = build_strategy({"class": cname, "tf": tf, "params": change})
             try:
                 sigs = sorted(_signals(st, df, ctx), key=lambda s: s.i)
@@ -347,7 +355,7 @@ def run_job(args) -> list[dict]:
                     if dist <= 0 or (price - stop) * s.side <= 0 or dist / price > m.max_stop_pct:
                         continue
                     res = simulate_live(O1, H1, L1, C1, tmin, j0, s.side, stop, m, hs, flat1, cont1[s.side],
-                                        max_hold, full_exit=(pname == "scalp"))
+                                        max_hold, full_exit=(pname == "scalp" or pname.startswith("tp")))
                     if res is None:
                         continue
                     busy_until = res["j_exit"]

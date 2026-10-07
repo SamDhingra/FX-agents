@@ -84,6 +84,13 @@ case "${1:-help}" in
                  --out "data/year_test/bb_${mode}_${c}" </dev/null | sed -n '/^## /,/^- no costs/p'
              done; done
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
+             #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
+             #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
+             $DC exec -T fxagents nice -n 15 python -m fxagents.lab "${@:2}" ;;
+  jevcheck)  # does Jev's grade predict results? every book's journal → data/year_test/jev_check, published to GitHub
+             $DC exec -T fxagents python -m fxagents.jev_check | head -60
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   publish-setup) # one-time: a deploy key that can push ONLY to this repo, used to publish test reports
              KEY="$HOME/.ssh/fx_results"
              [[ -f "$KEY" ]] || ssh-keygen -q -t ed25519 -N "" -C "fx-agents results ($(hostname))" -f "$KEY"
@@ -122,7 +129,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

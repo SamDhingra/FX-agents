@@ -5,7 +5,7 @@ playbook is the set of cells the policy currently allows, re-selected every week
 `window_days` of history, exactly as validated here:
 
   • per-instrument rules — XAUUSD is the core instrument (more cells, more concurrent positions, a lower
-    bar); NDQ / US30 only trade cells whose estimated win probability is ≥ 60%
+    bar); NDQ / US30 only trade cells whose estimated win probability is ≥ 50%
   • a cell's win probability and expectancy are SHRUNK toward its instrument/timeframe pool
     (Bayesian, `k` pseudo-trades), because raw stats over a few dozen trades mostly measure luck
   • a cell must have been positive in both halves of the window (stability), with enough trades
@@ -55,10 +55,10 @@ class Policy:
     tfs: tuple = ("3min", "5min", "15min", "30min", "1h")
     instruments: dict = field(default_factory=lambda: {
         "XAUUSD": InstrumentRule("core", 0.45, 0.02, 10, 2),
-        # 60% rule: estimates of 0.60–0.65 realised ~0.45 in walk-forward (winners regress), so index
-        # cells need heavier shrinkage and more trades before their estimate is believed
-        "NDQ": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
-        "US30": InstrumentRule("selective", 0.60, 0.03, 4, 1, k_p=40.0, min_n=30),
+        # indices: 50% bar (was 60% until Oct 2026 — nothing cleared it), still with heavier shrinkage and
+        # more trades before an estimate is believed (estimates of 0.60–0.65 realised ~0.45 in walk-forward)
+        "NDQ": InstrumentRule("selective", 0.50, 0.03, 4, 1, k_p=40.0, min_n=30),
+        "US30": InstrumentRule("selective", 0.50, 0.03, 4, 1, k_p=40.0, min_n=30),
         # forex majors: gold-like selection, one position each (they all move with the dollar → max_open caps the total)
         "EURUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
         "GBPUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
@@ -302,7 +302,7 @@ def cell_id(setup: str, tf: str, variant: str, mgmt: str, sym: str = "") -> str:
     import hashlib
     tag = "d" if variant == "default" else hashlib.sha1(variant.encode()).hexdigest()[:4]
     st = SYM_TAG.get(sym, sym.lower()[:4])
-    return f"{setup}:{TF_MIN[tf]}m@pb{'-' + st if st else ''}-{tag}{'-' + mgmt if mgmt in ('scalp', 'trend') else ''}"
+    return f"{setup}:{TF_MIN[tf]}m@pb{'-' + st if st else ''}-{tag}{'-' + mgmt if mgmt in ('scalp', 'trend') or mgmt.startswith('tp') else ''}"
 
 
 def cells_json(sel: pd.DataFrame) -> list[dict]:
@@ -370,15 +370,25 @@ def pinned_cells(cfg) -> list[dict]:
                         "variant": variant, "params": params, "mgmt": mgmt, "pinned": True,
                         "n": int(c.get("n", 0)), "win_rate": float(c.get("win_rate", 0.5)),
                         "p": float(c.get("p", c.get("win_rate", 0.5))), "exp_r": float(c.get("exp_r", 0.0)),
-                        "e": float(c.get("exp_r", 0.0))})
+                        "e": float(c.get("exp_r", 0.0)), **({"lab_id": c["lab_id"]} if c.get("lab_id") else {})})
         except (KeyError, TypeError, ValueError) as e:
             log.warning("playbook.pinned entry %r skipped: %s", c, e)
     return out
 
 
 def with_pinned(cfg, data: dict) -> dict:
+    """Selected cells + config pins + cells promoted from the strategy lab (data/lab/pinned.json)."""
     have = {c["id"] for c in data.get("cells", [])}
-    extra = [c for c in pinned_cells(cfg) if c["id"] not in have]
+    try:
+        from .lab import lab_pinned
+        lab = lab_pinned(cfg)
+    except Exception:  # noqa: BLE001
+        lab = []
+    extra = []
+    for c in pinned_cells(cfg) + pinned_cells({"playbook": {"pinned": lab}}):
+        if c["id"] not in have:
+            have.add(c["id"])
+            extra.append(c)
     return {**data, "cells": list(data.get("cells", [])) + extra} if extra else data
 
 

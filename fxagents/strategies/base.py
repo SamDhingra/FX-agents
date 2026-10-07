@@ -141,7 +141,16 @@ class Strategy:
         ctx = ctx or self.context(df)
         out = []
         a = ctx["atr"]
+        # filters the learner can add to any strategy (validated out of sample before a version uses them):
+        #   block_hours: NY hours (of the signal bar's close) when this version stays out
+        #   sides:       "long" / "short" to keep one direction only
+        block = set(int(h) for h in (self.params.get("block_hours") or []))
+        sides = self.params.get("sides") or "both"
         for s in self._scan(df, ctx):
+            if block and int(ctx["close_ts"][s.i].hour) in block:
+                continue
+            if (sides == "long" and s.side < 0) or (sides == "short" and s.side > 0):
+                continue
             risk = abs(s.entry - s.stop)
             if risk <= 0 or not np.isfinite(risk):
                 continue

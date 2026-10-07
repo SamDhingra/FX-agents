@@ -118,7 +118,12 @@ class PlaybookAgent(Agent):
         if self.last_poll is None or now - self.last_poll >= pd.Timedelta("5min"):
             self.last_poll = now
             path = pbk.playbook_path(self.cfg)
-            if path.exists() and path.stat().st_mtime != self.loaded_mtime and not self.refreshing:
+            from ..lab import pinned_path
+            pp = pinned_path(self.cfg)
+            pm = pp.stat().st_mtime if pp.exists() else None
+            if (path.exists() and path.stat().st_mtime != self.loaded_mtime or pm != getattr(self, "pins_mtime", None)) \
+                    and not self.refreshing:
+                self.pins_mtime = pm                         # strategy-lab promotions reach the book within 5 minutes
                 self.select(now)
         # once a day after the CME open, rebuild if the history cache is newer than the research
         if now.hour == 17 and now.minute >= 30 and self.last_check != day and not self.refreshing:
