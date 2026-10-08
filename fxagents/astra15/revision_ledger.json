@@ -1,0 +1,13 @@
+{
+  "strict_v01": {"purpose":"Initial frozen confluence screen", "selection":"15 candidates, volume on/off, cost 1/1.5/2; no parameter optimization", "outcome":"too sparse; preserve every result"},
+  "simple_v02": {
+    "purpose":"One exploratory simplification after observing v01; not a fresh holdout",
+    "sweep_fvg":"Keep fixed presession range sweep, replace FVG/HTF filter with close beyond the three bars preceding the sweep, within four bars. Same stop, target and cost gates.",
+    "ema_rsi":"Keep 9/21/50 stack, H1 agreement, touch, bar-break and RSI band; remove requirement that RSI crosses 50 on exactly the confirmation bar.",
+    "vwap_revert":"Use efficiency ratio <=.35 for range state, RSI(2) recovery from 10/90 and close-direction confirmation; preserve tick-weighted deviation, target-room and stop filters.",
+    "dtfx_pullback":"Freeze prior confirmed high-low range instead of extending to breakout extreme; range >=1 ATR; remove impulse-body filter; remember zone touch for eight bars, confirm with body and prior close rather than prior high/low.",
+    "ema_trend":"Keep 20/50/200 stack, H1 agreement and RSI band; use EMA20 close recovery and prior-close improvement instead of prior-bar break plus efficiency filter.",
+    "fixed_before_v02_pnl":"No changing periods, sessions, targets, costs or risk rules after viewing v02 returns. No additional search planned.",
+    "multiplicity":"60 rule variants across two revisions, three instruments, five families, volume on/off; cost scenarios are robustness checks, not independent discoveries. Account for previous project trials too."
+  }
+}

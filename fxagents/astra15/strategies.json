@@ -1,0 +1,28 @@
+{
+  "version": "ASTRA-INTRADAY-15-v0.1.0",
+  "frozen_before_first_pnl_run": true,
+  "timezone": "America/New_York",
+  "flatten": "15:50",
+  "spreads": {"XAUUSD":0.40,"NDQ":1.50,"US30":2.50},
+  "slippage_each_side": {"XAUUSD":0.10,"NDQ":0.375,"US30":0.625},
+  "cost_gate_fraction":0.15,
+  "min_h1_bars":500,
+  "split_dates":{"development_end":"2026-06-30","validation_end":"2026-07-31","evaluation_end":"2026-09-25"},
+  "strategies":[
+    {"id":"G-S1","symbol":"XAUUSD","family":"sweep_fvg","category":"Scalping","tf":3,"windows":[[525,660]],"level_end":480,"target_r":1.5,"max_hold":30,"max_daily":2},
+    {"id":"G-S2","symbol":"XAUUSD","family":"ema_rsi","category":"Scalping","tf":3,"windows":[[525,690],[780,870]],"target_r":1.5,"max_hold":45,"max_daily":2},
+    {"id":"G-S3","symbol":"XAUUSD","family":"vwap_revert","category":"Scalping","tf":5,"windows":[[540,690]],"anchor":480,"target_r":null,"max_hold":45,"max_daily":2},
+    {"id":"G-H1","symbol":"XAUUSD","family":"dtfx_pullback","category":"Long intraday hold","tf":15,"windows":[[540,780]],"target_r":2.0,"max_hold":240,"max_daily":1},
+    {"id":"G-H2","symbol":"XAUUSD","family":"ema_trend","category":"Long intraday hold","tf":15,"windows":[[540,810]],"target_r":null,"max_hold":300,"max_daily":1},
+    {"id":"N-S1","symbol":"NDQ","family":"sweep_fvg","category":"Scalping","tf":3,"windows":[[585,690]],"level_end":570,"target_r":1.5,"max_hold":30,"max_daily":2},
+    {"id":"N-S2","symbol":"NDQ","family":"ema_rsi","category":"Scalping","tf":3,"windows":[[585,690],[780,900]],"target_r":1.5,"max_hold":45,"max_daily":2},
+    {"id":"N-S3","symbol":"NDQ","family":"vwap_revert","category":"Scalping","tf":5,"windows":[[600,690]],"anchor":570,"target_r":null,"max_hold":45,"max_daily":2},
+    {"id":"N-H1","symbol":"NDQ","family":"dtfx_pullback","category":"Long intraday hold","tf":15,"windows":[[600,780]],"target_r":2.0,"max_hold":240,"max_daily":1},
+    {"id":"N-H2","symbol":"NDQ","family":"ema_trend","category":"Long intraday hold","tf":15,"windows":[[600,840]],"target_r":null,"max_hold":300,"max_daily":1},
+    {"id":"U-S1","symbol":"US30","family":"sweep_fvg","category":"Scalping","tf":5,"windows":[[585,690]],"level_end":570,"target_r":1.5,"max_hold":30,"max_daily":2},
+    {"id":"U-S2","symbol":"US30","family":"ema_rsi","category":"Scalping","tf":5,"windows":[[585,690],[780,900]],"target_r":1.5,"max_hold":45,"max_daily":2},
+    {"id":"U-S3","symbol":"US30","family":"vwap_revert","category":"Scalping","tf":5,"windows":[[600,720]],"anchor":570,"target_r":null,"max_hold":45,"max_daily":2},
+    {"id":"U-H1","symbol":"US30","family":"dtfx_pullback","category":"Long intraday hold","tf":15,"windows":[[600,780]],"target_r":2.0,"max_hold":240,"max_daily":1},
+    {"id":"U-H2","symbol":"US30","family":"ema_trend","category":"Long intraday hold","tf":30,"windows":[[600,840]],"target_r":null,"max_hold":300,"max_daily":1}
+  ]
+}

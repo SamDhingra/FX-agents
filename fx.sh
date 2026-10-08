@@ -91,6 +91,16 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.astra_cfd --days "$days" \
                ${until:+--until "$until"} --out "data/year_test/astra_cfd_${tag}" </dev/null | sed -n '/## Summary/,/^Verdict rule/p'
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  astra15)   # Astra's frozen 15 strategies (fxagents/astra15, unchanged) on OANDA history; needs data/history_730d
+             # (from ./fx.sh newstrats 730 …). Two runs: the unseen period before Astra's data, and the same dates as Astra's.
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/astra15-build.log 2>&1 || { echo "build failed — see logs/astra15-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 15 python -m fxagents.astra15_oanda --days 730 \
+               --until 2026-03-25 --label "unseen: before Astra's data" --out data/year_test/astra15_unseen </dev/null | grep -v candidates
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 15 python -m fxagents.astra15_oanda --days 730 \
+               --from 2026-02-01 --until 2026-09-25 --splits 2026-06-30 2026-07-31 2026-09-25 \
+               --label "same dates as Astra's vendor data" --out data/year_test/astra15_overlap </dev/null | grep -v candidates
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -136,7 +146,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
