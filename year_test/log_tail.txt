@@ -8,3 +8,4 @@
   pulling 365 days of AUDUSD 1-minute candles from OANDA …
     369,396 bars, 2025-10-08 → 2026-10-08
 [  1.1 min] research grid (every setup × variant × instrument × timeframe)
+
