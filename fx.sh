@@ -85,10 +85,11 @@ case "${1:-help}" in
              done; done
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   newstrats) # the audit's 3 strategies (ORB / gap-fail / H1 trend) + controls on 365 days → data/year_test/astra_cfd, published
-             need_env; days="${2:-365}"; mkdir -p logs
+             # ./fx.sh newstrats 730 2025-10-07  → 730 days of history, tested only up to that date (the unseen earlier year)
+             need_env; days="${2:-365}"; until="${3:-}"; tag="${days}d${until:+_to_$until}"; mkdir -p logs
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/newstrats-build.log 2>&1 || { echo "build failed — see logs/newstrats-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.astra_cfd --days "$days" \
-               --out "data/year_test/astra_cfd_${days}d" </dev/null | sed -n '/## Summary/,/^Verdict rule/p'
+               ${until:+--until "$until"} --out "data/year_test/astra_cfd_${tag}" </dev/null | sed -n '/## Summary/,/^Verdict rule/p'
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"

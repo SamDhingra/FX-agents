@@ -427,7 +427,7 @@ def stats(r: np.ndarray, seed: int = 7) -> dict:
             "lo95": float(np.percentile(bs, 2.5)), "hi95": float(np.percentile(bs, 97.5)), "dd": dd}
 
 
-def run(hd: Path, symbols: list[str] | None = None) -> tuple[list[dict], pd.DataFrame]:
+def run(hd: Path, symbols: list[str] | None = None, until: str | None = None) -> tuple[list[dict], pd.DataFrame]:
     rows, trades = [], []
     cache: dict[str, pd.DataFrame] = {}
     for name, kind, fn, kw, syms in TESTS:
@@ -438,7 +438,10 @@ def run(hd: Path, symbols: list[str] | None = None) -> tuple[list[dict], pd.Data
             if not p.exists():
                 continue
             if sym not in cache:
-                cache[sym] = pd.read_pickle(p)[0]
+                m = pd.read_pickle(p)[0]
+                if until:                                          # out-of-sample: only data up to this date
+                    m = m[m.index < pd.Timestamp(until, tz=m.index.tz) + pd.Timedelta("1D")]
+                cache[sym] = m
             m1 = cache[sym]
             c = Costs(SPREAD[sym], max(TICK[sym], 0.25 * SPREAD[sym]), TICK[sym])
             base = fn(m1, c, **kw)
@@ -532,6 +535,7 @@ def main() -> int:
     ap.add_argument("--days", type=int, help="use data/history_<days>d (fetched if missing or a day old)")
     ap.add_argument("--symbols", nargs="*")
     ap.add_argument("--out", help="folder for report.md / trades.csv / summary.json")
+    ap.add_argument("--until", help="use only data up to this date (YYYY-MM-DD), e.g. the year before an earlier test")
     a = ap.parse_args()
     cfg = load_config()
     from .research import history_dir
@@ -544,8 +548,10 @@ def main() -> int:
     if out:
         out.mkdir(parents=True, exist_ok=True)
         (out / "status.json").write_text(json.dumps({"stage": "running", "days": a.days}))
-    rows, trades = run(hd, a.symbols)
+    rows, trades = run(hd, a.symbols, a.until)
     txt = report(rows, a.days, hd)
+    if a.until:
+        txt = txt.replace("\n", f"\n\n**Data only up to {a.until}** (out-of-sample check).\n", 1)
     print(txt)
     if out:
         (out / "report.md").write_text(txt)
