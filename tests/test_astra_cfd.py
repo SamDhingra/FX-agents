@@ -56,3 +56,13 @@ def test_strategies_are_causal_on_a_prefix():
         part = [t for t in fn(pre, c, **kw) if pd.Timestamp(t["day"], tz="America/New_York") < cut - pd.Timedelta("1D")]
         assert len(full) > 0, fn.__name__
         assert [(t["day"], t["side"], round(t["r"], 9)) for t in full] == [(t["day"], t["side"], round(t["r"], 9)) for t in part]
+
+
+def test_incomplete_last_session_is_skipped_not_crashing():
+    m1 = _m1()
+    cut = m1.index[-1].normalize() + pd.Timedelta(hours=12)       # the data ends at noon on the last day
+    part = m1[m1.index < cut]
+    c = Costs(1.5, 0.375, 0.1)
+    for fn in (orb, h1_trend):
+        last = part.index[-1].strftime("%Y-%m-%d")
+        assert all(t["day"] != last for t in fn(part, c))

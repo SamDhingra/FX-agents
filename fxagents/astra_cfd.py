@@ -133,6 +133,8 @@ def execute(O, H, L, C, j: int, side: int, stop: float, j_end: int, c: Costs, ta
         if target is not None and (bid_hi - target) * side >= 0:
             return _done(target, "target", k, fill, stop, R, side)
         k += 1
+    if j_end >= len(O):
+        return {}                                                  # exit minute not in the data
     return _done(O[j_end] - side * (hs + c.slip), "time", j_end, fill, stop, R, side)
 
 
@@ -155,7 +157,11 @@ class Day:
         return self.pos.get(ts)
 
     def first_at_or_after(self, ts) -> int:
-        return int(self.idx.searchsorted(ts))
+        """Index of the first minute at or after ts ON THE SAME DAY; len(idx) (= not available) otherwise."""
+        k = int(self.idx.searchsorted(ts))
+        if k < len(self.idx) and self.idx[k].normalize() != ts.normalize():
+            return len(self.idx)
+        return k
 
 
 def sessions(m1: pd.DataFrame) -> list[pd.Timestamp]:
@@ -227,6 +233,8 @@ def orb(m1: pd.DataFrame, c: Costs, control: bool = False, k_cost: float = 1.0, 
             if admitted is not None and key not in admitted:
                 break
             j_end = d.first_at_or_after(_t(day, "15:50"))
+            if j_end >= len(d.idx):
+                break                                              # session incomplete in the data (e.g. today)
 
             best = {"c": None}
 
@@ -304,6 +312,8 @@ def gap_fail(m1: pd.DataFrame, c: Costs, control: bool = False, k_cost: float = 
         if admitted is not None and key not in admitted:
             continue
         j_end = d.first_at_or_after(_t(dn, "11:00"))
+        if j_end >= len(d.idx):
+            continue                                               # session incomplete in the data
         res = execute(d.O, d.H, d.L, d.C, j, side, S, j_end, cx, target=T)
         if res:
             out.append({"day": ds, "ts": d.idx[j], "side": side, "stop": S, "target": T, "gap_D": round(G / D, 3), **res, "key": key})
@@ -367,6 +377,8 @@ def h1_trend(m1: pd.DataFrame, c: Costs, control: str | None = None, k_cost: flo
             if admitted is not None and key not in admitted:
                 break
             j_end = d.first_at_or_after(_t(day, "15:50"))
+            if j_end >= len(d.idx):
+                break                                              # session incomplete in the data (e.g. today)
             best = {"c": None, "armed": False}
 
             def trail(k, stop, fill, R, side=side, j=j):
