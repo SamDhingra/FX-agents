@@ -35,7 +35,11 @@ class SignalOracle:
     """Replay speed-up: each strategy scans the WHOLE replay period once per (symbol, timeframe);
     the agents then look up what fired on the bar that just closed. Strategies are causal (each signal
     uses only bars up to its own — enforced by a test), so this equals rescanning a window every bar,
-    without the cost. Versions the learner creates mid-replay are scanned on first use."""
+    without the cost. Versions the learner creates mid-replay are scanned on first use.
+    Pivot-based setups are prefix-exact since indicators.pivots became causal (audit F07: a swing is
+    superseded only from its successor's confirmation, never erased retroactively), tested at many cuts
+    in tests/test_data_parity.py. Residual live difference: the live window starts later, so EMA/ATR
+    warm-up and swings near the window's first bars can differ — a start effect, not look-ahead."""
 
     CTX_KEYS = ("atr", "ema50", "ema200", "rsi", "macd", "macd_sig", "macd_hist", "adx", "htf")
 
