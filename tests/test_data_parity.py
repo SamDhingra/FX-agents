@@ -48,3 +48,35 @@ def test_pivot_strategies_are_prefix_invariant_at_many_cuts():
 def test_single_losing_trade_is_one_r_drawdown():
     t = {"r": -1.0, "mfe": 0.0, "hour": 9, "ts": pd.Timestamp("2026-06-02 09:30", tz=TZ)}
     assert stats([t])["max_dd_r"] == 1.0
+
+
+# ── F13 ───────────────────────────────────────────────────────────────────────
+def _h1(start, end):
+    idx = pd.date_range(start, end, freq="1h", tz=TZ, inclusive="left")
+    c = 100 + np.cumsum(np.random.default_rng(1).normal(0, 0.3, len(idx)))
+    return pd.DataFrame({"open": c, "high": c + 0.5, "low": c - 0.5, "close": c}, index=idx)
+
+
+def test_daily_bar_always_starts_at_1700_ny():
+    from fxagents.bias import wall_ohlc
+    for a, b in (("2026-02-20", "2026-03-20"), ("2026-10-20", "2026-11-20")):    # spring + autumn switches
+        d = wall_ohlc(_h1(a, b), "24h", offset="17h")
+        assert set(d.index.hour) == {17}, (a, sorted(set(d.index.hour)))
+        assert set(d["end"].dt.hour) == {17} and (d["end"].iloc[:-1].to_numpy() == d.index[1:].to_numpy()).all()
+        assert {round(x / 3600) for x in (d["end"] - d.index).dt.total_seconds()} == {23, 24, 25} - ({25} if a < "2026-06" else {23})
+
+
+def test_4h_bars_sit_on_the_ny_session_grid():
+    from fxagents.bias import wall_ohlc
+    for a, b in (("2026-02-20", "2026-03-20"), ("2026-10-20", "2026-11-20")):
+        h4 = wall_ohlc(_h1(a, b), "4h", offset="1h")
+        assert set(h4.index.hour) == {17, 21, 1, 5, 9, 13}, (a, sorted(set(h4.index.hour)))
+        assert set(h4["end"].dt.hour) == {17, 21, 1, 5, 9, 13}
+
+
+def test_trading_day_rolls_at_1700_wall_clock_across_dst():
+    from fxagents.structure import trading_day
+    for d in ("2026-03-07", "2026-03-08", "2026-10-31", "2026-11-01"):
+        t = pd.Timestamp(f"{d} 17:00", tz=TZ)
+        assert trading_day(t) == trading_day(t - pd.Timedelta("1min")) + pd.Timedelta("1D") \
+            == pd.Timestamp(d) + pd.Timedelta("1D")

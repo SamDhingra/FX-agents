@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..bias import bias_frame, label
 from ..indicators import in_windows
+from ..structure import trading_day
 from .core import Agent
 
 
@@ -43,7 +44,7 @@ class BiasAgent(Agent):
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
-        tday = (now + pd.Timedelta(hours=7)).date()
+        tday = trading_day(now).date()     # 17:00 NY roll on the wall clock
         if tday != self.day:           # new trading day → reset loss streaks
             self.day = tday
             for g in self.guard.values():

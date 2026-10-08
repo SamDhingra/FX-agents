@@ -18,10 +18,28 @@ import pandas as pd
 DEFAULT_WEIGHTS = {"d": 0.40, "h4": 0.35, "h1": 0.25}
 
 
-def _ohlc(df: pd.DataFrame, rule: str, offset: str | None = None) -> pd.DataFrame:
+def _localize(naive: pd.DatetimeIndex, tz) -> pd.DatetimeIndex:
+    """Wall-clock → tz-aware. An ambiguous fall-back label is its first (DST) occurrence; a label inside
+    the spring-forward gap moves to the first real instant after it."""
+    if tz is None:
+        return naive
+    return naive.tz_localize(tz, ambiguous=np.ones(len(naive), bool), nonexistent="shift_forward")
+
+
+def wall_ohlc(df: pd.DataFrame, rule: str, offset: str | None = None) -> pd.DataFrame:
+    """OHLC bars on a fixed NEW YORK WALL-CLOCK grid (audit F13): daily = 17:00 → 17:00 and 4H =
+    17/21/01/05/09/13 on both sides of a DST switch. Resampling a tz-aware index in fixed 24h/4h steps
+    is elapsed-time and drifts to 16:00/18:00 for half the year. Bins are built on the naive wall
+    clock, then re-localised; column `end` is each bar's real close instant (23h/25h on switch days)."""
+    tz = df.index.tz
+    wall = df.set_axis(df.index.tz_localize(None) if tz is not None else df.index)
     kw = {"offset": offset} if offset else {}
-    return df.resample(rule, label="left", closed="left", **kw).agg(
+    out = wall.resample(rule, label="left", closed="left", **kw).agg(
         {"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    end = _localize(out.index + pd.Timedelta(rule), tz)
+    out.index = _localize(out.index, tz)
+    out["end"] = end
+    return out
 
 
 def structure_state(htf: pd.DataFrame, swing: int) -> pd.DataFrame:
@@ -44,10 +62,11 @@ def structure_state(htf: pd.DataFrame, swing: int) -> pd.DataFrame:
     return pd.DataFrame({"state": st, "swing_hi": lv["hi"], "swing_lo": lv["lo"]}, index=htf.index)
 
 
-def _known(frame: pd.DataFrame, period: pd.Timedelta) -> pd.DataFrame:
-    """Re-index an HTF frame by the time each bar becomes known (its close)."""
+def _known(frame: pd.DataFrame, ends) -> pd.DataFrame:
+    """Re-index an HTF frame by the time each bar becomes known (its close): `ends` is either a fixed
+    period or the per-bar close instants (wall_ohlc's `end`, which handles 23h/25h DST days)."""
     out = frame.copy()
-    out.index = out.index + period
+    out.index = out.index + ends if isinstance(ends, pd.Timedelta) else pd.DatetimeIndex(ends)
     return out
 
 
@@ -61,10 +80,10 @@ def bias_frame(h1: pd.DataFrame, when: pd.DatetimeIndex, close_at_when: np.ndarr
     """Bias at each timestamp in `when` (decision times), using only information known by then.
     h1 = hourly OHLC with a long history (≥ 20 trading days recommended)."""
     w = weights or DEFAULT_WEIGHTS
-    d = _ohlc(h1, "24h", offset="17h")            # CME trading day: 17:00 → 17:00 NY
-    h4 = _ohlc(h1, "4h", offset="2h")             # 18:00, 22:00, 02:00 … session-aligned
+    d = wall_ohlc(h1, "24h", offset="17h")        # CME trading day: 17:00 → 17:00 NY wall clock
+    h4 = wall_ohlc(h1, "4h", offset="1h")         # 17:00, 21:00, 01:00 … aligned to the 17:00 roll
     parts = {}
-    for key, frame, swing, per in (("d", d, 1, pd.Timedelta("24h")), ("h4", h4, 2, pd.Timedelta("4h")),
+    for key, frame, swing, per in (("d", d, 1, d["end"]), ("h4", h4, 2, h4["end"]),
                                    ("h1", h1[["open", "high", "low", "close"]], 2, pd.Timedelta("1h"))):
         s = structure_state(frame, swing)
         parts[key] = _align(_known(s, per), when)
@@ -75,13 +94,13 @@ def bias_frame(h1: pd.DataFrame, when: pd.DatetimeIndex, close_at_when: np.ndarr
     out["h4_swing_hi"] = parts["h4"]["swing_hi"].to_numpy()
     out["h4_swing_lo"] = parts["h4"]["swing_lo"].to_numpy()
     # prior day range + premium/discount
-    dk = _align(_known(d[["high", "low"]].rename(columns={"high": "pdh", "low": "pdl"}), pd.Timedelta("24h")), when)
+    dk = _align(_known(d[["high", "low"]].rename(columns={"high": "pdh", "low": "pdl"}), d["end"]), when)
     out["pdh"], out["pdl"] = dk["pdh"].to_numpy(), dk["pdl"].to_numpy()
     # Asia range 20:00–00:00 NY, known from midnight until the next day's 17:00 roll
     asia = h1[(h1.index.hour >= 20)]
     if len(asia):
         a = asia.groupby(asia.index.normalize()).agg(asia_hi=("high", "max"), asia_lo=("low", "min"))
-        a.index = a.index + pd.Timedelta("1D")    # known at 00:00 the next calendar day
+        a.index = a.index + pd.DateOffset(days=1)   # known at 00:00 (wall clock) the next calendar day
         ak = _align(a, when)
         out["asia_hi"], out["asia_lo"] = ak["asia_hi"].to_numpy(), ak["asia_lo"].to_numpy()
     else:
