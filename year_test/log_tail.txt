@@ -1,11 +1,4 @@
- Container fx-agents-fxagents-run-0169f6b5f793 Creating 
- Container fx-agents-fxagents-run-0169f6b5f793 Created 
+ Container fx-agents-fxagents-run-5379bc41468a Creating 
+ Container fx-agents-fxagents-run-5379bc41468a Created 
 [  0.0 min] fetching history
-  pulling 365 days of EURUSD 1-minute candles from OANDA …
-    370,683 bars, 2025-10-08 → 2026-10-08
-  pulling 365 days of GBPUSD 1-minute candles from OANDA …
-    371,047 bars, 2025-10-08 → 2026-10-08
-  pulling 365 days of AUDUSD 1-minute candles from OANDA …
-    369,396 bars, 2025-10-08 → 2026-10-08
-[  1.1 min] research grid (every setup × variant × instrument × timeframe)
-
+[  0.0 min] research grid (every setup × variant × instrument × timeframe)
