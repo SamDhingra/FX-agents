@@ -25,7 +25,7 @@ def test_verdict_needs_trades_both_halves_and_t():
     rows += _trades("NDQ", "15min", "std", [-1.0] * 20 + [1.0, 1.0, 1.0, -1.0] * 10)   # second half only
     rows += _trades("US30", "15min", "std", [1.0, -1.0, 1.0] * 5)                       # too few trades
     v = {(r["sym"]): r for r in lab.verdict(pd.DataFrame(rows))}
-    assert v["XAUUSD"]["pass"] and not v["NDQ"]["pass"] and not v["US30"]["pass"]
+    assert v["XAUUSD"]["screened"] and not v["NDQ"]["screened"] and not v["US30"]["screened"]
 
 
 def test_add_validates_and_promote_pins_into_the_playbook(cfg):
@@ -36,8 +36,10 @@ def test_add_validates_and_promote_pins_into_the_playbook(cfg):
     c = lab.add(cfg, "trend_pullback", {"ema": 50}, ["XAUUSD"], ["15min"], "test")
     with pytest.raises(ValueError):
         lab.promote(cfg, c["id"])                                                       # not tested yet
-    cells = lab.verdict(pd.DataFrame(_trades("XAUUSD", "15min", "std", [1.0, -1.0, 1.0, 1.0] * 15)))
-    lab.update(cfg, c["id"], status="passed", results={"cells": cells, "passed": True})
+    t = pd.DataFrame(_trades("XAUUSD", "15min", "std", [1.0, -1.0, 1.0, 1.0] * 30)).assign(cost_r=0.05)  # clears the gate
+    cells = lab.verdict(t)
+    assert cells[0]["promotable"]
+    lab.update(cfg, c["id"], status="screened", results={"cells": cells, "screened": True})
     assert lab.promote(cfg, c["id"])["status"] == "promoted"
     got = playbook.with_pinned(cfg, {"cells": []})["cells"]
     assert len(got) == 1 and got[0]["setup"] == "trend_pullback" and got[0]["params"] == {"ema": 50} \

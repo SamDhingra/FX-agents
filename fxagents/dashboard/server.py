@@ -518,6 +518,12 @@ def build_app(ctx) -> FastAPI:
             args = ["nice", "-n", "15", sys.executable, "-m", "fxagents.lab", "run", cid]
             if b.get("days"):
                 args += ["--days", str(int(b["days"]))]
+            import re
+            for k, flag in (("from", "--from"), ("until", "--until")):     # optional out-of-sample window
+                if b.get(k):
+                    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(b[k])):
+                        raise HTTPException(400, f"{k}: use YYYY-MM-DD")
+                    args += [flag, str(b[k])]
             lab.update(ctx.cfg, cid, status="testing", error=None)
             import os
             logf = lab.lab_dir(ctx.cfg) / f"{cid}.log"
@@ -536,8 +542,8 @@ def build_app(ctx) -> FastAPI:
             asyncio.ensure_future(watch())
             return {"ok": True, "running": cid}
         try:
-            if action == "promote":
-                return lab.promote(ctx.cfg, cid, b.get("cells") or None)
+            if action == "promote":          # only cells that cleared the promotion gate, unless force (recorded)
+                return lab.promote(ctx.cfg, cid, b.get("cells") or None, force=bool(b.get("force")))
             if action == "reject":
                 return lab.unpromote(ctx.cfg, cid)
         except ValueError as e:

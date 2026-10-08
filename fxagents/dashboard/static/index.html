@@ -1327,7 +1327,8 @@ async function labPost(url, body){
 }
 function renderLab(){
   if(!LAB){ $("#labList").innerHTML = `<div class="empty">Couldn't load the lab.</div>`; return; }
-  $("#labCrit").textContent = `pass = ≥${LAB.criteria.min_n} trades, positive avg R and both halves positive, t ≥ ${LAB.criteria.min_t}`;
+  const K = LAB.criteria;
+  $("#labCrit").textContent = `screened = ≥${K.min_n} trades, positive avg R, both halves positive, t ≥ ${K.min_t} (a screen, not evidence) · promotable = ≥${K.promote_n||100} trades, day-block 95% lower bound > 0, still positive at ${K.cost_mult||2}× spread`;
   const sel = $("#labSetup");
   if(!sel.options.length){
     sel.innerHTML = Object.keys(LAB.setups).map(n => `<option value="${n}">${esc(sname(n))} (${n})</option>`).join("");
@@ -1344,9 +1345,10 @@ function renderLab(){
       if(c){ $("#labMsg").textContent = "Added — press Run to test it."; $("#labNote").value = ""; loadLab(); }
     };
   }
-  const st = s => `<span class="tag ${s==="passed"||s==="promoted"?"acc":s==="failed"||s==="error"||s==="rejected"?"":"gh"}">${s}</span>`;
+  const st = s => `<span class="tag ${s==="screened"||s==="passed"||s==="promoted"?"acc":s==="failed"||s==="error"||s==="rejected"?"":"gh"}">${s==="passed"?"screened":s}</span>`;
+  const scr = r => r.screened ?? r.pass;
   const cells = c => { const R = (c.results||{}).cells || []; return R.length ? `<div class="tbl"><table><tr><th></th><th>Symbol</th><th>TF</th><th>Exit</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Avg R</th><th class="r hide-m">Total</th><th class="r">t</th><th class="r hide-m">1st half</th><th class="r hide-m">2nd half</th></tr>${
-    R.map(r => `<tr><td>${r.pass?'<span class="tag acc">pass</span>':""}</td><td><b>${r.sym}</b></td><td>${tfl(r.tf)}</td><td class="mut">${r.mgmt}</td><td class="r num">${r.n}</td><td class="r num">${Math.round(r.win*100)}%</td>
+    R.map(r => `<tr><td>${r.promotable?'<span class="tag acc" title="cleared the promotion gate">promotable</span>':scr(r)?'<span class="tag gh" title="exploratory screen only">screened</span>':""}</td><td><b>${r.sym}</b></td><td>${tfl(r.tf)}</td><td class="mut">${r.mgmt}</td><td class="r num">${r.n}</td><td class="r num">${Math.round(r.win*100)}%</td>
       <td class="r num ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num hide-m ${cls(r.sum_r)}">${sR(r.sum_r,1)}</td><td class="r num">${fmt(r.t,1)}</td><td class="r num hide-m ${cls(r.h1)}">${r.h1==null?"—":sR(r.h1)}</td><td class="r num hide-m ${cls(r.h2)}">${r.h2==null?"—":sR(r.h2)}</td></tr>`).join("")}</table></div>` : `<div class="empty">${c.status==="error" ? esc(c.error||"error") : c.status==="testing" ? "Testing… (a few minutes)" : "Not tested yet."}</div>`; };
   $("#labList").innerHTML = LAB.candidates.length ? LAB.candidates.map(c => { const R = c.results||{}, best = (R.cells||[])[0];
     const busy = LAB.running === c.id || c.status === "testing";
@@ -1354,7 +1356,7 @@ function renderLab(){
       ${best ? `<small class="mut num">best ${best.sym} ${tfl(best.tf)} ${best.mgmt}: <b class="${cls(best.avg_r)}">${sR(best.avg_r)}</b> over ${best.n}, t ${fmt(best.t,1)}${R.days?` · ${R.days==="cache"?"90":R.days} days`:""}</small>` : ""}</div>
       <div class="rw s3"><small class="mut">${esc(c.note||"")}${c.note?" · ":""}${c.symbols.join(", ")} · ${c.tfs.map(tfl).join(" ")}</small></div>
       <div class="labbtns"><button class="btn" data-a="run" ${busy||LAB.running?"disabled":""}>${busy?"Testing…":"Test 90 days"}</button><button class="btn" data-a="run365" ${busy||LAB.running?"disabled":""}>Test 365 days</button>
-        <button class="btn" data-a="promote" ${c.status==="passed"?"":"disabled"} title="pin its passing cells into the playbook">Promote to playbook</button><button class="btn" data-a="reject" ${c.status==="new"||c.status==="testing"?"disabled":""}>${c.status==="promoted"?"Unpromote":"Reject"}</button>
+        <button class="btn" data-a="promote" ${(c.status==="screened"||c.status==="passed") && ((c.results||{}).cells||[]).some(r => r.promotable)?"":"disabled"} title="pin its promotable cells into the playbook (from now on, never retroactively)">Promote to playbook</button><button class="btn" data-a="reject" ${c.status==="new"||c.status==="testing"?"disabled":""}>${c.status==="promoted"?"Unpromote":"Reject"}</button>
         ${LAB.pine.includes(c.setup) ? `<a class="btn" href="api/pine/${c.setup}" download>Pine script</a>` : ""}<button class="btn" data-a="more">${labOpen===c.id?"Hide":"Details"}</button></div>
       ${labOpen===c.id ? cells(c) : ""}</div>`; }).join("") : `<div class="empty">No candidates yet. Add one above, or from the server: <code>./fx.sh lab add trend_pullback --params '{"ema": 50}'</code></div>`;
   $$("#labList .labc button").forEach(b => b.onclick = async () => {
