@@ -27,11 +27,17 @@ _LOCK = threading.Lock()
 _CTX: "OrderedDict[tuple, dict]" = OrderedDict()
 
 
+_OHLCV = ("open", "high", "low", "close", "volume")
+
+
 def frame_key(df: pd.DataFrame) -> tuple:
-    """Identity of a bar frame: same first/last bar, length and last close → same indicators/signals."""
+    """Identity of a bar frame: first/last bar, length and a hash of EVERY OHLCV value (audit F14: a
+    corrected high/open/volume anywhere — not just the last close/low — must give new indicators and
+    signals). Hashing the raw bytes costs ~30µs for a 700-bar window, far below one context build."""
     if not len(df):
-        return (0, 0, 0, 0.0)
-    return (df.index[0].value, df.index[-1].value, len(df), float(df["close"].iloc[-1]), float(df["low"].iloc[-1]))
+        return (0, 0, 0, 0)
+    v = np.ascontiguousarray(df[[c for c in _OHLCV if c in df.columns]].to_numpy(dtype=float))
+    return (df.index[0].value, df.index[-1].value, len(df), hash(v.tobytes()))
 
 
 class Strategy:
@@ -126,6 +132,8 @@ class Strategy:
 
     def scan(self, df: pd.DataFrame, ctx: dict | None = None) -> list[RawSignal]:
         key = frame_key(df)
+        if self.needs_peers and ctx is not None:      # SMT reads correlated frames: their data is identity too
+            key += tuple(frame_key(p) for p in ctx.get("peers") or [])
         cache = self.__dict__.setdefault("_scan_cache", OrderedDict())
         with _LOCK:
             if key in cache:

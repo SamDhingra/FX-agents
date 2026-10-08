@@ -159,7 +159,7 @@ def stats(trades: list[dict], now: pd.Timestamp | None = None) -> dict:
     r = np.array([t["r"] for t in trades])
     mfe = np.array([t["mfe"] for t in trades])
     wins, losses = r[r > 0].sum(), -r[r < 0].sum()
-    eq = np.cumsum(r)
+    eq = np.r_[0.0, np.cumsum(r)]        # start from flat equity: an opening losing streak is drawdown too
     dd = float((np.maximum.accumulate(eq) - eq).max())
     by_hour: dict[int, dict] = {}
     for t in trades:

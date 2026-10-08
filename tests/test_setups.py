@@ -30,7 +30,7 @@ def peers_for(df, seed=11):
 def test_vectorised_pivots_match_the_reference():
     df = frame(5)
     for left in (2, 3, 5):
-        a = pivots(df, left, left)
+        a = [p for p in pivots(df, left, left) if p.until > len(df)]   # alive at the end = whole-history reduction
         b = sx.pivots_arr(df["high"].to_numpy(), df["low"].to_numpy(), left, left)
         assert [(p.idx, p.kind, p.price, p.known_at) for p in a] == [(p.idx, p.kind, p.price, p.known_at) for p in b]
 

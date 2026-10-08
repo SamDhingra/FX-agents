@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..indicators import Pivot
+from ..indicators import Pivot, take_known
 from .base import RawSignal, Strategy, in_window
 
 KILLZONES = [["02:00", "05:00"], ["08:30", "11:00"], ["13:30", "15:00"]]
@@ -17,13 +17,14 @@ KILLZONES = [["02:00", "05:00"], ["08:30", "11:00"], ["13:30", "15:00"]]
 def _mirror(df: pd.DataFrame, piv: list[Pivot]):
     O, H, L, C = (df[c].to_numpy() for c in ("open", "high", "low", "close"))
     long_view = (O, H, L, C, piv)
-    mp = [Pivot(p.idx, -p.price, "L" if p.kind == "H" else "H", p.known_at) for p in piv]
+    mp = [Pivot(p.idx, -p.price, "L" if p.kind == "H" else "H", p.known_at, p.until) for p in piv]
     short_view = (-O, -L, -H, -C, mp)
     return ((1, long_view), (-1, short_view))
 
 
 def _known_iter(piv: list[Pivot]):
-    """Yields pivots in the order they become known."""
+    """Pivots in the order they become known (feed through indicators.take_known so a superseded swing
+    drops out exactly when its replacement is confirmed — what a live prefix scan sees)."""
     return sorted(piv, key=lambda p: (p.known_at, p.idx))
 
 
@@ -48,8 +49,7 @@ class ICTFvgSweep(Strategy):
             sweep = None     # {"idx", "low", "mss"}
             active = []      # FVGs waiting for a retrace
             for i in range(2, len(C)):
-                while ptr < len(order) and order[ptr].known_at <= i:
-                    known.append(order[ptr]); ptr += 1
+                ptr = take_known(order, ptr, known, i)
                 lows = [q for q in known[-14:] if q.kind == "L" and q.idx >= i - p["sweep_lookback"]]
                 highs = [q for q in known if q.kind == "H"]
                 # 1) liquidity sweep: wick through a known swing low
@@ -105,8 +105,7 @@ def _leg_retrace_scan(self: Strategy, df, ctx, fib_touch: float, fib_floor: floa
         leg = None
         broken = set()
         for i in range(1, len(C)):
-            while ptr < len(order) and order[ptr].known_at <= i:
-                known.append(order[ptr]); ptr += 1
+            ptr = take_known(order, ptr, known, i)
             highs = [q for q in known if q.kind == "H"]
             lows = [q for q in known if q.kind == "L"]
             if highs and lows and highs[-1].idx not in broken and C[i] > highs[-1].price:
@@ -210,8 +209,7 @@ class StoicSBS(Strategy):
             order = _known_iter(piv)
             ptr, known, used = 0, [], set()
             for i in range(1, len(C)):
-                while ptr < len(order) and order[ptr].known_at <= i:
-                    known.append(order[ptr]); ptr += 1
+                ptr = take_known(order, ptr, known, i)
                 if len(known) < 5:
                     continue
                 p0, p1, p2, p3, p4 = known[-5:]
@@ -275,8 +273,7 @@ class SMCOrderBlock(Strategy):
             order = _known_iter(piv)
             ptr, known, broken, blocks = 0, [], set(), []
             for i in range(3, len(C)):
-                while ptr < len(order) and order[ptr].known_at <= i:
-                    known.append(order[ptr]); ptr += 1
+                ptr = take_known(order, ptr, known, i)
                 highs = [q for q in known if q.kind == "H"]
                 lows = [q for q in known if q.kind == "L"]
                 if highs and lows and highs[-1].idx not in broken and C[i] > highs[-1].price:
@@ -319,8 +316,7 @@ class SMCBreaker(Strategy):
             order = _known_iter(piv)
             ptr, known, used, zones = 0, [], set(), []
             for i in range(3, len(C)):
-                while ptr < len(order) and order[ptr].known_at <= i:
-                    known.append(order[ptr]); ptr += 1
+                ptr = take_known(order, ptr, known, i)
                 if len(known) >= 3:
                     l1, h1, l2 = known[-3:] if known[-1].kind == "L" else (None, None, None)
                     if l1 and [l1.kind, h1.kind] == ["L", "H"] and l2.price < l1.price and h1.idx not in used \
@@ -405,8 +401,7 @@ class SMCLiquiditySweep(Strategy):
             order = _known_iter(piv)
             ptr, known, raid, taken = 0, [], None, set()
             for i in range(1, len(C)):
-                while ptr < len(order) and order[ptr].known_at <= i:
-                    known.append(order[ptr]); ptr += 1
+                ptr = take_known(order, ptr, known, i)
                 for lvl in pools:
                     x = lvl[i]
                     if np.isfinite(x) and L[i] < x and C[i] > x and (round(float(x), 6)) not in taken:

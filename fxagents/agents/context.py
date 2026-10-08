@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..bias import bias_frame, label
 from ..indicators import in_windows
+from ..structure import trading_day
 from .core import Agent
 
 
@@ -33,6 +34,10 @@ class BiasAgent(Agent):
         self.bc = self.cfg["bias"]
         self.sg = self.bc["safeguards"]
         self.last_hour: pd.Timestamp | None = None
+        # F23: per symbol (hour, complete) of the last hourly update — the clock can tick past the hour
+        # before that hour's final 1m bar was polled, which would close a PARTIAL hour into the bias.
+        self.done: dict[str, tuple[pd.Timestamp, bool]] = {}
+        self.grace = pd.Timedelta(minutes=float(self.bc.get("hour_complete_grace_min", 5)))
         self.guard: dict[str, dict] = {s: {"aligned_losses": 0, "suspended": False, "suspended_h1": None,
                                            "in_doubt": False, "audit_p": None, "audit_hour": None}
                                        for s in self.cfg["instruments"]}
@@ -43,15 +48,30 @@ class BiasAgent(Agent):
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
-        tday = (now + pd.Timedelta(hours=7)).date()
+        tday = trading_day(now).date()     # 17:00 NY roll on the wall clock
         if tday != self.day:           # new trading day → reset loss streaks
             self.day = tday
             for g in self.guard.values():
                 g["aligned_losses"] = 0
         hour = now.floor("h")
-        if hour != self.last_hour:
-            self.last_hour = hour
-            await self.update_all(now)
+        self.last_hour = hour
+        for sym in self.cfg["instruments"]:
+            d = self.done.get(sym)
+            if d is not None and d[0] == hour and d[1]:
+                continue                                    # this hour's bias is final
+            full = self.hour_complete(sym, hour)
+            if d is not None and d[0] == hour and not full:
+                continue                                    # grace update done; still waiting for the bar
+            # wait for the hour's last bar; after `grace` (daily break, weekend, dead feed) update anyway
+            # and redo it once the bar does arrive
+            if full or now - hour >= self.grace:
+                self.done[sym] = (hour, full)
+                await self.update(sym, now)
+
+    def hour_complete(self, sym: str, hour: pd.Timestamp) -> bool:
+        """The store holds the bar that closes the previous hour (opened at hour − 1 min) or a later one."""
+        m1 = self.ctx.store.m1(sym)
+        return bool(len(m1)) and m1.index[-1] >= hour - pd.Timedelta("1min")
 
     async def update_all(self, now: pd.Timestamp):
         for sym in self.cfg["instruments"]:

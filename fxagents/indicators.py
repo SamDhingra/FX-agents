@@ -50,10 +50,18 @@ class Pivot:
     price: float
     kind: str       # "H" or "L"
     known_at: int   # first bar index at which the pivot is confirmed
+    until: int = 1 << 62  # bar index from which a more extreme same-kind swing supersedes it (causal pivots)
 
 
 def pivots(df: pd.DataFrame, left: int = 3, right: int = 3) -> list[Pivot]:
-    """Fractal swing highs/lows, reduced to an alternating H/L sequence (keeps the extreme)."""
+    """Fractal swing highs/lows, reduced CAUSALLY to an alternating H/L sequence (keeps the extreme).
+
+    Raw fractals are folded in the order they become known: a same-kind swing with no opposite swing in
+    between replaces the current one only if more extreme, and only from ITS known_at — the replaced
+    pivot stays in the list with `until` = that bar (it was real, and used, until then). So the pivots
+    alive at bar i (known_pivots) are exactly what a scan of df[:i+1] would report: reducing the whole
+    history first erased swings before their successor was even confirmed (audit F07 look-ahead).
+    The returned list is in known order; the pivots alive at the end equal the old whole-history result."""
     h, l = df["high"].to_numpy(), df["low"].to_numpy()
     n = len(df)
     raw: list[Pivot] = []
@@ -64,20 +72,34 @@ def pivots(df: pd.DataFrame, left: int = 3, right: int = 3) -> list[Pivot]:
             raw.append(Pivot(i, float(h[i]), "H", i + right))
         if l[i] == wl.min() and (wl == l[i]).sum() == 1:
             raw.append(Pivot(i, float(l[i]), "L", i + right))
-    raw.sort(key=lambda p: (p.idx, p.kind))
+    raw.sort(key=lambda p: (p.known_at, p.idx, p.kind))
     out: list[Pivot] = []
+    cur: Pivot | None = None          # the last alive pivot of the fold
     for p in raw:
-        if out and out[-1].kind == p.kind:
-            better = p.price > out[-1].price if p.kind == "H" else p.price < out[-1].price
-            if better:
-                out[-1] = Pivot(p.idx, p.price, p.kind, max(p.known_at, out[-1].known_at))
-            continue
+        if cur is not None and cur.kind == p.kind:
+            better = p.price > cur.price if p.kind == "H" else p.price < cur.price
+            if not better:
+                continue
+            cur.until = p.known_at        # superseded from here on, never retroactively
         out.append(p)
+        cur = p
     return out
 
 
 def known_pivots(pvts: list[Pivot], i: int) -> list[Pivot]:
-    return [p for p in pvts if p.known_at <= i]
+    """Pivots alive at bar i's close (confirmed and not yet superseded)."""
+    return [p for p in pvts if p.known_at <= i < p.until]
+
+
+def take_known(order: list[Pivot], ptr: int, known: list[Pivot], i: int) -> int:
+    """Advance `known` (alive pivots, known order) to bar i: append each newly confirmed pivot, dropping
+    the one it supersedes (always the last alive one). Returns the new pointer into `order`."""
+    while ptr < len(order) and order[ptr].known_at <= i:
+        q = order[ptr]; ptr += 1
+        if known and known[-1].until <= q.known_at:
+            known.pop()
+        known.append(q)
+    return ptr
 
 
 def htf_bias(df: pd.DataFrame, rule: str = "60min", n: int = 50) -> pd.Series:

@@ -156,12 +156,19 @@ def fvg_up(H, L, atr, min_atr: float = 0.1) -> tuple[np.ndarray, np.ndarray, np.
 
 
 # ── sessions & liquidity pools ────────────────────────────────────────────────
+def trading_day(ts):
+    """Trading-day key of the 17:00 NY roll, on the WALL clock (17:00 → next calendar date). Works for a
+    Timestamp or DatetimeIndex; returns naive midnight(s). Never add 7h to a UTC/elapsed clock (F13)."""
+    wall = ts.tz_localize(None) if getattr(ts, "tz", None) is not None else ts
+    return (wall + pd.Timedelta(hours=7)).normalize()
+
+
 def session_levels(index: pd.DatetimeIndex, close_ts: pd.DatetimeIndex, O, H, L) -> dict[str, np.ndarray]:
     """ICT reference levels, each known only once its window has finished (NY time):
        asia 20:00–00:00 · london 02:00–05:00 · midnight open 00:00 · prior trading day (17:00 roll)."""
     n = len(index)
     df = pd.DataFrame({"o": O, "h": H, "l": L}, index=index)
-    tday = (index + pd.Timedelta(hours=7)).normalize()          # trading day key (17:00 roll)
+    tday = trading_day(index)                                   # trading day key (17:00 roll)
     hour = index.hour
     out = {k: np.full(n, np.nan) for k in ("asia_hi", "asia_lo", "lon_hi", "lon_lo", "mid_open", "pdh", "pdl")}
     g = df.groupby(tday)
@@ -175,17 +182,17 @@ def session_levels(index: pd.DatetimeIndex, close_ts: pd.DatetimeIndex, O, H, L)
     ct_h = close_ts.hour + close_ts.minute / 60.0
     in_day = np.asarray((hour < 17))                            # same trading day, after midnight
     if len(asia):
-        a = asia.groupby((asia.index + pd.Timedelta(hours=7)).normalize()).agg(hi=("h", "max"), lo=("l", "min"))
+        a = asia.groupby(trading_day(asia.index)).agg(hi=("h", "max"), lo=("l", "min"))
         ok = in_day
         out["asia_hi"] = np.where(ok, a["hi"].reindex(tday).to_numpy(), np.nan)
         out["asia_lo"] = np.where(ok, a["lo"].reindex(tday).to_numpy(), np.nan)
     if len(lon):
-        b = lon.groupby((lon.index + pd.Timedelta(hours=7)).normalize()).agg(hi=("h", "max"), lo=("l", "min"))
+        b = lon.groupby(trading_day(lon.index)).agg(hi=("h", "max"), lo=("l", "min"))
         ok = in_day & np.asarray(ct_h > 5.0) & np.asarray(hour >= 5)
         out["lon_hi"] = np.where(ok, b["hi"].reindex(tday).to_numpy(), np.nan)
         out["lon_lo"] = np.where(ok, b["lo"].reindex(tday).to_numpy(), np.nan)
     if len(mid):
-        m = mid.groupby((mid.index + pd.Timedelta(hours=7)).normalize())["o"].first()
+        m = mid.groupby(trading_day(mid.index))["o"].first()
         out["mid_open"] = np.where(in_day, m.reindex(tday).to_numpy(), np.nan)
     return out
 
@@ -278,7 +285,7 @@ def session_vwap(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         return np.full(n, np.nan), np.full(n, np.nan)
     tp = ((df["high"] + df["low"] + df["close"]) / 3).to_numpy(float)
     v = np.nan_to_num(df["volume"].to_numpy(float))
-    day = (df.index + pd.Timedelta(hours=7)).normalize()
+    day = trading_day(df.index)
     g = pd.Series(day).ne(pd.Series(day).shift()).cumsum().to_numpy()
     s_v = pd.Series(v).groupby(g).cumsum().to_numpy()
     s_pv = pd.Series(tp * v).groupby(g).cumsum().to_numpy()

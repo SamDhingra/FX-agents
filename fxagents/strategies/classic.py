@@ -19,7 +19,7 @@ class SRRejection(Strategy):
 
     def _levels(self, piv, i, a_i):
         p = self.params
-        pts = sorted(q.price for q in piv if q.known_at <= i and q.idx >= i - p["lookback"])
+        pts = sorted(q.price for q in piv if q.known_at <= i < q.until and q.idx >= i - p["lookback"])
         levels, cluster = [], []
         for x in pts:
             if cluster and x - cluster[-1] > p["cluster_atr"] * a_i:
