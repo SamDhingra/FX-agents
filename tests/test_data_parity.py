@@ -118,3 +118,46 @@ def test_barstore_shows_a_corrected_bar():
     last = m1.index[-1] + pd.Timedelta("1min")                        # same ts + length: a re-sent newest bar
     st.append(Bar("NDQ", last, 102.0, 104.0, 1.0, 102.0, 10.0))
     assert st.tf("NDQ", "5min", complete_only=False)["low"].iloc[-1] == 1.0
+
+
+# ── F23 ───────────────────────────────────────────────────────────────────────
+def test_hourly_bias_waits_for_the_hours_last_bar():
+    """The 09:59 bar is polled only after the 10:00 clock tick. The bias must not close the partial
+    09:00 hour; it is computed once the bar arrives and reflects its close (which breaks 1H structure)."""
+    import asyncio
+    import copy
+
+    from fxagents.agents.context import BiasAgent
+    from fxagents.agents.core import Ctx
+    from fxagents.bus import Bus
+    from fxagents.config import load_config
+    from fxagents.data import BarStore
+    from fxagents.models import Bar
+    from fxagents.state import LiveState
+
+    cfg = copy.deepcopy(load_config("config.yaml"))
+    sym = next(iter(cfg["instruments"]))
+    cfg["instruments"] = {sym: cfg["instruments"][sym]}
+    cfg["bias"]["safeguards"]["jev_audit"] = False
+    h_idx = pd.date_range("2026-06-01 00:00", "2026-06-04 09:00", freq="1h", tz=TZ, inclusive="left")
+    c = 100 + 0.3 * np.arange(len(h_idx)) + 2.0 * np.sin(np.arange(len(h_idx)) / 2.0)     # rising zig-zag
+    store = BarStore(TZ)
+    store.load_h1(sym, pd.DataFrame({"open": c, "high": c + 0.4, "low": c - 0.4, "close": c}, index=h_idx))
+    m_idx = pd.date_range("2026-06-04 09:00", periods=59, freq="1min", tz=TZ)                # 09:00 … 09:58
+    px = c[-1] + 0.5
+    store.load_history(sym, pd.DataFrame({"open": px, "high": px + 0.1, "low": px - 0.1, "close": px,
+                                          "volume": 1.0}, index=m_idx))
+    st = LiveState()
+    agent = BiasAgent(Ctx(cfg, Bus(), st, store, None, None, None, None))
+    agent.start()
+    partial = agent.compute(sym, pd.Timestamp("2026-06-04 10:00:05", tz=TZ))
+
+    asyncio.run(agent.on_clock(pd.Timestamp("2026-06-04 10:00:05", tz=TZ)))
+    assert sym not in st.bias                                        # hour incomplete → not computed yet
+    crash = float(c.min() - 20)                                      # the 09:59 close breaks every swing low
+    store.append(Bar(sym, pd.Timestamp("2026-06-04 09:59", tz=TZ), px, px, crash, crash, 1.0))
+    asyncio.run(agent.on_clock(pd.Timestamp("2026-06-04 10:00:20", tz=TZ)))
+    b = st.bias[sym]
+    assert b["price"] == round(crash, 4) and b["h1"] == -1 and partial["h1"] != -1
+    asyncio.run(agent.on_clock(pd.Timestamp("2026-06-04 10:00:35", tz=TZ)))      # final for the hour
+    assert agent.done[sym] == (pd.Timestamp("2026-06-04 10:00", tz=TZ), True)
