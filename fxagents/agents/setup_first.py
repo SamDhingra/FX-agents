@@ -282,7 +282,7 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-MODES = ("hourly_pick", "setup_first", "playbook")
+MODES = ("hourly_pick", "setup_first", "playbook", "h1_vol_trend")
 
 
 def shadow_db_path(main_path: str, mode: str | None = None) -> str:
@@ -333,7 +333,10 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     mode = mode or (shadow_modes(cfg) or ["setup_first"])[0]
     journal = Journal(shadow_db_for(cfg, mode, first))
     sctx = Ctx(cfg, bus, st, main.store, broker, journal, main.jev, main.book, main.news)
-    if mode == "playbook":
+    if mode == "h1_vol_trend":
+        from .h1_trend_trader import H1VolTrendTrader
+        trader = H1VolTrendTrader(sctx)
+    elif mode == "playbook":
         from .playbook_trader import PlaybookHolder, PlaybookTrader
         sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
         trader = PlaybookTrader(sctx)

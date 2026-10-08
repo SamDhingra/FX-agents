@@ -321,6 +321,52 @@ def gap_fail(m1: pd.DataFrame, c: Costs, control: bool = False, k_cost: float = 
 
 
 # ── ASTRA-H1-VOL-TREND-CFD-001 ────────────────────────────────────────────────
+class H1Ind:
+    """Indicators of the H1-VOL-TREND spec over a frame of COMPLETED hourly bars (shared by the backtest and
+    the live shadow book, so both decide with the same code)."""
+
+    def __init__(self, h1: pd.DataFrame):
+        self.H, self.L, self.C = (h1[x].to_numpy(float) for x in ("high", "low", "close"))
+        self.A = wilder_atr(self.H, self.L, self.C)
+        self.e32, self.e128 = ema(self.C, 32), ema(self.C, 128)
+        self.absd = np.abs(np.diff(self.C, prepend=np.nan))
+
+    def side(self, t: int, q: float, control: str | None = None) -> int:
+        """+1 / −1 / 0 for the hourly bar t (needs t ≥ 150)."""
+        Ch, e32, e128 = self.C, self.e32, self.e128
+        if t < 150:
+            return 0
+        if control == "trend10":
+            return 1 if e32[t] > e128[t] else -1 if e32[t] < e128[t] else 0
+        hi12, lo12 = self.H[t - 12:t].max(), self.L[t - 12:t].min()
+        up, dn = Ch[t] >= hi12 + q, Ch[t] <= lo12 - q
+        if control != "plain":
+            den = self.absd[t - 23:t + 1].sum()
+            er = abs(Ch[t] - Ch[t - 24]) / den if den > 0 else 0.0
+            med = np.median(self.A[t - 120:t])
+            if not (er >= 0.30 and np.isfinite(med) and med > 0 and 0.75 <= self.A[t] / med <= 1.75):
+                return 0
+            up = up and e32[t] > e128[t] and e32[t] > e32[t - 3]
+            dn = dn and e32[t] < e128[t] and e32[t] < e32[t - 3]
+        return 1 if up else -1 if dn else 0
+
+
+def h1_initial_stop(E0: float, A: float, side: int, q: float) -> float:
+    raw = E0 - side * 2 * A
+    return math.floor(raw / q) * q if side > 0 else math.ceil(raw / q) * q
+
+
+def h1_trail(state: dict, close: float, A: float, fill: float, R: float, side: int, q: float) -> float | None:
+    """One completed post-entry hourly close → the new trailing stop (or None). `state` keeps best/armed."""
+    state["best"] = close if state.get("best") is None else (max(state["best"], close) if side > 0 else min(state["best"], close))
+    if not state.get("armed"):
+        if (close - (fill + side * R)) * side < 0:
+            return None
+        state["armed"] = True
+    ns = state["best"] - side * 2 * A
+    return math.floor(ns / q) * q if side > 0 else math.ceil(ns / q) * q
+
+
 def h1_trend(m1: pd.DataFrame, c: Costs, control: str | None = None, k_cost: float = 1.0, admitted: set | None = None) -> list[dict]:
     """control: None (the spec), 'plain' (12-bar breakout, no EMA/ER/vol filters), 'trend10' (10:00 entry
     in the EMA32/EMA128 direction, no breakout)."""
@@ -328,10 +374,7 @@ def h1_trend(m1: pd.DataFrame, c: Costs, control: str | None = None, k_cost: flo
     cx = c.scaled(k_cost)
     q = c.q
     h1 = resample(m1, "1h")
-    Hh, Lh, Ch = (h1[x].to_numpy(float) for x in ("high", "low", "close"))
-    A = wilder_atr(Hh, Lh, Ch)
-    e32, e128 = ema(Ch, 32), ema(Ch, 128)
-    absd = np.abs(np.diff(Ch, prepend=np.nan))
+    ind = H1Ind(h1)
     h_close_t = h1.index + pd.Timedelta("1h")
     first_k = np.asarray(d.idx.searchsorted(h_close_t))
     k_to_h = {}
@@ -348,28 +391,14 @@ def h1_trend(m1: pd.DataFrame, c: Costs, control: str | None = None, k_cost: flo
             t = by_close.get(_t(day, hm))
             if t is None or t < 150:
                 continue
-            if control == "trend10":
-                side = 1 if e32[t] > e128[t] else -1 if e32[t] < e128[t] else 0
-            else:
-                hi12, lo12 = Hh[t - 12:t].max(), Lh[t - 12:t].min()
-                up, dn = Ch[t] >= hi12 + q, Ch[t] <= lo12 - q
-                if control != "plain":
-                    den = absd[t - 23:t + 1].sum()
-                    er = abs(Ch[t] - Ch[t - 24]) / den if den > 0 else 0.0
-                    med = np.median(A[t - 120:t])
-                    if not (er >= 0.30 and np.isfinite(med) and med > 0 and 0.75 <= A[t] / med <= 1.75):
-                        continue
-                    up = up and e32[t] > e128[t] and e32[t] > e32[t - 3]
-                    dn = dn and e32[t] < e128[t] and e32[t] < e32[t - 3]
-                side = 1 if up else -1 if dn else 0
+            side = ind.side(t, q, control)
             if side == 0:
                 continue
             j = d.at(_t(day, hm))
             if j is None:
                 break
             E0 = d.O[j] + side * c.s / 2
-            raw = E0 - side * 2 * A[t]
-            S = math.floor(raw / q) * q if side > 0 else math.ceil(raw / q) * q
+            S = h1_initial_stop(E0, ind.A[t], side, q)
             dist = abs(E0 - S)
             key = (ds, side)
             if admitted is None and c.round_trip / dist > COST_GATE:
@@ -379,20 +408,13 @@ def h1_trend(m1: pd.DataFrame, c: Costs, control: str | None = None, k_cost: flo
             j_end = d.first_at_or_after(_t(day, "15:50"))
             if j_end >= len(d.idx):
                 break                                              # session incomplete in the data (e.g. today)
-            best = {"c": None, "armed": False}
+            st: dict = {}
 
-            def trail(k, stop, fill, R, side=side, j=j):
+            def trail(k, stop, fill, R, side=side, j=j, st=st):
                 b = k_to_h.get(k)
                 if b is None or h1.index[b] < d.idx[j]:
                     return None
-                cl = Ch[b]
-                best["c"] = cl if best["c"] is None else (max(best["c"], cl) if side > 0 else min(best["c"], cl))
-                if not best["armed"]:
-                    if (cl - (fill + side * R)) * side < 0:
-                        return None
-                    best["armed"] = True
-                ns = best["c"] - side * 2 * A[b]
-                return math.floor(ns / q) * q if side > 0 else math.ceil(ns / q) * q
+                return h1_trail(st, ind.C[b], ind.A[b], fill, R, side, q)
 
             res = execute(d.O, d.H, d.L, d.C, j, side, S, j_end, cx, trail=trail)
             if res:

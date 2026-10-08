@@ -588,6 +588,8 @@ class PositionManagerAgent(Agent):
         max_hold = float(pos.meta.get("max_hold", s["max_hold_minutes"]))
         if (_hm(s["flatten_at"]) <= mins < 17 * 60) or held >= max_hold:
             return await self.close(pos, bar.close, "session_flat" if held < max_hold else "max_hold")
+        if pos.meta.get("external_mgmt"):
+            return              # its own trader manages stops (e.g. the h1_vol_trend book); time exits still apply
 
         # 2) target steps. A step only counts (pos.stage) once its partial and its stop move went through at the
         #    broker; a step whose level was hit but whose action failed stays pending in meta["step_hit"] and is

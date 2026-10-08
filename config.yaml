@@ -252,8 +252,11 @@ setup_first:
 # ── Shadow book: runs the OTHER selection mode on the same live bars, virtual fills only ──
 shadow:
   enabled: true
+  h1_vol_trend:                 # the audit's H1-VOL-TREND spec on paper, rules frozen (agents/h1_trend_trader.py)
+    symbols: [XAUUSD]
+    risk_pct: 0.001             # constant 0.10% of the book's equity per trade
   mode: playbook                # what the shadow book runs (default: setup_first if the real book is hourly_pick)
-  modes: [playbook]             # shadow books (overrides `mode`); several run side by side, each with its own journal.
+  modes: [playbook, h1_vol_trend]  # shadow books (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
