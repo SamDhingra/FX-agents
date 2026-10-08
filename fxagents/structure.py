@@ -60,6 +60,30 @@ def pivots_arr(h: np.ndarray, l: np.ndarray, left: int, right: int, reduce: bool
     return out
 
 
+def pivots_pullback(h: np.ndarray, l: np.ndarray, c: np.ndarray) -> list[Pivot]:
+    """Swings confirmed by a VALIDATED PULLBACK instead of a fractal (Dave's rule as TFO's commenter puts
+    it): the highest high since the last swing low becomes a swing high only once a later candle CLOSES
+    below the low of the candle that made that high; a swing low likewise needs a close above the high
+    of the candle that made it. Alternating H/L, causal (known_at = the validating close)."""
+    n = len(h)
+    out: list[Pivot] = []
+    kh = kl = 0                      # candidate high / low bar since the last confirmed swing
+    want = None                      # None = either; "H" or "L" = the next swing kind
+    for i in range(1, n):
+        if want != "L" and h[i] > h[kh]:
+            kh = i
+        if want != "H" and l[i] < l[kl]:
+            kl = i
+        if want != "L" and kh < i and c[i] < l[kh]:
+            out.append(Pivot(kh, float(h[kh]), "H", i))
+            want, kl = "L", kh + int(np.argmin(l[kh:i + 1]))
+            continue
+        if want != "H" and kl < i and c[i] > h[kl]:
+            out.append(Pivot(kl, float(l[kl]), "L", i))
+            want, kh = "H", kl + int(np.argmax(h[kl:i + 1]))
+    return out
+
+
 def swing_levels(piv: list[Pivot], n: int) -> dict[str, np.ndarray]:
     """Per bar: the current swing high / low (price and bar index) as KNOWN at that bar's close.
 
@@ -211,7 +235,7 @@ def views(df: pd.DataFrame, ctx: dict, swing: int, rule: str = "close") -> list[
     out = []
     for side in (1, -1):
         o, h, l, c = (O, H, L, C) if side > 0 else (-O, -L, -H, -C)
-        piv = pivots_arr(h, l, swing, swing, reduce=False)
+        piv = pivots_pullback(h, l, c) if swing == "pb" else pivots_arr(h, l, swing, swing, reduce=False)
         lv = ctx["_sess"] if side > 0 else _mirror_levels(ctx["_sess"])
         out.append(View(side, o, h, l, c, piv, market_structure(h, l, c, piv, rule), lv))
     ctx[key] = out

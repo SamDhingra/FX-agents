@@ -50,7 +50,7 @@ class _DTFX(_Fast):
                           min_leg_atr=1.5, max_age=48, stop_buf_atr=0.1, band_wait=6)
     # level "50-70": a pullback ZONE instead of one line — price reaching 50% arms it, and the trade is the
     # first rejection candle anywhere between 50% and 70% (a close below 70% or `band_wait` bars kills it)
-    param_grid = {"swing": [3, 5], "level": [0.3, 0.5, 0.7, "50-70"], "confirm": ["touch", "rejection"],
+    param_grid = {"swing": [3, 5, "pb"], "level": [0.3, 0.5, 0.7, "50-70"], "confirm": ["touch", "rejection"],
                   "mtf": ["none", "1h"], "sessions": ["all", "killzones"]}
 
     @classmethod
@@ -172,5 +172,5 @@ class DTFXCloseOrigin(_DTFX):
     description = ("DTFX — close-based structure, zone = the origin candle (last opposing candle at the valid "
                    "low); entry on the first return to the zone, stop below the zone.")
     default_params = dict(_DTFX.default_params)
-    param_grid = {"swing": [3, 5], "confirm": ["touch", "rejection"], "mtf": ["none", "1h"],
+    param_grid = {"swing": [3, 5, "pb"], "confirm": ["touch", "rejection"], "mtf": ["none", "1h"],
                   "sessions": ["all", "killzones"]}
