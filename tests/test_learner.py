@@ -68,8 +68,18 @@ def test_promotion_builds_up_over_weeks_beyond_the_rolling_window(tmp_path):
     ctx, ag, book, j, parent, child = setup(tmp_path)
     fwd(j, child.id, [0.6] * 30)                              # 30 forward trades spread over ~8 days
     fwd(j, parent.id, [0.1] * 30)
+    ag.lc["auto_promote"] = True
     asyncio.run(ag.promote_demote(NOW, NOW.isoformat()))
     assert book.get(child.id).status == "live" and book.get(parent.id).status == "shadow"
+
+
+def test_auto_promote_off_only_reports(tmp_path):
+    ctx, ag, book, j, parent, child = setup(tmp_path)
+    fwd(j, child.id, [0.6] * 30)
+    fwd(j, parent.id, [0.1] * 30)
+    ag.lc["auto_promote"] = False
+    asyncio.run(ag.promote_demote(NOW, NOW.isoformat()))
+    assert book.get(child.id).status == "shadow" and book.get(parent.id).status != "shadow"
 
 
 def test_negative_real_trades_veto_promotion(tmp_path):

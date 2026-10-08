@@ -373,6 +373,10 @@ class StrategistAgent(Agent):
                                f"{real['expectancy']:+.2f}R over {real['n']}")
             if fwd["n"] >= ec["min_trades_promote"] and fwd["expectancy"] >= par["expectancy"] + ec["promote_margin_r"] \
                     and fwd["expectancy"] > 0 and not real_veto:
+                if not self.lc.get("auto_promote", True):
+                    self._note(ts, f"would promote {st.id} (forward {fwd['expectancy']:+.2f}R over {fwd['n']}) — "
+                                   "auto_promote is off")
+                    continue
                 book.set_status(st.id, "live", ts, "promoted on forward shadow results")
                 if parent_id in book.items and not isinstance(st, Confluence):
                     book.set_status(parent_id, "shadow", ts, f"superseded by {st.id}")

@@ -169,7 +169,7 @@ management:
     struct_k: 0                 #   pivot half-width in 1m bars (0 = the entry timeframe in minutes)
   pyramid:
     enabled: true
-    max_adds: 2
+    max_adds: 0                # adds off (Oct 2026 audit: −0.04R per added trade, fill-price risk bug) — 2 to re-enable
     add_size_frac: 0.5         # each add = 50% of the initial size
     require_continuation: true # Jev must rate continuation likely before adding
     min_continuation_prob: 0.55
@@ -211,6 +211,7 @@ learner:
   is_frac: 0.67                # fit on the first 2/3, validate on the last 1/3 it never saw
   real_block_n: 5              # real trades (paper account + shadow book) that can veto a promotion if negative
   real_demote_n: 15            # real trades that can demote a live version if they lose
+  auto_promote: false          # false: the learner only REPORTS what it would promote (Oct 2026 audit: its simulator has no spread)
   live_requires_vetting: true  # LIVE mode: learner-made versions trade only after you vet them (paper promotes automatically)
 
 notifications:
