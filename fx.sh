@@ -114,7 +114,7 @@ case "${1:-help}" in
              git -C "$R" fetch -q origin results 2>/dev/null && git -C "$R" reset -q --hard origin/results || true
              for d in data/year_test/*/; do                        # every run folder (365d, 365d_trend_raw, …)
                n=$(basename "$d"); mkdir -p "$R/year_test/$n"
-               for f in report.md status.json run.json cells.csv summary.json; do [[ -f "$d$f" ]] && cp "$d$f" "$R/year_test/$n/"; done
+               for f in report.md status.json run.json cells.csv summary.json; do [[ -f "$d$f" ]] && cp "$d$f" "$R/year_test/$n/"; done; cp "$d"report_w*.md "$R/year_test/$n/" 2>/dev/null || true
              done
              ls -t logs/yeartest-*.log 2>/dev/null | head -1 | xargs -r tail -n 80 > "$R/year_test/log_tail.txt"
              git -C "$R" add -A

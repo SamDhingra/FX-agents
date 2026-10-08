@@ -227,6 +227,9 @@ def run_one(a, costs: str, tag: str) -> None:
                                               "manifest": manifest(execution_cfg(cfg, mandate), t)}, indent=1, default=str))
     write_report(out, t, cells, summary, a.days, cfg, label=f"{a.days} days · costs {costs}"
                  + (f" · {' '.join(a.tfs)}" if a.tfs else "") + (f" · {tag}" if tag else ""))
+    if a.window:            # keep one report per selection window (--report-only --window N reuses the same trades)
+        import shutil
+        shutil.copy(out / "report.md", out / f"report_w{a.window}.md")
     stage("done", trades=len(t), cells=len(cells))
     print((out / "report.md").read_text()[:3000])
 
