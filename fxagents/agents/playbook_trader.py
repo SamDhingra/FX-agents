@@ -100,7 +100,9 @@ class PlaybookAgent(Agent):
             self.loaded_mtime = path.stat().st_mtime
             data = json.loads(path.read_text())
             src = "playbook.json"
-        data = pbk.with_pinned(self.cfg, data)              # pinned cells trade every week
+        # pinned cells trade every week — but only from their effective_from on (a replay of a week before
+        # a lab promotion must not trade the promoted cell)
+        data = pbk.with_pinned(self.cfg, data, asof=now)
         self.holder.load(data, pol, src)
         self.last_sel_day = day
         log.info("playbook %s (%s): %d cells — %s", data.get("asof"), src, len(data.get("cells", [])),

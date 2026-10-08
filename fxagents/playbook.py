@@ -89,7 +89,10 @@ class Policy:
 # ── cell statistics over a window (vectorised via per-day cumulative sums) ───
 class CellCube:
     """Per-cell, per-day cumulative sums. Expectancy is measured on `val` — `rw` (R weighted by the size
-    Risk can really take, in units of the full budget) when the research has it, else plain `r`."""
+    Risk can really take, in units of the full budget) when the research has it, else plain `r`.
+    Statistics use each cell's own one-at-a-time record (busy_self rows dropped); `self.trades` keeps every
+    candidate so the walk-forward → portfolio replay applies occupancy only to the positions it accepted.
+    A trade counts toward a selection made at day b's start only if it had EXITED by then (window())."""
 
     def __init__(self, trades: pd.DataFrame, val: str | None = None) -> None:
         t = trades.copy()
@@ -103,20 +106,38 @@ class CellCube:
         cells["ci"] = np.arange(len(cells))
         t = t.merge(cells, on=KEY)
         self.cells, self.trades = cells, t
+        own = ~t["busy_self"].astype(bool) if "busy_self" in t.columns else pd.Series(True, index=t.index)
         C, D = len(cells), len(self.days)
         self.n = np.zeros((C, D + 1)); self.w = np.zeros((C, D + 1)); self.s = np.zeros((C, D + 1))
-        g = t.groupby(["ci", "di"]).agg(n=("r", "size"), w=("win", "sum"), s=("_v", "sum"))
+        g = t[own].groupby(["ci", "di"]).agg(n=("r", "size"), w=("win", "sum"), s=("_v", "sum"))
         ci, di = g.index.get_level_values(0), g.index.get_level_values(1)
         self.n[ci, di + 1] = g["n"]; self.w[ci, di + 1] = g["w"]; self.s[ci, di + 1] = g["s"]
         self.n, self.w, self.s = (np.cumsum(x, axis=1) for x in (self.n, self.w, self.s))
         self.pool = cells[["sym", "tf", "mgmt"]].astype(str).agg("|".join, axis=1).to_numpy()
+        # sums are by ENTRY day; the few trades that exit on a later trading day (gaps, long holds) are kept
+        # aside so window() can take them out again when their exit is at/after the selection cutoff (F24)
+        self.cross = None
+        if "exit_ts" in t.columns:
+            xday = pd.to_datetime((pd.to_datetime(t["exit_ts"]) + pd.Timedelta(hours=7)).dt.date)
+            c = (own & (xday > pd.to_datetime(t["day"]))).to_numpy()
+            self.cross = t.loc[c, ["ci", "di", "win", "_v"]].assign(xday=xday[c])
 
-    def window(self, a: int, b: int) -> pd.DataFrame:
-        """Stats of every cell over trading days [a, b)."""
+    def window(self, a: int, b: int, cutoff=None) -> pd.DataFrame:
+        """Stats of every cell over trading days [a, b), counting only trades whose exit's trading day is
+        before `cutoff` (default: day b — a selection made as day b starts)."""
         a, b = max(0, a), max(0, b)
         n, w, s = (x[:, b] - x[:, a] for x in (self.n, self.w, self.s))
         m = (a + b) // 2
         n1, s1 = self.n[:, m] - self.n[:, a], self.s[:, m] - self.s[:, a]
+        cutoff = cutoff if cutoff is not None else (self.days[b] if b < len(self.days) else None)
+        if cutoff is not None and self.cross is not None and len(self.cross):
+            x = self.cross
+            x = x[(x["di"] >= a) & (x["di"] < b) & (x["xday"] >= pd.Timestamp(cutoff))]
+            if len(x):                                  # entered inside the window, outcome not known yet
+                C, ci, f = len(self.cells), x["ci"].to_numpy(), (x["di"] < m).to_numpy()
+                bc = lambda k, v=None: np.bincount(k, weights=v, minlength=C)  # noqa: E731
+                n, w, s = n - bc(ci), w - bc(ci, x["win"].to_numpy()), s - bc(ci, x["_v"].to_numpy())
+                n1, s1 = n1 - bc(ci[f]), s1 - bc(ci[f], x["_v"].to_numpy()[f])
         n2, s2 = n - n1, s - s1
         out = self.cells.copy()
         out["n"], out["wins"], out["sum_r"] = n, w, s
@@ -168,7 +189,10 @@ def select(st: pd.DataFrame, pol: Policy) -> pd.DataFrame:
 
 def walk_forward(trades: pd.DataFrame, pol: Policy, start_day=None, cube: CellCube | None = None) -> pd.DataFrame:
     """Weekly re-selection on the trailing window; returns the trades the selection would then have
-    taken in the following (unseen) week, before portfolio capacity rules."""
+    taken in the following (unseen) week, before portfolio capacity rules. The window is counted in
+    OBSERVED TRADE DAYS (cube.days = days with ≥1 research trade in any cell), not calendar days; the
+    first weeks after `start_day` select on fewer days than window_days. Every candidate of a selected
+    cell is returned (incl. busy_self rows): portfolio() decides occupancy from what it accepted."""
     cube = cube or CellCube(trades)
     days = cube.days
     t = cube.trades
@@ -235,12 +259,35 @@ def portfolio(taken: pd.DataFrame, pol: Policy) -> pd.DataFrame:
     return t[keep].reset_index(drop=True)
 
 
+def day_block_ci(vals, days, n_boot: int = 2000, seed: int = 7) -> dict | None:
+    """95% interval of the average R per trade from a DAY-BLOCK bootstrap: whole trading days are resampled
+    (trades on one day share the market and move together), not single trades. `share_le0` = share of the
+    resampled averages ≤ 0 — a tail fraction of this bootstrap, NOT the probability that the true edge is
+    ≤ 0, and nothing here corrects for how the strategy was selected (multiple testing)."""
+    g = pd.DataFrame({"v": np.asarray(vals, float), "d": list(days)}).groupby("d")["v"].agg(["sum", "size"])
+    if len(g) < 2:
+        return None
+    k = np.random.default_rng(seed).integers(0, len(g), size=(n_boot, len(g)))
+    means = g["sum"].to_numpy()[k].sum(axis=1) / g["size"].to_numpy()[k].sum(axis=1)
+    lo, hi = np.percentile(means, [2.5, 97.5])
+    return {"lo": round(float(lo), 4), "hi": round(float(hi), 4), "share_le0": round(float((means <= 0).mean()), 3),
+            "days": int(len(g))}
+
+
+def days_of(x: pd.DataFrame):
+    """Trading day (17:00 → 17:00 NY) of each trade: the `day` column, else derived from `ts`."""
+    return x["day"] if "day" in x.columns else (pd.to_datetime(x["ts"]) + pd.Timedelta(hours=7)).dt.date
+
+
 def summarize(x: pd.DataFrame, col: str | None = None) -> dict:
-    """Headline stats on `col` (default: budget-weighted `rw` when present). `sum_r_unweighted` is the
-    same trades in plain R (each trade's own risk), for reference."""
+    """Headline stats on `col` (default: budget-weighted `rw` when present; named in `units`).
+    `sum_r_unweighted` is the same trades in plain R (each trade's own risk), for reference.
+    `avg_ci95` = day-block bootstrap 95% interval of the average per trade. `p_boot` (kept for the dashboard)
+    is that bootstrap's share of averages ≤ 0 — a tail fraction, not "the chance the edge is ≤ 0"."""
     if not len(x):
         return {"trades": 0, "win_rate": 0.0, "avg_r": 0.0, "sum_r": 0.0, "max_dd_r": 0.0, "pf": None,
-                "sum_r_unweighted": 0.0, "t_stat": None, "p_boot": None, "top1_share": None, "sum_ex_top3": None}
+                "sum_r_unweighted": 0.0, "t_stat": None, "p_boot": None, "avg_ci95": None, "units": col,
+                "top1_share": None, "sum_ex_top3": None}
     col = col or ("rw" if "rw" in x.columns else "r")
     y = x.sort_values("ts")
     r = y[col].to_numpy(dtype=float)
@@ -249,15 +296,16 @@ def summarize(x: pd.DataFrame, col: str | None = None) -> dict:
     wins, losses = r[r > 0].sum(), -r[r < 0].sum()
     sd = float(r.std(ddof=1)) if len(r) > 1 else 0.0
     t_stat = float(r.mean() / (sd / np.sqrt(len(r)))) if sd > 0 else None
-    rng = np.random.default_rng(7)
-    boot = rng.choice(r, size=(2000, len(r)), replace=True).mean(axis=1) if len(r) > 1 else np.array([r.mean()])
+    ci = day_block_ci(r, days_of(y))
     srt = np.sort(r)[::-1]
     return {"trades": int(len(r)), "win_rate": round(float((y["r"] > 0).mean()), 3), "avg_r": round(float(r.mean()), 3),
             "sum_r": round(float(r.sum()), 2), "max_dd_r": round(dd, 2),
             "pf": round(float(wins / losses), 2) if losses > 0 else None,
             "sum_r_unweighted": round(float(y["r"].sum()), 2),
             "t_stat": round(t_stat, 2) if t_stat is not None else None,
-            "p_boot": round(float((boot <= 0).mean()), 3),
+            "p_boot": ci["share_le0"] if ci else None,
+            "avg_ci95": [ci["lo"], ci["hi"]] if ci else None, "ci_days": ci["days"] if ci else None,
+            "ci_method": "day-block bootstrap (trading days resampled), 95% interval of avg per trade", "units": col,
             "top1_share": round(float(srt[0] / r.sum()), 2) if r.sum() > 0 else None,
             "sum_ex_top3": round(float(srt[3:].sum()), 2) if len(r) > 3 else None}
 
@@ -348,7 +396,7 @@ def select_asof(cfg, day, pol: Policy | None = None) -> dict:
     if cube is None:
         return {"cells": [], "asof": str(day), "why": "no research trades yet"}
     b = int(np.searchsorted(np.array(cube.days), day))
-    sel = select(cube.window(b - pol.window_days, b), pol)
+    sel = select(cube.window(b - pol.window_days, b, cutoff=day), pol)
     return {"asof": str(day), "window": [str(cube.days[max(0, b - pol.window_days)]) if b else None,
                                          str(cube.days[b - 1]) if b else None],
             "cells": cells_json(sel), "policy": pol.to_json()}
@@ -376,16 +424,38 @@ def pinned_cells(cfg) -> list[dict]:
     return out
 
 
-def with_pinned(cfg, data: dict) -> dict:
-    """Selected cells + config pins + cells promoted from the strategy lab (data/lab/pinned.json)."""
+def pin_active(pin: dict, asof=None, tz: str = "America/New_York") -> bool:
+    """A pin applies only from its `effective_from` (the promotion time) on — a replay or walk-forward
+    before that date must not trade it (F18). `asof`: a timestamp (the clock), or a trading-day date (which
+    starts 17:00 NY the evening before); None = now. Pins without effective_from (config pins) always apply."""
+    ef = pin.get("effective_from")
+    if not ef:
+        return True
+    ef = pd.Timestamp(ef)
+    ef = ef if ef.tzinfo else ef.tz_localize(tz)
+    if asof is None:
+        at = pd.Timestamp.now(tz=tz)
+    elif isinstance(asof, pd.Timestamp) or (isinstance(asof, str) and len(asof) > 10):
+        at = pd.Timestamp(asof)
+        at = at if at.tzinfo else at.tz_localize(tz)
+    else:                                                # a trading day: it starts at 17:00 NY the day before
+        at = pd.Timestamp(str(asof)).tz_localize(tz) - pd.Timedelta(hours=7)
+    return bool(ef <= at)
+
+
+def with_pinned(cfg, data: dict, asof=None) -> dict:
+    """Selected cells + config pins + cells promoted from the strategy lab (data/lab/pinned.json), each
+    only from its effective_from on (asof: the clock or trading day this playbook is for; None = now)."""
     have = {c["id"] for c in data.get("cells", [])}
     try:
         from .lab import lab_pinned
-        lab = lab_pinned(cfg)
+        lab = [p for p in lab_pinned(cfg) if pin_active(p, asof, cfg.get("timezone", "America/New_York"))]
     except Exception:  # noqa: BLE001
         lab = []
+    conf = [p for p in ((cfg.get("playbook") or {}).get("pinned") or [])
+            if pin_active(p, asof, cfg.get("timezone", "America/New_York"))]
     extra = []
-    for c in pinned_cells(cfg) + pinned_cells({"playbook": {"pinned": lab}}):
+    for c in pinned_cells({"playbook": {"pinned": conf}}) + pinned_cells({"playbook": {"pinned": lab}}):
         if c["id"] not in have:
             have.add(c["id"])
             extra.append(c)
@@ -442,6 +512,8 @@ def build(cfg, robustness: bool = True) -> dict:
     if not p.exists():
         raise FileNotFoundError(f"{p} — run the research grid first (python run_research.py)")
     trades = pd.read_pickle(p)
+    from .research import own_trades
+    own = own_trades(trades)            # per-cell statistics: each cell's own one-at-a-time record
     pol = policy_from_cfg(cfg)
     cube = load_cube(cfg)
     days = cube.days
@@ -470,7 +542,7 @@ def build(cfg, robustness: bool = True) -> dict:
                         rob.append({"window": win, "min_n": mn, "xau_cells": ncell, "xau_min_p": mp, **summarize(x)})
     # does a cell's past predict its future? (in-sample vs out-of-sample expectancy across cells)
     val = cube.val
-    tt = trades.assign(_oos=trades["day"] >= oos_from)
+    tt = own.assign(_oos=own["day"] >= oos_from)
     g = tt.groupby(KEY + ["_oos"])[val].agg(["size", "mean"]).unstack("_oos")
     g.columns = ["n_is", "n_oos", "e_is", "e_oos"]
     g = g.dropna()
@@ -498,16 +570,19 @@ def build(cfg, robustness: bool = True) -> dict:
     summary = {
         "created": pd.Timestamp.now(tz=cfg["timezone"]).isoformat(timespec="seconds"),
         "data": {"from": str(days[0]), "to": str(days[-1]), "days": len(days), "oos_from": str(oos_from),
-                 "walk_forward_from": str(wf_start), "trades": int(len(trades)), "grid": meta},
+                 "walk_forward_from": str(wf_start), "trades": int(len(own)), "candidates": int(len(trades)), "grid": meta},
         "policy": pol.to_json(),
         "walk_forward": {"summary": summarize(pf), "before_capacity": summarize(wf), "trades": _trades_json(pf),
                          "by_symbol": {s: summarize(pf[pf["sym"] == s]) for s in pf["sym"].unique()} if len(pf) else {},
-                         "weekly": (pf.groupby("week")["r"].agg(["size", "sum"]).round(2).reset_index()
-                                    .rename(columns={"size": "n", "sum": "r"}).to_dict("records") if len(pf) else [])},
-        "calibration": calib, "robustness": rob, "instruments": per, "heat": _heat(trades, oos_from),
+                         # weekly sums in the SAME units as the headline (`units`: rw = budget-weighted), so
+                         # they add up to summary.sum_r; r_unw = the same trades in plain per-trade R
+                         "units": cube.val,
+                         "weekly": (pf.groupby("week").agg(n=(cube.val, "size"), r=(cube.val, "sum"), r_unw=("r", "sum"))
+                                    .round(4).reset_index().to_dict("records") if len(pf) else [])},
+        "calibration": calib, "robustness": rob, "instruments": per, "heat": _heat(own, oos_from),
         "persistence": persistence, "periods": periods,
-        "costs": json.loads(trades.groupby(["sym", "tf"]).agg(cost_r=("cost_r", "mean"),
-                                                              size=("w", "mean") if "w" in trades.columns else ("cost_r", "size"))
+        "costs": json.loads(own.groupby(["sym", "tf"]).agg(cost_r=("cost_r", "mean"),
+                                                           size=("w", "mean") if "w" in own.columns else ("cost_r", "size"))
                             .round(4).reset_index().to_json(orient="records")),
         "units": "rw" if "rw" in trades.columns else "r",
         "playbook": current,
