@@ -42,13 +42,35 @@ class FakeOanda:
         self.drop_stop_next = False              # make the next fill come back without its stop
         self.now = pd.Timestamp.now(tz="UTC").floor("min")
         self.page_cap = 5000                     # real OANDA can return fewer candles than `count`
+        self.spread: dict[str, float] = {}       # instrument → full bid/ask spread (default 0)
+        self.fx_down = False                     # account-currency conversion pricing unavailable
+        # injected failures: [method, path substring, mode, times] with mode "timeout_before" (never reaches
+        # OANDA), "timeout_after" (executes, response lost) or an HTTP status (not executed)
+        self.faults: list[list] = []
+        self._closed: dict[str, tuple[float, float]] = {}   # trade id → (units closed, close value)
+        self.orders: dict[str, dict] = {}                     # client order id → order (GET /orders/@id)
+        self.deferred: list[tuple] = []                       # "defer" fault: requests that execute later
+
+    def flush_deferred(self) -> None:
+        """Execute requests held by a "defer" fault (an order that reaches OANDA after its response timed out)."""
+        held, self.deferred = self.deferred, []
+        for args in held:
+            self.route(*args)
 
     # ── helpers for tests ──
     def hit_stop(self, tid: str) -> None:
         t = self.trades[tid]
+        self._record_close(t, abs(float(t["currentUnits"])), float(t["stopLossOrder"]["price"]))
         t["state"] = "CLOSED"
-        t["averageClosePrice"] = t["stopLossOrder"]["price"]
         t["currentUnits"] = "0"
+
+    def _record_close(self, t: dict, n: float, px: float) -> None:
+        """averageClosePrice is the average over EVERY close of the trade (partials included), like OANDA."""
+        u, v = self._closed.get(t["id"], (0.0, 0.0))
+        u, v = u + n, v + n * px
+        self._closed[t["id"]] = (u, v)
+        t["averageClosePrice"] = f"{v / u:.{SPECS[t['instrument']]['displayPrecision'] + 2}f}"
+        t["realizedPL"] = "0"
 
     def open_trades(self) -> list[dict]:
         return [t for t in self.trades.values() if t["state"] == "OPEN"]
@@ -64,6 +86,21 @@ class FakeOanda:
         path = req.url.path
         q = dict(req.url.params)
         self.requests.append((req.method, path, body))
+        for f in self.faults:
+            if f[3] > 0 and req.method == f[0] and f[1] in path:
+                f[3] -= 1
+                if f[2] == "timeout_before":
+                    raise httpx.ReadTimeout("injected timeout", request=req)
+                if f[2] == "timeout_after":
+                    self.route(req, path, q, body)
+                    raise httpx.ReadTimeout("injected timeout (executed)", request=req)
+                if f[2] == "defer":
+                    self.deferred.append((req, path, q, body))
+                    raise httpx.ReadTimeout("injected timeout (executes later)", request=req)
+                return httpx.Response(f[2], json={"errorMessage": "injected failure"})
+        return self.route(req, path, q, body)
+
+    def route(self, req: httpx.Request, path: str, q: dict, body: dict | None) -> httpx.Response:
         a = f"/v3/accounts/{ACCT}"
         if path == "/v3/accounts":
             return self.ok({"accounts": [{"id": ACCT, "tags": []}]})
@@ -78,14 +115,24 @@ class FakeOanda:
                                             for n in names if n in SPECS]})
         if path == f"{a}/pricing":
             n = q["instruments"]
-            if n == "USD_CAD":
+            if n == "USD_CAD" and not self.fx_down:
                 return self.ok({"prices": [{"instrument": n, "closeoutBid": str(self.usdcad - 0.0001),
                                             "closeoutAsk": str(self.usdcad + 0.0001)}]})
+            if n in SPECS:
+                hs = self.spread.get(n, 0.0) / 2
+                bid, ask = self.prices[n] - hs, self.prices[n] + hs
+                return self.ok({"prices": [{"instrument": n, "bids": [{"price": str(bid)}], "asks": [{"price": str(ask)}],
+                                            "closeoutBid": str(bid), "closeoutAsk": str(ask)}]})
             return httpx.Response(400, json={"errorMessage": f"Invalid instrument {n}"})
         if path.startswith("/v3/instruments/") and path.endswith("/candles"):
             return self.candles(path.split("/")[3], q)
         if path == f"{a}/orders" and req.method == "POST":
             return self.order(body["order"])
+        if path.startswith(f"{a}/orders/@"):
+            o = self.orders.get(path.split("@", 1)[1])
+            if o is None:
+                return httpx.Response(404, json={"errorCode": "ORDER_DOESNT_EXIST", "errorMessage": "no such order"})
+            return self.ok({"order": o})
         if path == f"{a}/openTrades":
             return self.ok({"trades": self.open_trades()})
         if path == f"{a}/openPositions":
@@ -156,19 +203,33 @@ class FakeOanda:
                                              "errorCode": "STOP_LOSS_ON_FILL_PRICE_PRECISION_EXCEEDED", "errorMessage": "precision"})
         if _dp(o["units"].lstrip("-")) > sp["tradeUnitsPrecision"]:
             return httpx.Response(400, json={"errorCode": "UNITS_PRECISION_EXCEEDED", "errorMessage": "units precision"})
+        cid = (o.get("clientExtensions") or {}).get("id")
         if self.cancel_next:
             why, self.cancel_next = self.cancel_next, None
+            if cid:
+                self.orders[cid] = {"id": str(self.next_id + 1), "state": "CANCELLED", "clientExtensions": o["clientExtensions"]}
             return self.ok({"orderCreateTransaction": {"id": str(self._id())},
                             "orderCancelTransaction": {"id": str(self._id()), "reason": why}}, 201)
+        side = -1 if o["units"].startswith("-") else 1
+        fill_px = self.prices[n] + side * self.spread.get(n, 0.0) / 2
+        if o.get("priceBound") and (fill_px - float(o["priceBound"])) * side > 0:
+            if cid:
+                self.orders[cid] = {"id": str(self.next_id + 1), "state": "CANCELLED", "clientExtensions": o["clientExtensions"]}
+            return self.ok({"orderCreateTransaction": {"id": str(self._id())},
+                            "orderCancelTransaction": {"id": str(self._id()), "reason": "BOUNDS_VIOLATION"}}, 201)
         tid = str(self._id())
-        px = f"{self.prices[n]:.{sp['displayPrecision']}f}"
+        px = f"{fill_px:.{sp['displayPrecision']}f}"
         t = {"id": tid, "instrument": n, "price": px, "state": "OPEN", "initialUnits": o["units"], "currentUnits": o["units"],
-             "realizedPL": "0", "unrealizedPL": "0",
+             "realizedPL": "0", "unrealizedPL": "0", "openTime": self.now.strftime("%Y-%m-%dT%H:%M:%S.000000000Z"),
+             **({"clientExtensions": o["tradeClientExtensions"]} if o.get("tradeClientExtensions") else {}),
              "stopLossOrder": {"id": str(self._id()), "type": "STOP_LOSS", "price": o["stopLossOnFill"]["price"], "timeInForce": "GTC"}}
         if self.drop_stop_next:
             self.drop_stop_next = False
             t.pop("stopLossOrder")
         self.trades[tid] = t
+        if cid:
+            self.orders[cid] = {"id": str(int(tid) - 1), "state": "FILLED", "tradeOpenedID": tid,
+                                "clientExtensions": o["clientExtensions"]}
         return self.ok({"orderCreateTransaction": {"id": str(int(tid) - 1)},
                         "orderFillTransaction": {"id": str(self._id()), "price": px,
                                                  "tradeOpened": {"tradeID": tid, "units": o["units"], "price": px}}}, 201)
@@ -182,8 +243,9 @@ class FakeOanda:
         n = abs(cur) if units == "ALL" else float(units)
         px = f"{self.prices[t['instrument']]:.{SPECS[t['instrument']]['displayPrecision']}f}"
         fill = {"id": str(self._id()), "price": px}
+        self._record_close(t, min(n, abs(cur)), float(px))
         if n >= abs(cur) - 1e-9:
-            t["state"], t["currentUnits"], t["averageClosePrice"] = "CLOSED", "0", px
+            t["state"], t["currentUnits"] = "CLOSED", "0"
             fill["tradesClosed"] = [{"tradeID": t["id"], "units": str(-sign * abs(cur))}]
         else:
             t["currentUnits"] = str(sign * (abs(cur) - n))

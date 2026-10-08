@@ -47,6 +47,8 @@ class JournalAgent(Agent):
         self.beat()
         eq = await self.ctx.broker.equity()
         st = self.state
+        if eq is None or eq <= 0:
+            return              # equity unknown right now (broker/FX rate down): keep the last value, record nothing
         st.equity = eq
         st.equity_peak = max(st.equity_peak or eq, eq)
         if not st.day_start_equity:
@@ -227,10 +229,10 @@ class MonitorAgent(Agent):
         self._now = now
         st, r = self.state, self.cfg["risk"]
         # trading day rolls at 17:00 NY (CME)
-        tday = (now + pd.Timedelta(hours=7)).date()
-        if self.day != tday:
-            self.day = tday
-            st.day_start_equity = st.equity or st.day_start_equity
+        tday = str((now + pd.Timedelta(hours=7)).date())
+        if st.trading_day != tday:           # (restored after a restart for the same day → no reset)
+            self.day = st.trading_day = tday
+            st.day_start_equity = st.equity if st.equity > 0 else 0.0   # unknown → set at the first good reading
             st.realized_today = 0.0
             if st.halt_reason.startswith("daily loss"):
                 st.trading_enabled, st.halt_reason = True, ""
@@ -239,7 +241,8 @@ class MonitorAgent(Agent):
                 # so restart next day from a new peak and keep the event in the report
                 st.trading_enabled, st.halt_reason = True, ""
                 st.equity_peak = st.equity
-        if st.day_start_equity and st.trading_enabled:
+        # equity unknown (≤ 0: not read yet, e.g. booted while the FX rate was unavailable) → no kill-switch maths
+        if st.day_start_equity and st.trading_enabled and st.equity > 0:
             day_pnl = st.equity - st.day_start_equity
             if day_pnl <= -r["daily_loss_limit_pct"] * st.day_start_equity:
                 await self.kill(f"daily loss limit hit (${day_pnl:,.0f})")
@@ -264,7 +267,10 @@ class MonitorAgent(Agent):
         for p in st.positions.values():
             if p.status == "open":
                 known[p.symbol] = known.get(p.symbol, 0) + p.side * p.open_qty
+        pending = getattr(self.ctx.broker, "unresolved", None) or {}
         for sym, q in (await self.ctx.broker.broker_positions()).items():
+            if sym in pending:      # an entry whose outcome is still being reconciled → the broker adopts or drops it
+                continue
             if q and abs(q - known.get(sym, 0)) > 1e-9:
                 self._orphan_seen[sym] = self._orphan_seen.get(sym, 0) + 1
                 if self._orphan_seen[sym] >= 2:          # seen on two checks 30 s apart → not a fill race

@@ -141,6 +141,8 @@ risk:
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak
   min_stop_atr: 0.5                  # stops tighter than 0.5 ATR are widened (noise protection)
+  max_entry_slippage_frac_of_risk: 0.1   # OANDA priceBound: entry may fill at most 0.1 × stop distance worse (sized for it)
+  post_fill_risk_tolerance: 0.1      # after the fill, risk > budget × 1.1 → the excess units are closed at once
 
 # ── Sessions (NY time). Entries only inside windows; everything flat before close ──
 sessions:
@@ -150,6 +152,7 @@ sessions:
     - ["13:30", "15:30"]   # NY PM
     - ["20:00", "23:59"]   # Asia (overnight spreads are wider on indices; the 60% gate still applies to them)
   flatten_at: "15:50"      # day trading: all positions closed here
+  flatten_buffer_s: 60     # paper/live: a wall-clock supervisor starts closing this many seconds before flatten_at
   max_hold_minutes: 240
 
 # ── Trade management: start steady at 1:1, pyramid winners, stops only move toward profit ──

@@ -20,8 +20,8 @@ from fxagents.agents.context import BiasAgent, NewsAgent
 from fxagents.agents.core import Ctx, StrategyBook
 from fxagents.agents.ops import JournalAgent, MonitorAgent, NotifierAgent
 from fxagents.agents.strategist import StrategistAgent
-from fxagents.agents.trading import (MarketDataAgent, PositionManagerAgent, RiskAgent, SelectorAgent,
-                                     TraderAgent)
+from fxagents.agents.trading import (FlattenSupervisor, MarketDataAgent, PositionManagerAgent, RiskAgent,
+                                     SelectorAgent, TraderAgent)
 from fxagents.broker import IBKRBroker, PaperBroker
 from fxagents.bus import Bus
 from fxagents.config import apply_broker, load_config
@@ -29,13 +29,16 @@ from fxagents.data import BarStore, IBKRFeed, SimFeed
 from fxagents.jev import JevScorer
 from fxagents.journal import Journal
 from fxagents.news import NewsCalendar
-from fxagents.state import LiveState
+from fxagents.state import STARTUP_FAILED, STARTUP_HALT, LiveState, RuntimeStore, startup_reconcile
 
 log = logging.getLogger("main")
 
 
 async def build(cfg, args):
     state = LiveState(mode=cfg["mode"])
+    real = cfg["mode"] in ("paper", "live") and not cfg.get("replay")
+    if real:   # no entries until the broker has been reconciled with the saved runtime state (end of build)
+        state.trading_enabled, state.halt_reason = False, STARTUP_HALT
     bus = Bus()
     journal = Journal(cfg["storage"]["db_path"])
     store = BarStore(cfg["timezone"], max_days=cfg["timeframes"]["history_days"] + 3)
@@ -100,7 +103,15 @@ async def build(cfg, args):
         store.load_h1(sym, feed.h1_history(sym))
     first = store.m1(next(iter(cfg["instruments"])))
     state.now = (first.index[-1] + pd.Timedelta("1min")) if len(first) else pd.Timestamp.now(tz=cfg["timezone"])
-    state.equity = state.equity_peak = state.day_start_equity = await broker.equity()
+    eq = None
+    for attempt in range(3 if real else 1):    # OANDA: None = NAV or FX rate unavailable right now
+        eq = await broker.equity()
+        if eq is not None or attempt == 2:
+            break
+        log.warning("account equity unavailable (attempt %d/3)", attempt + 1)
+        await asyncio.sleep(5)
+    # unknown → 0: the journal fills it at the first good reading; kill-switch maths skip until then
+    state.equity = state.equity_peak = state.day_start_equity = eq if eq and eq > 0 else 0.0
     if cfg.get("replay"):
         news.source = "none (replay — no historical calendar)"
     elif cfg["mode"] == "sim":
@@ -123,9 +134,13 @@ async def build(cfg, args):
         trader = SetupFirstTrader(ctx) if sel_mode == "setup_first" else TraderAgent(ctx)
     ctx.selection_mode = sel_mode
     notifier = NotifierAgent(ctx)
+    pm = PositionManagerAgent(ctx)
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
-              trader, RiskAgent(ctx), PositionManagerAgent(ctx), JournalAgent(ctx), notifier,
+              trader, RiskAgent(ctx), pm, JournalAgent(ctx), notifier,
               MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
+    # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay).
+    # Started at the end of build, after the startup reconciliation has put saved positions back.
+    supervisor = FlattenSupervisor(ctx, pm)
     for a in agents:
         a.start()
     # 90-day setup map (heatmap + setup-first prior): loaded now, built/rebuilt in the background
@@ -173,6 +188,34 @@ async def build(cfg, args):
         for sctx in ctx.shadows.values():
             sctx.shadow_info = info
     ctx.oanda = oanda
+    if real:
+        # restart safety: halt flag, day-start equity, peak and open positions (with broker trade ids) live in
+        # runtime_state.json next to the journal; entries open only after the broker has been reconciled
+        store = RuntimeStore.for_cfg(cfg)
+        last_try = [0.0]
+
+        async def reconcile(_=None):
+            # at boot, and then at most once a minute (clock) while it keeps failing; entries stay off until it works
+            if state.halt_reason not in (STARTUP_HALT,) and not state.halt_reason.startswith(STARTUP_FAILED):
+                return
+            loop = asyncio.get_running_loop()
+            if loop.time() - last_try[0] < 60:
+                return
+            last_try[0] = loop.time()
+            try:
+                res = await startup_reconcile(state, broker, store, pd.Timestamp.now(tz=cfg["timezone"]))
+                log.info("startup reconciliation: %s", res)
+            except Exception as e:  # noqa: BLE001
+                state.halt_reason = f"{STARTUP_FAILED} ({e}) — retrying every minute; entries stay off"
+                state.alert("error", state.halt_reason)
+                log.error(state.halt_reason)
+        await reconcile()
+        bus.subscribe("clock", reconcile)
+        for topic in ("position_opened", "position_updated", "position_closed", "stop_filled", "clock", "alert"):
+            bus.subscribe(topic, lambda _ev, store=store: store.save(state))
+        ctx.runtime_store = store
+    supervisor.start()
+    agents.append(supervisor)
     return ctx, feed, agents, ib
 
 
@@ -217,6 +260,7 @@ async def main(args, cfg=None):
     done = asyncio.Event()
     ctx.bus.subscribe("feed_done", lambda _: done.set())
     tasks.append(asyncio.create_task(feed.run()))
+    tasks += [a.task for a in agents if getattr(a, "task", None) is not None]   # the flatten supervisor
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:

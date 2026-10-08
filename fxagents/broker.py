@@ -57,13 +57,15 @@ class Broker:
     async def equity(self) -> float: raise NotImplementedError
     async def open(self, pos: Position, qty: float, ref_price: float) -> float: raise NotImplementedError
     async def add(self, pos: Position, qty: float, ref_price: float) -> float: raise NotImplementedError
-    async def reduce(self, pos: Position, qty: float, ref_price: float, limit: float | None = None) -> float: raise NotImplementedError
+    async def reduce(self, pos: Position, qty: float, ref_price: float, limit: float | None = None) -> float | None: raise NotImplementedError   # None = nothing filled
     async def close(self, pos: Position, ref_price: float, limit: float | None = None) -> float: raise NotImplementedError
     async def move_stop(self, pos: Position, new_stop: float) -> None: raise NotImplementedError
     async def on_bar(self, bar: Bar) -> None: ...
     async def broker_positions(self) -> dict[str, float]: return {}
     async def unprotected(self) -> list[str]: return []
     async def flatten_orphan(self, sym: str, qty: float) -> None: ...
+    async def quote(self, sym: str) -> tuple[float, float] | None: return None       # fresh (bid, ask) if the broker has one
+    async def adopt(self, positions: list[Position]) -> bool: return False           # re-manage persisted positions after a restart
 
 
 class PaperBroker(Broker):
@@ -108,6 +110,8 @@ class PaperBroker(Broker):
         return px
 
     async def reduce(self, pos, qty, ref_price, limit=None):
+        if pos.open_qty <= 0:
+            return None                          # nothing left to reduce
         px = limit if limit is not None else ref_price - self._slip(pos.symbol, pos.side)
         px = self.round_px(pos.symbol, px)
         self._book(pos, min(qty, pos.open_qty), px)
