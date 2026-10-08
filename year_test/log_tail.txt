@@ -14,3 +14,46 @@
   pulling 90 days of AUDUSD 1-minute candles from OANDA …
     90,890 bars, 2026-07-09 → 2026-10-07
 [  0.5 min] research grid (every setup × variant × instrument × timeframe)
+[ 36.1 min] playbook walk-forward
+[ 36.5 min] report
+[ 37.6 min] done
+# Strategy test — 90 days · costs oanda · d90
+
+Created 2026-10-07 20:17 NY · trades 2026-07-09 → 2026-10-07 · 1,013,423 simulated trades · 24,120 cells
+
+R is per trade in units of its own risk, after spread. Quarters split the period in four equal parts; an edge worth trading is positive in most quarters, not just on average. 1-minute cells are listed but the playbook doesn't trade 1m (spread is too large a share of the bar).
+
+## 1 · The playbook system, replayed week by week on unseen data
+
+Each week: pick cells from the trailing 60 days, trade them the next week, capacity rules on. This is the number that says whether the approach works.
+
+- trades **282**, win rate **45%**, avg **-0.058R**, total **-16.33R**, profit factor 0.8, worst drawdown -22.24R, t-stat -1.59, chance it's really ≤0: 0.938
+- without the 3 best trades: -21.17R
+- XAUUSD: 186 trades, 46% win, -3.29R
+- NDQ: 59 trades, 36% win, -12.38R
+- US30: 20 trades, 70% win, +1.65R
+- EURUSD: 12 trades, 42% win, -2.54R
+- GBPUSD: 5 trades, 60% win, +0.24R
+
+By month (R): 2026-08 -31.5 (125) · 2026-09 +6.8 (133) · 2026-10 +3.4 (24)
+
+Positive weeks: 3 of 10
+
+## 2 · Cells that held up (≥30 trades, positive in both halves and ≥3 of 4 quarters)
+
+| setup | variant | sym | tf | exit | trades | win | avg R | t | H1 | H2 | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| smc_mss | default | XAUUSD | 3min | tp1.5 | 39 | 64% | +0.547 | 2.8 | +0.55 | +0.55 | +0.56 | +0.54 | +0.94 | +0.24 |
+| smc_mss | default | XAUUSD | 3min | tp2 | 39 | 59% | +0.603 | 2.8 | +0.71 | +0.44 | +0.69 | +0.73 | +0.86 | +0.12 |
+| dtfx_wick_fib | level=50-70 | NDQ | 15min | std | 41 | 71% | +0.357 | 2.4 | +0.42 | +0.28 | +0.32 | +0.54 | +0.31 | +0.23 |
+| smc_ifvg | default | XAUUSD | 15min | tp1 | 42 | 67% | +0.335 | 2.3 | +0.20 | +0.41 | +0.26 | +0.16 | +0.73 | +0.11 |
+| dtfx_close_fib | sessions=killzones | US30 | 1min | std | 53 | 62% | +0.504 | 2.2 | +0.21 | +0.71 | +0.30 | -0.01 | +0.21 | +1.18 |
+| dtfx_wick_fib | level=50-70 | NDQ | 15min | tp1 | 41 | 71% | +0.259 | 2.1 | +0.35 | +0.15 | +0.21 | +0.53 | +0.21 | +0.06 |
+| smc_mss | sweep_bars=10 | XAUUSD | 3min | tp2 | 30 | 53% | +0.560 | 2.1 | +0.77 | +0.20 | +0.87 | +0.68 | +0.91 | -0.39 |
+| smc_displacement | default | US30 | 5min | std | 31 | 61% | +0.733 | 2.1 | +0.54 | +0.89 | +0.51 | +0.56 | +1.79 | +0.40 |
+| dtfx_wick_fib | level=50-70 | NDQ | 15min | trend | 39 | 56% | +0.403 | 2.1 | +0.70 | +0.06 | +0.83 | +0.55 | -0.06 | +0.24 |
+| ict_turtle_soup | confirm=choch | XAUUSD | 3min | tp1.5 | 47 | 60% | +0.347 | 2.1 | +0.43 | +0.26 | +0.61 | +0.30 | +0.36 | +0.09 |
+| dtfx_wick_fib | level=50-70 | NDQ | 15min | tp2 | 41 | 66% | +0.333 | 2.1 | +0.52 | +0.12 | +0.41 | +0.65 | +0.11 | +0.13 |
+| dtfx_wick_fib | default | US30 | 1min | std | 127 | 59% | +0.242 | 2.0 | +0.04 | +0.38 | -0.06 | +0.19 | +0.18 | +0.57 |
+| smc_mss | swing=3 | XAUUSD | 1min | tp2 | 93 | 47% | +0.296 | 2.0 | +0.26 | +0.32 | -0.15 | +0.58 | +0.50 | +0.10 |
+| dtfx_w
