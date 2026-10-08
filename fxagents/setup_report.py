@@ -72,7 +72,7 @@ def main() -> int:
     out_dir = base.parent / "research_one" / (a.setup + (f"_{a.days}d" if a.days else ""))
     cfg["research_dir"] = str(out_dir)
     print(f"Backtesting {a.setup} on {', '.join(syms or ['all instruments'])} … (a few minutes)", flush=True)
-    t = research.run_all(cfg, syms, a.tfs, [a.setup], workers=1)
+    t = research.own_trades(research.run_all(cfg, syms, a.tfs, [a.setup], workers=1))   # one trade at a time per cell
     if not len(t):
         print("No trades: the setup never fired inside the entry windows on this history.")
         return 0

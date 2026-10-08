@@ -12,11 +12,15 @@ through the bot's own rules so the numbers mean what live trading would mean:
     the full 0.5% budget — what the money actually does; `r` is per unit of the trade's own risk
   • an approximation of the news blackouts (no historical calendar is cached; see news_block)
   • legacy setups re-checked on the exact 700-bar window the live trader scans
-  • one trade at a time per setup/instrument/timeframe
+  • one trade at a time per setup/instrument/timeframe for the CELL's own statistics — but every signal is
+    simulated and kept: rows the cell would have skipped (its own earlier trade still open) carry
+    `busy_self=True`. Cell stats drop them (own_trades); the playbook's portfolio replay uses all of them
+    and applies occupancy only to positions it actually ACCEPTED (a rejected trade blocks nothing)
 
 Output: one row per simulated trade (data/research/trades.pkl) for the selection step."""
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 import logging
@@ -75,8 +79,12 @@ def vkey(change: dict) -> str:
 
 
 def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
+    """Exit profiles as live runs them. `pyramid` here means only "adds allowed" — whether the first
+    target closes everything is `full_exit()` (live: no_pyramid ≠ full_exit). std takes its adds from the
+    config (pyramid.enabled AND max_adds; max_adds 0 = no adds, as live)."""
     bm = int(pd.Timedelta(tf).total_seconds() // 60)
     std = Mgmt.from_cfg(cfg, bar_minutes=bm)
+    std.pyramid = bool(std.pyramid and std.max_adds > 0)
     out = {"std": std}
     if tf in SCALP_TFS:
         out["scalp"] = Mgmt(rr=1.0, partial=1.0, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r, pyramid=False,
@@ -90,11 +98,24 @@ def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
                                   trail_gap_r=0.0, pyramid=False, max_adds=0, add_frac=0.0, max_hold_bars=std.max_hold_bars,
                                   min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
     if bm >= 15:
-        # trend profile: first target 2R (half banked), the rest trailed 1R at a time, no adds, held up to 8 h
-        out["trend"] = Mgmt(rr=2.0, partial=0.5, lock_r=std.lock_r, trail_step_r=std.trail_step_r, trail_gap_r=std.trail_gap_r,
-                            pyramid=False, max_adds=0, add_frac=0.0, max_hold_bars=max(2, int(480 / bm)),
-                            min_stop_atr=std.min_stop_atr, max_stop_pct=std.max_stop_pct)
+        # trend profile = live RiskAgent mgmt "trend": first target ≥2R, the configured partial banked, the runner
+        # managed by the same runner rules as std (trail, stall), NO adds, held up to 8 h. (Until Oct 2026 this
+        # was simulated as all-out at 2R — audit F08.)
+        out["trend"] = dataclasses.replace(std, rr=max(std.rr, 2.0), pyramid=False, max_adds=0, add_frac=0.0,
+                                           max_hold_bars=max(2, int(480 / bm)))
     return out
+
+
+def full_exit(cfg, pname: str) -> bool:
+    """Does the first target close the whole position? Live (PositionManager): yes when the profile sets
+    meta.full_exit (scalp, tpX) or pyramiding is globally disabled; trend/std bank a partial and run the rest."""
+    return pname == "scalp" or pname.startswith("tp") or not cfg["management"]["pyramid"]["enabled"]
+
+
+def own_trades(t: pd.DataFrame) -> pd.DataFrame:
+    """The cell's own one-at-a-time record: drop the candidates it would have skipped while its own trade
+    was open (busy_self). Every per-cell statistic uses this; the portfolio replay uses all rows."""
+    return t[~t["busy_self"].astype(bool)] if "busy_self" in t.columns else t
 
 
 # ── live-style execution on 1-minute bars ─────────────────────────────────────
@@ -174,7 +195,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
         while (hi - lvl(step + 1)) * side >= 0:
             step += 1
             if step == 1:
-                if full_exit or not m.pyramid:
+                if full_exit:                         # scalp / tpX (or adds globally off): all out
                     return done(mkt, "target", j)
                 q = min(m.partial, open_q)
                 realized += (mkt - avg) * side * q
@@ -225,6 +246,10 @@ def margin_weight(cfg, ic: dict, price: float, dist: float, equity: float) -> fl
 
 
 FOMC_2026 = {"2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17", "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09"}
+# FOMC decision days (statement day) — the year tests reach back into 2024/2025 (audit F22)
+FOMC = FOMC_2026 | {"2024-01-31", "2024-03-20", "2024-05-01", "2024-06-12", "2024-07-31", "2024-09-18", "2024-11-07",
+                    "2024-12-18", "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18", "2025-07-30", "2025-09-17",
+                    "2025-10-29", "2025-12-10"}
 
 
 def news_block(ts: pd.Timestamp) -> bool:
@@ -234,9 +259,11 @@ def news_block(ts: pd.Timestamp) -> bool:
     hm = ts.hour * 60 + ts.minute
     if 8 * 60 + 15 <= hm < 8 * 60 + 45 or 9 * 60 + 55 <= hm < 10 * 60 + 5:
         return True
+    # NFP ≈ the first Friday — an approximation: BLS sometimes moves it (e.g. to the second Friday when the 1st
+    # is early in the week / holidays, or a Thursday), and shutdowns delay it; no point-in-time calendar is cached
     if ts.dayofweek == 4 and ts.day <= 7 and 8 * 60 <= hm < 9 * 60:
         return True
-    return ts.strftime("%Y-%m-%d") in FOMC_2026 and 13 * 60 + 30 <= hm < 15 * 60
+    return ts.strftime("%Y-%m-%d") in FOMC and 13 * 60 + 30 <= hm < 15 * 60
 
 
 def verify_live_window(st: Strategy, df: pd.DataFrame, i: int, side: int, window: int = 700) -> bool:
@@ -283,7 +310,7 @@ def run_job(args) -> list[dict]:
     ctx["peers"] = peers
     close_ts = ctx["close_ts"]
     C_tf = df["close"].to_numpy(dtype=float)
-    bias = bias_frame(h1, close_ts)["score"].to_numpy()
+    bias = bias_frame(h1, close_ts, weights=(cfg.get("bias") or {}).get("weights"))["score"].to_numpy()
     s_cfg = cfg["sessions"]
     fh, fm = map(int, s_cfg["flatten_at"].split(":"))
     mins = close_ts.hour * 60 + close_ts.minute
@@ -297,7 +324,8 @@ def run_job(args) -> list[dict]:
     # 1-minute execution arrays (the position manager and the broker work on 1m bars)
     O1, H1, L1, C1 = (m1[c].to_numpy(dtype=float) for c in ("open", "high", "low", "close"))
     close1 = m1.index + pd.Timedelta("1min")
-    tmin = (m1.index.asi8 // 60_000_000_000).astype(np.int64)
+    # minutes since epoch — via a ns view: pandas 3 indexes are often us/s, and raw asi8 // 6e10 then breaks max_hold
+    tmin = (m1.index.as_unit("ns").asi8 // 60_000_000_000).astype(np.int64)
     m1min = close1.hour * 60 + close1.minute
     flat1 = np.asarray((m1min >= fh * 60 + fm) & (m1min < 17 * 60), bool)
     # live continuation check for adds: 5-minute momentum, known at each 5m close
@@ -307,7 +335,7 @@ def run_job(args) -> list[dict]:
                            index=d5.index + pd.Timedelta("5min")) for sd in (1, -1)}
     cont1 = {sd: cont5[sd].reindex(cont5[sd].index.union(close1)).ffill().reindex(close1).fillna(0).to_numpy() > 0.5
              for sd in (1, -1)}
-    j_of = np.searchsorted(m1.index.asi8, (close_ts - pd.Timedelta("1min")).asi8, side="right") - 1
+    j_of = np.searchsorted(m1.index.as_unit("ns").asi8, (close_ts - pd.Timedelta("1min")).as_unit("ns").asi8, side="right") - 1
     ic = {**cfg["instruments"].get(sym, {}), **((load_specs_cached(cfg) or {}).get(sym, {}))}
     equity = float((cfg.get("playbook") or {}).get("equity_usd", 70000))
     profiles = mgmt_profiles(cfg, tf)
@@ -344,9 +372,11 @@ def run_job(args) -> list[dict]:
             for pname, m in profiles.items():
                 busy_until = -1
                 max_hold = 30.0 if pname == "scalp" else 480.0 if pname == "trend" else float(s_cfg["max_hold_minutes"])
+                fx = full_exit(cfg, pname)
                 for s, j0 in keep:
-                    if j0 <= busy_until:
-                        continue
+                    # the cell's own trade still open → keep the candidate, flagged (the portfolio may have
+                    # rejected that earlier trade, in which case live would take this one — audit F16)
+                    busy = j0 <= busy_until
                     i, price = s.i, C1[j0]
                     stop = s.stop
                     if abs(price - stop) < m.min_stop_atr * a[i]:
@@ -355,21 +385,22 @@ def run_job(args) -> list[dict]:
                     if dist <= 0 or (price - stop) * s.side <= 0 or dist / price > m.max_stop_pct:
                         continue
                     res = simulate_live(O1, H1, L1, C1, tmin, j0, s.side, stop, m, hs, flat1, cont1[s.side],
-                                        max_hold, full_exit=(pname == "scalp" or pname.startswith("tp")))
+                                        max_hold, full_exit=fx)
                     if res is None:
                         continue
-                    busy_until = res["j_exit"]
+                    if not busy:
+                        busy_until = res["j_exit"]
                     w = margin_weight(cfg, ic, price, dist, equity)
                     ts = close_ts[i]
                     rows.append({"sym": sym, "tf": tf, "setup": cname, "family": cls.family, "variant": vkey(change),
                                  "mgmt": pname, "ts": ts, "exit_ts": close1[res["j_exit"]],
                                  "day": (ts + pd.Timedelta(hours=7)).normalize().date(),
-                                 "hour": ts.hour, "wd": ts.dayofweek, "side": s.side, "bias": float(sc),
+                                 "hour": ts.hour, "wd": ts.dayofweek, "side": s.side, "bias": float(bias[i]),
                                  "risk_atr": float(dist / a[i]) if a[i] else np.nan,
                                  "r": res["r"], "w": w, "rw": res["r"] * w * res["R"] / dist,
                                  "cost_r": spread * (1 + m.add_frac * res["adds"]) / res["R"],
                                  "exit": res["exit_reason"], "bars": int((res["j_exit"] - j0)), "adds": res["adds"],
-                                 "mfe": res["mfe"]})
+                                 "mfe": res["mfe"], "busy_self": busy})
     log.info("%s %s: %d trades (%.0fs)", sym, tf, len(rows), time.time() - t0)
     return rows
 
@@ -382,6 +413,44 @@ def load_specs_cached(cfg):
     if "v" not in _SPECS:
         _SPECS["v"] = load_specs(cfg)
     return _SPECS["v"]
+
+
+# ── run manifest: which code, which settings, which data produced a result ─
+MANIFEST_KEYS = ("instruments", "management", "risk", "sessions", "bias", "playbook", "research")
+
+
+def git_sha() -> str:
+    """The commit this code runs at: `git rev-parse HEAD`, else $FX_GIT_SHA (set it in images without .git)."""
+    import os
+    import subprocess
+    try:
+        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.environ.get("FX_GIT_SHA") or "unknown"
+
+
+def config_hash(cfg) -> str:
+    """Short sha256 of the settings that shape research results — only MANIFEST_KEYS + shadow.spread are
+    hashed (never broker credentials or other secrets)."""
+    import hashlib
+    eff = {k: cfg.get(k) for k in MANIFEST_KEYS}
+    eff["shadow.spread"] = (cfg.get("shadow") or {}).get("spread")
+    return hashlib.sha256(json.dumps(eff, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def manifest(cfg, t: pd.DataFrame | None = None, **extra) -> dict:
+    """git commit + config hash + the data span (first/last trade entry, trading days) of a run."""
+    span = None
+    if t is not None and len(t):
+        ts = pd.to_datetime(t["ts"])
+        span = {"from": str(ts.min()), "to": str(ts.max()),
+                "trade_days": int(t["day"].nunique()) if "day" in t.columns else None}
+    return {"git_sha": git_sha(), "config_sha256": config_hash(cfg), "config_hashed": [*MANIFEST_KEYS, "shadow.spread"],
+            "history_dir": str(history_dir(cfg)), "data_span": span, **extra}
 
 
 def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2) -> pd.DataFrame:
