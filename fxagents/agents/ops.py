@@ -227,9 +227,9 @@ class MonitorAgent(Agent):
         self._now = now
         st, r = self.state, self.cfg["risk"]
         # trading day rolls at 17:00 NY (CME)
-        tday = (now + pd.Timedelta(hours=7)).date()
-        if self.day != tday:
-            self.day = tday
+        tday = str((now + pd.Timedelta(hours=7)).date())
+        if st.trading_day != tday:           # (restored after a restart for the same day → no reset)
+            self.day = st.trading_day = tday
             st.day_start_equity = st.equity or st.day_start_equity
             st.realized_today = 0.0
             if st.halt_reason.startswith("daily loss"):
