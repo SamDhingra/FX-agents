@@ -84,6 +84,12 @@ case "${1:-help}" in
                  --out "data/year_test/bb_${mode}_${c}" </dev/null | sed -n '/^## /,/^- no costs/p'
              done; done
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  newstrats) # the audit's 3 strategies (ORB / gap-fail / H1 trend) + controls on 365 days → data/year_test/astra_cfd, published
+             need_env; days="${2:-365}"; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/newstrats-build.log 2>&1 || { echo "build failed — see logs/newstrats-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.astra_cfd --days "$days" \
+               --out "data/year_test/astra_cfd_${days}d" </dev/null | sed -n '/## Summary/,/^Verdict rule/p'
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -129,7 +135,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
