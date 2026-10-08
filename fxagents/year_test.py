@@ -7,8 +7,10 @@ What runs (all with the live rules — session windows, the bias rule, news blac
 OANDA-style fills on 1-minute bars, standard and scalp exits):
   1. pull N days of 1-minute history from OANDA into data/history_<N>d (reused for a day)
   2. the research grid: every setup × variant × instrument × timeframe × exit profile
-  3. the weekly playbook selection replayed over that year (pick cells from the trailing 60 days, trade
-     only the following unseen week, capacity rules applied) — the honest test of the whole system
+  3. the weekly playbook selection replayed over that year (pick cells from the trailing
+     playbook.window_days OBSERVED TRADE DAYS, trade only the following unseen week, capacity rules
+     applied) — on the instruments the config actually trades (trade: true); watch-only instruments are
+     researched (cells.csv, sections 2–4) but never enter the walk-forward portfolio
   4. report.md (read this), cells.csv (every cell), summary.json (the playbook build output)
 
 Everything lands in data/year_test/<N>d/; the live research, playbook and journals are untouched.
@@ -25,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .config import load_config
-from .research import history_dir
+from .research import history_dir, manifest, own_trades
 
 MIN_N = 30          # cells with fewer trades are listed in cells.csv but not ranked in the report
 
@@ -35,8 +37,9 @@ def _fmt(x, d=2):
 
 
 def cell_table(t: pd.DataFrame) -> pd.DataFrame:
-    """One row per setup × variant × instrument × timeframe × exit, in plain R per trade."""
-    t = t.copy()
+    """One row per setup × variant × instrument × timeframe × exit, in plain R per trade (each cell's own
+    one-at-a-time record: busy_self candidates dropped)."""
+    t = own_trades(t).copy()
     t["ts"] = pd.to_datetime(t["ts"])
     ns = t["ts"].astype("int64").to_numpy() if t["ts"].dt.tz is None else t["ts"].dt.tz_convert("UTC").astype("int64").to_numpy()
     edges = np.linspace(ns.min(), ns.max(), 5)[1:-1]
@@ -58,7 +61,7 @@ def cell_table(t: pd.DataFrame) -> pd.DataFrame:
 
 def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict | None, days: int, cfg, label: str = "") -> str:
     L = []
-    t = t.copy()
+    t = own_trades(t).copy()
     t["ts"] = pd.to_datetime(t["ts"])
     L.append(f"# Strategy test — {label or f'{days} days'}\n")
     L.append(f"Created {pd.Timestamp.now(tz=cfg['timezone']):%Y-%m-%d %H:%M} NY · trades {t['ts'].min():%Y-%m-%d} → "
@@ -71,12 +74,23 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
     if summary:
         wf = summary.get("walk_forward", {})
         s = wf.get("summary", {})
+        pol, dat = summary.get("policy") or {}, summary.get("data") or {}
+        units = wf.get("units") or s.get("units") or "r"
+        traded = [k for k, v in (pol.get("instruments") or {}).items() if v.get("role") != "off"]
         L.append("## 1 · The playbook system, replayed week by week on unseen data\n")
-        L.append("Each week: pick cells from the trailing 60 days, trade them the next week, capacity rules on. "
+        L.append(f"Each week: pick cells from the trailing **{pol.get('window_days')} observed trade days** (days on which "
+                 f"the research recorded at least one trade — not calendar days), trade them the next week, capacity "
+                 f"rules on. The replay starts {dat.get('walk_forward_from')}, so its first weeks select on fewer days. "
+                 f"Portfolio instruments (config trade: true): {', '.join(traded) or '—'}. "
                  "This is the number that says whether the approach works.\n")
+        L.append(f"All R figures in this section are **{units}** "
+                 + ("(budget-weighted: each trade's R × the share of the full risk budget Risk could take)."
+                    if units == "rw" else "(per unit of each trade's own risk).") + "\n")
+        ci = s.get("avg_ci95")
         L.append(f"- trades **{s.get('trades')}**, win rate **{(s.get('win_rate') or 0):.0%}**, avg **{_fmt(s.get('avg_r'), 3)}R**, "
                  f"total **{_fmt(s.get('sum_r'))}R**, profit factor {s.get('pf')}, worst drawdown {_fmt(s.get('max_dd_r'))}R, "
-                 f"t-stat {s.get('t_stat')}, chance it's really ≤0: {s.get('p_boot')}")
+                 f"t-stat {s.get('t_stat')}, 95% interval of the average R per trade (day-block bootstrap, trading days "
+                 f"resampled; not selection-adjusted): " + (f"[{ci[0]:+.3f}, {ci[1]:+.3f}]" if ci else "—"))
         if s.get("sum_ex_top3") is not None:
             L.append(f"- without the 3 best trades: {_fmt(s.get('sum_ex_top3'))}R")
         for sym, x in (wf.get("by_symbol") or {}).items():
@@ -85,8 +99,9 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
         if len(wk):
             wk["month"] = pd.to_datetime(wk["week"]).dt.strftime("%Y-%m")
             m = wk.groupby("month").agg(trades=("n", "sum"), r=("r", "sum")).round(2)
-            L.append("\nBy month (R): " + " · ".join(f"{k} {v.r:+.1f} ({int(v.trades)})" for k, v in m.iterrows()))
-            L.append(f"\nPositive weeks: {int((wk['r'] > 0).sum())} of {len(wk)}")
+            L.append(f"\nBy month ({units}): " + " · ".join(f"{k} {v.r:+.1f} ({int(v.trades)})" for k, v in m.iterrows()))
+            L.append(f"\nPositive weeks: {int((wk['r'] > 0).sum())} of {len(wk)} · weekly {units} sums to "
+                     f"{wk['r'].sum():+.2f}R (= the total above)")
         L.append("")
 
     c = cells[(cells["n"] >= MIN_N)]
@@ -100,7 +115,7 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
             L.append(f"| {r.setup} | {r.variant} | {r.sym} | {r.tf} | {r.mgmt} | {r.n} | {r.win:.0%} | {r.avg_r:+.3f} | {r.t:.1f} | "
                      f"{r.h1:+.2f} | {r.h2:+.2f} | {r.q1:+.2f} | {r.q2:+.2f} | {r.q3:+.2f} | {r.q4:+.2f} |")
         L.append(f"\n{len(good)} cells qualify out of {len(c)} with ≥{MIN_N} trades. With this many cells, a few "
-                 "will pass by luck alone — a t above ~3 is the bar for 'probably real'.")
+                 "will pass by luck alone; t here is a per-cell screen, not corrected for the number of cells tried.")
     else:
         L.append("None.")
     L.append("")
@@ -146,6 +161,12 @@ def write_report(out: Path, t: pd.DataFrame, cells: pd.DataFrame, summary: dict 
     return txt
 
 
+def execution_cfg(cfg, mandate: list[str]) -> dict:
+    """The config as the bot trades it: only `mandate` instruments have trade: true (policy_from_cfg turns
+    the rest off), whatever the research universe was."""
+    return {**cfg, "instruments": {s: {**ic, "trade": s in mandate} for s, ic in cfg["instruments"].items()}}
+
+
 def run_one(a, costs: str, tag: str) -> None:
     from . import playbook, research
     from .setup_report import fetch_long
@@ -162,7 +183,10 @@ def run_one(a, costs: str, tag: str) -> None:
         print(f"[{(time.time() - t0) / 60:5.1f} min] {s}", flush=True)
 
     syms = a.symbols or list(cfg["instruments"])
-    for s in syms:                                  # watch-only instruments are tested too (that's the point)
+    # the execution mandate is the ORIGINAL config's trade flags: watch-only instruments are researched
+    # (that's the point) but the walk-forward portfolio only trades what the bot really trades (F17)
+    mandate = [s for s, ic in cfg["instruments"].items() if ic.get("trade", True) is not False]
+    for s in syms:
         cfg["instruments"][s]["trade"] = True
     if costs == "raw":
         sc = cfg.setdefault("shadow", {})
@@ -188,15 +212,19 @@ def run_one(a, costs: str, tag: str) -> None:
     stage("playbook walk-forward", trades=len(t))
     summary = None
     try:
-        summary = playbook.build(cfg, robustness=False)
+        summary = playbook.build(execution_cfg(cfg, mandate), robustness=False)
     except Exception as e:  # noqa: BLE001
         print("playbook walk-forward failed:", e)
     stage("report")
     cells = cell_table(t)
     cells.round(4).to_csv(out / "cells.csv", index=False)
+    pol = (summary or {}).get("policy") or {}
     (out / "run.json").write_text(json.dumps({"days": a.days, "costs": costs, "tfs": a.tfs, "classes": a.classes,
                                               "exits": a.exits, "window": a.window,
-                                              "symbols": syms, "spreads": (cfg.get("shadow") or {}).get("spread")}, indent=1))
+                                              "window_days": pol.get("window_days"), "window_units": "observed trade days",
+                                              "symbols": syms, "portfolio_instruments": mandate,
+                                              "spreads": (cfg.get("shadow") or {}).get("spread"),
+                                              "manifest": manifest(execution_cfg(cfg, mandate), t)}, indent=1, default=str))
     write_report(out, t, cells, summary, a.days, cfg, label=f"{a.days} days · costs {costs}"
                  + (f" · {' '.join(a.tfs)}" if a.tfs else "") + (f" · {tag}" if tag else ""))
     stage("done", trades=len(t), cells=len(cells))
@@ -217,7 +245,8 @@ def main() -> int:
     ap.add_argument("--report-only", action="store_true", help="rebuild the report from an earlier run's trades")
     ap.add_argument("--exits", nargs="*", default=[],
                     help="extra fixed take-profit exits to compare with the runner management, e.g. tp1 tp1.5 tp2")
-    ap.add_argument("--window", type=int, help="playbook selection window in days (default config, 60); use ~30 on a 90-day test")
+    ap.add_argument("--window", type=int, help="playbook selection window in OBSERVED TRADE DAYS (default: config "
+                                               "playbook.window_days); use ~30 on a 90-day test")
     a = ap.parse_args()
     costs = ["oanda", "raw"] if a.costs == "both" else [a.costs]
     for c in costs:
