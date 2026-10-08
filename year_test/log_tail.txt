@@ -2,3 +2,4 @@
  Container fx-agents-fxagents-run-5379bc41468a Created 
 [  0.0 min] fetching history
 [  0.0 min] research grid (every setup × variant × instrument × timeframe)
+
