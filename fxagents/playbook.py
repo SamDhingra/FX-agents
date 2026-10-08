@@ -523,10 +523,11 @@ def build(cfg, robustness: bool = True) -> dict:
     pf = portfolio(wf, pol)
     # calibration of the win-probability estimate on unseen weeks (before capacity)
     calib = []
-    if len(wf):
-        b = pd.cut(wf["p"], [0, 0.45, 0.5, 0.55, 0.6, 0.65, 1.0])
-        val = "rw" if "rw" in wf.columns else "r"
-        for k, g in wf.groupby(b, observed=True):
+    wfo = own_trades(wf)                # each selected cell's own one-at-a-time trades (busy_self candidates dropped)
+    if len(wfo):
+        b = pd.cut(wfo["p"], [0, 0.45, 0.5, 0.55, 0.6, 0.65, 1.0])
+        val = "rw" if "rw" in wfo.columns else "r"
+        for k, g in wfo.groupby(b, observed=True):
             calib.append({"bucket": str(k), "n": int(len(g)), "p_est": round(float(g["p"].mean()), 3),
                           "win_rate": round(float((g["r"] > 0).mean()), 3), "avg_r": round(float(g[val].mean()), 3)})
     rob = []
@@ -572,7 +573,7 @@ def build(cfg, robustness: bool = True) -> dict:
         "data": {"from": str(days[0]), "to": str(days[-1]), "days": len(days), "oos_from": str(oos_from),
                  "walk_forward_from": str(wf_start), "trades": int(len(own)), "candidates": int(len(trades)), "grid": meta},
         "policy": pol.to_json(),
-        "walk_forward": {"summary": summarize(pf), "before_capacity": summarize(wf), "trades": _trades_json(pf),
+        "walk_forward": {"summary": summarize(pf), "before_capacity": summarize(wfo), "trades": _trades_json(pf),
                          "by_symbol": {s: summarize(pf[pf["sym"] == s]) for s in pf["sym"].unique()} if len(pf) else {},
                          # weekly sums in the SAME units as the headline (`units`: rw = budget-weighted), so
                          # they add up to summary.sum_r; r_unw = the same trades in plain per-trade R

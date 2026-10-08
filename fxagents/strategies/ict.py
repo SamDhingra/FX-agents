@@ -31,7 +31,7 @@ def _bar_minutes(ctx: dict) -> float:
 
 def _tday(df: pd.DataFrame, ctx: dict) -> np.ndarray:
     if "_tday" not in ctx:
-        ctx["_tday"] = ((df.index + pd.Timedelta(hours=7)).normalize().asi8 // 86_400_000_000_000).astype(np.int64)
+        ctx["_tday"] = ((df.index + pd.Timedelta(hours=7)).normalize().as_unit("ns").asi8 // 86_400_000_000_000).astype(np.int64)
     return ctx["_tday"]
 
 

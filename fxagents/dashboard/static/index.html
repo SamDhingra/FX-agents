@@ -1120,7 +1120,7 @@ function pbStats(w){
     <div class="stat"><div class="l">Total</div><div class="v num ${cls(w.sum_r)}">${sR(w.sum_r)}</div></div>
     <div class="stat"><div class="l">Worst drawdown</div><div class="v num down">${sR(w.max_dd_r)}</div></div>
     <div class="stat"><div class="l">Profit factor</div><div class="v num">${w.pf==null?"—":fmt(w.pf,2)}</div></div></div>
-    ${w.p_boot!=null ? `<div class="mut num" style="font-size:12px;margin-top:8px;line-height:1.55">Luck check: t-stat <b>${w.t_stat==null?"—":fmt(w.t_stat,2)}</b> · chance the true average is ≤ 0: <b>${Math.round(w.p_boot*100)}%</b>`
+    ${w.p_boot!=null ? `<div class="mut num" style="font-size:12px;margin-top:8px;line-height:1.55">Luck check: t-stat <b>${w.t_stat==null?"—":fmt(w.t_stat,2)}</b>` + (w.avg_ci95 ? ` · 95% range of the average (trading days resampled): <b>${sR(w.avg_ci95[0])} … ${sR(w.avg_ci95[1])}</b>` : ` · bootstrap share ≤ 0: <b>${Math.round(w.p_boot*100)}%</b>`)
       + (w.sum_ex_top3!=null ? ` · without the best 3 trades: <b class="${cls(w.sum_ex_top3)}">${sR(w.sum_ex_top3)}</b>` : "") + `</div>` : ""}`;
 }
 function roleBadge(role){
@@ -1209,7 +1209,7 @@ function pbInstrument(sym){
       <div class="rule">${ruleText(inst, pol)}</div>
       <div class="mut" style="font-size:12px;margin-top:12px">Walk-forward: re-selected every Monday from the previous ${pol.window_days} days, then traded on the week it hadn't seen (${md(RS.data.walk_forward_from)} → ${md(RS.data.to)}), with the live capacity rules.</div>
       ${pbStats(inst.walk_forward)}
-      ${inst.walk_forward && inst.walk_forward.p_boot!=null && inst.walk_forward.p_boot >= 0.05 ? `<div class="mut" style="font-size:12px;margin-top:6px">Not statistically reliable. See <a href="#" onclick="pbv.sym='ALL';renderResearch();return false">All</a> for the evidence.</div>` : ""}
+      ${inst.walk_forward && (inst.walk_forward.avg_ci95 ? inst.walk_forward.avg_ci95[0] <= 0 : (inst.walk_forward.p_boot!=null && inst.walk_forward.p_boot >= 0.05)) ? `<div class="mut" style="font-size:12px;margin-top:6px">Not statistically reliable. See <a href="#" onclick="pbv.sym='ALL';renderResearch();return false">All</a> for the evidence.</div>` : ""}
       ${lv ? `<div class="mut" style="font-size:12px;margin-top:10px">${lv}</div>` : ""}</div>
     <div class="card c7"><h3>Walk-forward equity <span class="sp"></span><span class="mut" style="font-weight:500">cumulative R, after spread</span></h3><div class="chart"><svg id="pbChart" height="250"></svg></div></div>
     <div class="card c12"><h3>Every setup × timeframe <span class="sp"></span><span class="mut" style="font-weight:500">${sym} · best variant per cell · bias rule applied · spread charged</span></h3>
@@ -1230,10 +1230,10 @@ function pbInstrument(sym){
 }
 function pbVerdict(){
   const w = RS.walk_forward.summary || {}, P = RS.persistence || {};
-  const ok = w.p_boot != null && w.p_boot < 0.05 && (P.corr || 0) > 0.1 && w.sum_r > 0;
-  if(ok) return `<div class="card c12 verdict-ok"><b>Evidence: an edge that held on unseen weeks.</b> <span class="t2">${w.trades} walk-forward trades, ${sR(w.sum_r)}, chance of luck ${Math.round(w.p_boot*100)}%. Past results predicted the following weeks (correlation ${fmt(P.corr,2)}).</span></div>`;
+  const ok = (w.avg_ci95 ? w.avg_ci95[0] > 0 : (w.p_boot != null && w.p_boot < 0.05)) && (P.corr || 0) > 0.1 && w.sum_r > 0;
+  if(ok) return `<div class="card c12 verdict-ok"><b>Evidence: an edge that held on unseen weeks.</b> <span class="t2">${w.trades} walk-forward trades, ${sR(w.sum_r)}` + (w.avg_ci95 ? `, 95% range of the average ${sR(w.avg_ci95[0])} … ${sR(w.avg_ci95[1])}` : "") + `. Past results predicted the following weeks (correlation ${fmt(P.corr,2)}).</span></div>`;
   return `<div class="card c12 verdict-no"><b>No reliable edge yet.</b> <span class="t2">On weeks it hadn't seen, the playbook made <b class="${cls(w.sum_r)}">${sR(w.sum_r||0)}</b> over ${w.trades||0} trades`
-    + (w.pf!=null ? ` (profit factor ${fmt(w.pf,2)})` : "") + (w.p_boot!=null ? `, with a ${Math.round(w.p_boot*100)}% chance the true average is zero or worse` : "") + `.`
+    + (w.pf!=null ? ` (profit factor ${fmt(w.pf,2)})` : "") + (w.avg_ci95 ? `; the 95% range of its average is ${sR(w.avg_ci95[0])} … ${sR(w.avg_ci95[1])}` : "") + `.`
     + (P.corr!=null ? ` Across ${P.cells} setup × timeframe cells, a cell's results before ${md(RS.data.oos_from)} had a correlation of <b>${fmt(P.corr,2)}</b> with its results after. Cells positive in both periods: ${Math.round((P.both_positive||0)*100)}%, vs ${Math.round((P.chance||0)*100)}% by chance. Past performance hasn't predicted the next weeks.` : "")
     + ` Run it in the shadow book (virtual fills) and let live results decide. It re-selects every week and this page tracks it.</span></div>`;
 }

@@ -161,3 +161,14 @@ def test_hourly_bias_waits_for_the_hours_last_bar():
     assert b["price"] == round(crash, 4) and b["h1"] == -1 and partial["h1"] != -1
     asyncio.run(agent.on_clock(pd.Timestamp("2026-06-04 10:00:35", tz=TZ)))      # final for the hour
     assert agent.done[sym] == (pd.Timestamp("2026-06-04 10:00", tz=TZ), True)
+
+
+def test_ict_trading_day_is_unit_safe():
+    """pandas 3 indexes default to microseconds: the trading-day bucket must not collapse to one day."""
+    import numpy as np
+    import pandas as pd
+    from fxagents.strategies.ict import _tday
+    idx = pd.date_range("2026-01-05", periods=3 * 1440, freq="1min", tz="America/New_York")
+    for unit in ("ns", "us"):
+        df = pd.DataFrame({"close": 1.0}, index=idx.as_unit(unit))
+        assert np.unique(_tday(df, {})).size == 4

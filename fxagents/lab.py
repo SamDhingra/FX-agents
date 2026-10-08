@@ -140,7 +140,8 @@ def window_history(src: Path, dst: Path, until: str | None, tz: str) -> Path:
     nothing later can reach the test. instruments.json is copied as is."""
     import shutil
     dst.mkdir(parents=True, exist_ok=True)
-    end = pd.Timestamp(until, tz=tz) + pd.Timedelta(days=1) if until else None
+    # the trading day `until` ends at its 17:00 New York roll (bars after that belong to the next day)
+    end = pd.Timestamp(until, tz=tz) + pd.Timedelta(hours=17) if until else None
     for p in src.glob("*.pkl"):
         m1, h1 = pd.read_pickle(p)
         if end is not None:
@@ -180,7 +181,8 @@ def run(cfg, cid: str, days: int | None = None, since: str | None = None, until:
         syms = [s for s in c["symbols"] if (hd / f"{s}.pkl").exists()]
         t = research.run_all(cfg, syms, c["tfs"], [c["setup"]], workers=1)
         if since and len(t):
-            t = t[pd.to_datetime(t["ts"]) >= pd.Timestamp(since, tz=cfg["timezone"])].reset_index(drop=True)
+            # trading day `since` starts at the previous evening's 17:00 New York roll
+            t = t[pd.to_datetime(t["ts"]) >= pd.Timestamp(since, tz=cfg["timezone"]) - pd.Timedelta(hours=7)].reset_index(drop=True)
             out.mkdir(parents=True, exist_ok=True)
             t.to_pickle(out / "trades.pkl")
         rows = verdict(t)
