@@ -80,3 +80,41 @@ def test_trading_day_rolls_at_1700_wall_clock_across_dst():
         t = pd.Timestamp(f"{d} 17:00", tz=TZ)
         assert trading_day(t) == trading_day(t - pd.Timedelta("1min")) + pd.Timedelta("1D") \
             == pd.Timestamp(d) + pd.Timedelta("1D")
+
+
+# ── F14 ───────────────────────────────────────────────────────────────────────
+def _flat_bars(n, freq="5min"):
+    idx = pd.date_range("2026-06-02 09:00", periods=n, freq=freq, tz=TZ)
+    return pd.DataFrame({"open": 102.0, "high": 104.0, "low": 100.0, "close": 102.0, "volume": 10.0}, index=idx)
+
+
+def test_context_cache_sees_a_corrected_high():
+    from fxagents.strategies import Strategy
+    from fxagents.strategies.base import frame_key
+    df = _flat_bars(40)
+    assert abs(Strategy.context(df)["atr"][-1] - 4.0) < 1e-9
+    fixed = df.copy()
+    fixed.iloc[-1, fixed.columns.get_loc("high")] = 204.0            # TR 104 → ATR 4·13/14 + 104/14
+    assert abs(Strategy.context(fixed)["atr"][-1] - 11.142857) < 1e-6
+    older = df.copy()
+    older.iloc[5, older.columns.get_loc("volume")] = 99.0            # anywhere, any column → new identity
+    assert frame_key(older) != frame_key(df)
+
+
+def test_barstore_shows_a_corrected_bar():
+    from fxagents.data import BarStore
+    from fxagents.models import Bar
+    st = BarStore(TZ)
+    m1 = _flat_bars(30, "1min")
+    st.load_history("NDQ", m1)
+    assert st.tf("NDQ", "5min")["high"].iloc[1] == 104.0
+    t = m1.index[7]                                                   # inside the 2nd 5m bar, not the newest
+    st.append(Bar("NDQ", t, 102.0, 900.0, 100.0, 102.0, 10.0))
+    st.append(Bar("NDQ", m1.index[-1] + pd.Timedelta("1min"), 102.0, 104.0, 100.0, 102.0, 10.0))  # + a new bar
+    h5 = st.tf("NDQ", "5min")
+    assert h5["high"].iloc[1] == 900.0                                # incremental rebuild used to keep 104
+    assert h5.index.is_monotonic_increasing and len(h5) == 6
+    assert st.m1("NDQ").index.is_monotonic_increasing and len(st.m1("NDQ")) == 31
+    last = m1.index[-1] + pd.Timedelta("1min")                        # same ts + length: a re-sent newest bar
+    st.append(Bar("NDQ", last, 102.0, 104.0, 1.0, 102.0, 10.0))
+    assert st.tf("NDQ", "5min", complete_only=False)["low"].iloc[-1] == 1.0

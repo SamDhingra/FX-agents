@@ -14,7 +14,12 @@ log = logging.getLogger("data")
 
 
 class BarStore:
-    """1-minute bars per symbol with cached higher-timeframe views."""
+    """1-minute bars per symbol with cached higher-timeframe views.
+
+    Cache identity (audit F14): `rev[symbol]` is a monotonically increasing data revision, bumped on
+    every load/append — a re-sent bar with the same timestamp but corrected OHLCV changes neither the
+    length nor the last timestamp, so those alone left stale views. A correction to a bar older than
+    the newest marks every resampled view of that symbol dirty FROM that bar (incremental rebuild)."""
 
     def __init__(self, tz: str, max_days: int = 15) -> None:
         self.tz = tz
@@ -22,10 +27,15 @@ class BarStore:
         self.frames: dict[str, pd.DataFrame] = {}
         self._buf: dict[str, list[dict]] = {}
         self._cache: dict[tuple[str, str], tuple[int, pd.DataFrame]] = {}
+        self.rev: dict[str, int] = {}
+        self._dirty: dict[tuple, pd.Timestamp] = {}     # resampled-cache key → earliest corrected 1m bar
 
     def load_history(self, symbol: str, df: pd.DataFrame) -> None:
         self.frames[symbol] = df[["open", "high", "low", "close", "volume"]].copy()
         self._buf[symbol] = []
+        self.rev[symbol] = self.rev.get(symbol, 0) + 1
+        for k in [k for k in self._cache if k[0] == "full" and k[1] == symbol]:
+            del self._cache[k]                         # whole history replaced: rebuild from scratch
 
     def load_h1(self, symbol: str, df: pd.DataFrame) -> None:
         """Long hourly history for Daily/4H/1H structure."""
@@ -46,6 +56,7 @@ class BarStore:
     def append(self, bar: Bar) -> None:
         self._buf.setdefault(bar.symbol, []).append(
             {"ts": bar.ts, "open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close, "volume": bar.volume})
+        self.rev[bar.symbol] = self.rev.get(bar.symbol, 0) + 1
 
     def m1(self, symbol: str) -> pd.DataFrame:
         buf = self._buf.get(symbol)
@@ -53,7 +64,13 @@ class BarStore:
             new = pd.DataFrame(buf).set_index("ts")
             base = self.frames.get(symbol)
             df = new if base is None else pd.concat([base, new])
-            self.frames[symbol] = df[~df.index.duplicated(keep="last")].iloc[-self.max_rows:]
+            df = df[~df.index.duplicated(keep="last")]
+            if base is not None and len(base) and new.index.min() <= base.index[-1]:   # correction / late bar
+                t = new.index.min()
+                df = df.sort_index()
+                for k in [k for k in self._cache if k[0] == "full" and k[1] == symbol]:
+                    self._dirty[k] = min(self._dirty.get(k, t), t)
+            self.frames[symbol] = df.iloc[-self.max_rows:]
             self._buf[symbol] = []
         return self.frames.get(symbol, pd.DataFrame(columns=["open", "high", "low", "close", "volume"]))
 
@@ -65,9 +82,13 @@ class BarStore:
         if prev is not None and len(m1) and len(prev[1]):
             p_first, full = prev[0], prev[1]
             last_start = full.index[-1]
+            dirty = self._dirty.pop(key, None)
+            if dirty is not None:                       # re-aggregate from the bin holding the corrected bar
+                before = full.index[full.index <= dirty]
+                last_start = before[-1] if len(before) else m1.index[0] - pd.Timedelta(rule)
             if m1.index[-1] >= last_start and m1.index[0] <= p_first + pd.Timedelta(rule):
                 tail = resample_ohlc(m1[m1.index >= last_start], rule)
-                full = pd.concat([full.iloc[:-1], tail])
+                full = pd.concat([full[full.index < last_start], tail])
                 full = full[full.index >= m1.index[0].floor(rule)]
                 self._cache[key] = (m1.index[0], full)
                 return full
@@ -78,7 +99,9 @@ class BarStore:
     def tf(self, symbol: str, rule: str, complete_only: bool = True) -> pd.DataFrame:
         m1 = self.m1(symbol)
         key = (symbol, rule, complete_only)
-        stamp = (len(m1), m1.index[-1] if len(m1) else None)   # length alone goes stale once the store is full
+        # revision: any load/append (incl. a corrected re-send of an existing bar) → new stamp;
+        # length alone goes stale once the store is full, length + last ts misses corrections
+        stamp = (self.rev.get(symbol, 0), len(m1), m1.index[-1] if len(m1) else None)
         if key in self._cache and self._cache[key][0] == stamp:
             return self._cache[key][1]
         df = self._resampled(symbol, rule, m1)
