@@ -300,6 +300,7 @@ class OandaBroker(Broker):
         self.client_ext = bool(oc.get("client_extensions", True))
         self.managed: dict[str, Position] = {}        # trade id → position
         self.unresolved: dict[str, str] = {}          # symbol → client id of an entry whose outcome is unknown
+        self._pending: dict[str, dict] = {}           # symbol → {cid, pos, kind, tries} for those entries
         self._locks: dict[str, asyncio.Lock] = {}     # position id → one close / reconciliation at a time
         self.currency = "USD"
         self._fx_cache: tuple[float, float] | None = None   # (rate, loop time)
@@ -348,15 +349,17 @@ class OandaBroker(Broker):
         log.warning("no %s→USD rate — new exposure blocked until it is available", self.currency)
         return None
 
-    async def equity(self) -> float:
+    async def equity(self) -> float | None:
+        """Account NAV in USD, or None when it can't be known right now (summary or FX rate unavailable).
+        Callers keep their last known value and skip anything that compares equity (kill switch)."""
         try:
             s = (await self.c.req("GET", self.c.acct("/summary")))["account"]
         except OandaError as e:
             log.warning("summary: %s", e)
-            return self.state.equity
+            return None
         rate = await self._usd_rate()
         if rate is None:
-            return self.state.equity             # last known USD value; never NAV × a guessed 1.0
+            return None                          # never NAV × a guessed 1.0
         return _f(s["NAV"]) * rate
 
     async def quote(self, sym: str) -> tuple[float, float] | None:
@@ -382,6 +385,21 @@ class OandaBroker(Broker):
             elif _f(t.get("initialUnits")) == _f(signed):
                 return t
         return None
+
+    async def _entry_order(self, cid: str) -> tuple[str, str | None]:
+        """State of our order by client id (GET /orders/@{clientID}): ('FILLED', tradeOpenedID),
+        ('CANCELLED', None) or ('UNKNOWN', None) when OANDA doesn't know it (yet) or it is still pending.
+        Raises OandaError if OANDA can't be read."""
+        try:
+            o = (await self.c.req("GET", self.c.acct(f"/orders/@{cid}")))["order"]
+        except OandaError as e:
+            if e.status == 404:
+                return "UNKNOWN", None
+            raise
+        state = o.get("state")
+        if state == "FILLED":
+            return "FILLED", (str(o["tradeOpenedID"]) if o.get("tradeOpenedID") else None)
+        return ("CANCELLED", None) if state == "CANCELLED" else ("UNKNOWN", None)
 
     async def _market(self, pos: Position, qty: float, kind: str) -> tuple[float, str, float]:
         sym = pos.symbol
@@ -413,11 +431,24 @@ class OandaBroker(Broker):
                 if not ambiguous(e):
                     known = True
                     raise OrderRejected(str(e)) from e
-                # timeout / 5xx: the order may have filled. Look for it before calling it rejected.
-                tr = await self._find_entry(sym, cid, signed)
+                # timeout / 5xx: the order may have filled (now or a moment later). Ask OANDA for the order by its
+                # client id; only FILLED or CANCELLED is an answer. Anything else stays unresolved: the symbol is
+                # blocked and on_clock asks again (resolve_entries), adopting the trade if it did fill.
+                if self.client_ext:
+                    state, otid = await self._entry_order(cid)
+                    if state == "CANCELLED":
+                        known = True
+                        raise OrderRejected(f"entry cancelled at OANDA after a lost response ({e})") from e
+                    if state != "FILLED" or not otid:
+                        self._pending[sym] = {"cid": cid, "pos": pos, "kind": kind, "tries": 0}
+                        raise OrderRejected(f"entry outcome unknown ({e}); {sym} blocked until reconciled") from e
+                    tr = (await self.c.req("GET", self.c.acct(f"/trades/{otid}")))["trade"]
+                else:                            # no client ids on this account: match an unmanaged trade by units
+                    tr = await self._find_entry(sym, cid, signed)
+                    if tr is None:
+                        known = True
+                        raise OrderRejected(f"entry not filled ({e})") from e
                 known = True
-                if tr is None:
-                    raise OrderRejected(f"entry not filled ({e})") from e
                 log.warning("%s: entry response lost (%s) but trade %s exists — registering it", sym, e, tr["id"])
                 tid, px, filled = str(tr["id"]), _f(tr.get("price")), abs(_f(tr.get("initialUnits")))
             else:
@@ -435,6 +466,7 @@ class OandaBroker(Broker):
                 filled = abs(_f(opened.get("units")))
         except OandaError as e:
             # the order may have filled and we couldn't look: keep the symbol blocked until on_clock finds out
+            self._pending[sym] = {"cid": cid, "pos": pos, "kind": kind, "tries": 0}
             raise OrderRejected(f"entry outcome unknown ({e}); {sym} blocked until reconciled") from e
         finally:
             if known:
@@ -572,7 +604,7 @@ class OandaBroker(Broker):
                 if n > 0:
                     self._book(pos, min(n, pos.open_qty), px)
                     got, value, left = got + n, value + px * n, left - n
-            return value / got if got > 0 else ref_price
+            return value / got if got > 0 else None      # None: nothing was reduced (e.g. already closed)
 
     async def close(self, pos, ref_price, limit=None):
         async with self._lock(pos):
@@ -614,16 +646,49 @@ class OandaBroker(Broker):
         finally:
             self._checking = False
 
+    RESOLVE_TRIES = 2       # clock ticks an order OANDA doesn't know yet is re-checked before giving up
+
     async def resolve_entries(self) -> None:
-        """Entries whose outcome was unknown: once OANDA can be read again, unblock the symbol. A trade that
-        did open is not ours to manage any more (the entry was reported rejected) → the monitor's orphan
-        check closes and journals it."""
-        for sym, cid in list(self.unresolved.items()):
-            tr = await self._find_entry(sym, cid, "")
+        """Entries whose outcome was unknown: ask OANDA for the order by client id each clock tick. FILLED →
+        the trade is adopted and managed like any entry (position_opened); CANCELLED, or still unknown to
+        OANDA after RESOLVE_TRIES ticks → the symbol is unblocked. Not readable → keep asking."""
+        for sym, p in list(self._pending.items()):
+            p["tries"] += 1
+            try:
+                state, tid = await self._entry_order(p["cid"]) if self.client_ext else ("UNKNOWN", None)
+                if state == "FILLED" and tid:
+                    tr = (await self.c.req("GET", self.c.acct(f"/trades/{tid}")))["trade"]
+                    await self._adopt_entry(p, tr)
+                elif state != "CANCELLED" and p["tries"] < self.RESOLVE_TRIES:
+                    continue
+            except OandaError as e:
+                log.warning("%s: entry %s still unresolved: %s", sym, p["cid"], e)
+                continue
+            self._pending.pop(sym, None)
             self.unresolved.pop(sym, None)
-            if tr is not None:
-                log.warning("%s: entry %s did fill (trade %s) after being reported unknown — left to orphan handling",
-                            sym, cid, tr["id"])
+        for sym in [s for s in self.unresolved if s not in self._pending]:
+            self.unresolved.pop(sym, None)
+
+    async def _adopt_entry(self, p: dict, tr: dict) -> None:
+        """An entry reported unknown did fill: manage it (stop verified first, as for any entry)."""
+        pos, tid = p["pos"], str(tr["id"])
+        px, filled = _f(tr.get("price")), abs(_f(tr.get("initialUnits")))
+        if not (tr.get("stopLossOrder") or tr.get("guaranteedStopLossOrder")):
+            await self.c.req("PUT", self.c.acct(f"/trades/{tid}/close"), json={"units": "ALL"})
+            log.warning("late-filled trade %s had no stop at OANDA — closed it", tid)
+            return
+        now = self.state.now
+        pos.add_leg(Leg(filled, px, now, p["kind"]))
+        if p["kind"] == "initial":
+            pos.meta["trades"] = []
+        self._register(pos, tid, filled)
+        log.warning("%s: entry %s filled after a lost response — adopted trade %s", pos.symbol, p["cid"], tid)
+        if p["kind"] == "initial":
+            pos.risk_per_unit = abs(px - pos.initial_stop) or pos.risk_per_unit
+            pos.last_price = px
+            pos.log(now, "entry", price=px, qty=filled, stop=pos.stop, late=True)
+            self.state.positions[pos.id] = pos
+            await self.bus.publish("position_opened", pos)
 
     async def check_stops(self) -> None:
         """Book what OANDA closed without us: stop hit, manual (partial) close, margin closeout. A trade that

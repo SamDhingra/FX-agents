@@ -29,7 +29,7 @@ from fxagents.data import BarStore, IBKRFeed, SimFeed
 from fxagents.jev import JevScorer
 from fxagents.journal import Journal
 from fxagents.news import NewsCalendar
-from fxagents.state import STARTUP_HALT, LiveState, RuntimeStore, startup_reconcile
+from fxagents.state import STARTUP_FAILED, STARTUP_HALT, LiveState, RuntimeStore, startup_reconcile
 
 log = logging.getLogger("main")
 
@@ -103,7 +103,15 @@ async def build(cfg, args):
         store.load_h1(sym, feed.h1_history(sym))
     first = store.m1(next(iter(cfg["instruments"])))
     state.now = (first.index[-1] + pd.Timedelta("1min")) if len(first) else pd.Timestamp.now(tz=cfg["timezone"])
-    state.equity = state.equity_peak = state.day_start_equity = await broker.equity()
+    eq = None
+    for attempt in range(3 if real else 1):    # OANDA: None = NAV or FX rate unavailable right now
+        eq = await broker.equity()
+        if eq is not None or attempt == 2:
+            break
+        log.warning("account equity unavailable (attempt %d/3)", attempt + 1)
+        await asyncio.sleep(5)
+    # unknown → 0: the journal fills it at the first good reading; kill-switch maths skip until then
+    state.equity = state.equity_peak = state.day_start_equity = eq if eq and eq > 0 else 0.0
     if cfg.get("replay"):
         news.source = "none (replay — no historical calendar)"
     elif cfg["mode"] == "sim":
@@ -130,8 +138,9 @@ async def build(cfg, args):
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
               trader, RiskAgent(ctx), pm, JournalAgent(ctx), notifier,
               MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
-    # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay)
-    agents.append(FlattenSupervisor(ctx, pm))
+    # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay).
+    # Started at the end of build, after the startup reconciliation has put saved positions back.
+    supervisor = FlattenSupervisor(ctx, pm)
     for a in agents:
         a.start()
     # 90-day setup map (heatmap + setup-first prior): loaded now, built/rebuilt in the background
@@ -183,16 +192,30 @@ async def build(cfg, args):
         # restart safety: halt flag, day-start equity, peak and open positions (with broker trade ids) live in
         # runtime_state.json next to the journal; entries open only after the broker has been reconciled
         store = RuntimeStore.for_cfg(cfg)
-        try:
-            res = await startup_reconcile(state, broker, store, pd.Timestamp.now(tz=cfg["timezone"]))
-            log.info("startup reconciliation: %s", res)
-        except Exception as e:  # noqa: BLE001
-            state.halt_reason = f"startup reconciliation failed ({e}) — check the broker, then resume from the dashboard"
-            state.alert("error", state.halt_reason)
-            log.error(state.halt_reason)
+        last_try = [0.0]
+
+        async def reconcile(_=None):
+            # at boot, and then at most once a minute (clock) while it keeps failing; entries stay off until it works
+            if state.halt_reason not in (STARTUP_HALT,) and not state.halt_reason.startswith(STARTUP_FAILED):
+                return
+            loop = asyncio.get_running_loop()
+            if loop.time() - last_try[0] < 60:
+                return
+            last_try[0] = loop.time()
+            try:
+                res = await startup_reconcile(state, broker, store, pd.Timestamp.now(tz=cfg["timezone"]))
+                log.info("startup reconciliation: %s", res)
+            except Exception as e:  # noqa: BLE001
+                state.halt_reason = f"{STARTUP_FAILED} ({e}) — retrying every minute; entries stay off"
+                state.alert("error", state.halt_reason)
+                log.error(state.halt_reason)
+        await reconcile()
+        bus.subscribe("clock", reconcile)
         for topic in ("position_opened", "position_updated", "position_closed", "stop_filled", "clock", "alert"):
             bus.subscribe(topic, lambda _ev, store=store: store.save(state))
         ctx.runtime_store = store
+    supervisor.start()
+    agents.append(supervisor)
     return ctx, feed, agents, ib
 
 

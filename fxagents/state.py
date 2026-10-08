@@ -52,6 +52,7 @@ class LiveState:
 # ── restart persistence (paper/live) ─────────────────────────────────────────
 RUNTIME_FILE = "runtime_state.json"
 STARTUP_HALT = "startup: reconciling with the broker"
+STARTUP_FAILED = "startup reconciliation failed"
 
 
 def trading_day(ts) -> str:
@@ -101,8 +102,10 @@ class RuntimeStore:
 
     def save(self, st: LiveState) -> None:
         enabled, reason = st.trading_enabled, st.halt_reason
-        if reason == STARTUP_HALT:       # never persist the transient startup gate as a real halt
-            enabled, reason = True, ""
+        if reason == STARTUP_HALT or reason.startswith(STARTUP_FAILED):
+            # the transient startup gate is never a real halt: keep whatever halt the file already holds
+            prev = self.load() or {}
+            enabled, reason = prev.get("trading_enabled", True), prev.get("halt_reason", "")
         d = {"saved": datetime.now().isoformat(timespec="seconds"), "trading_enabled": enabled, "halt_reason": reason,
              "trading_day": st.trading_day, "day_start_equity": st.day_start_equity, "equity_peak": st.equity_peak,
              "realized_today": st.realized_today,

@@ -418,6 +418,8 @@ class RiskAgent(Agent):
         if dist / price > r["max_stop_pct_of_trade_value"]:
             return self._reject(rec, f"stop {dist/price:.2%} of trade value > {r['max_stop_pct_of_trade_value']:.0%}")
         equity = self.state.equity or await self.ctx.broker.equity()
+        if not equity or equity <= 0:
+            return self._reject(rec, "account equity unknown (broker or FX rate unavailable)")
         risk_ccy = equity * r["risk_per_trade_pct"] * risk_mult
         step, min_u = qty_rules(ic)
         # brokers that take a price bound (OANDA priceBound): the fill can be up to `slip` worse than `price`,
@@ -455,7 +457,9 @@ class RiskAgent(Agent):
             pos.meta.update(no_pyramid=True, full_exit=True)
             pos.rr = float(str(pb["mgmt"])[2:])
         try:
-            px = await self.ctx.broker.open(pos, qty, price)
+            # a live quote is the fill price; without one the broker (paper/shadow) adds its own half-spread
+            # to the mid, so pass the mid (not price) or the spread would be paid twice
+            px = await self.ctx.broker.open(pos, qty, price if q else mid)
         except OrderRejected as e:
             return self._reject(rec, f"broker: {e}")
         pos.risk_per_unit = abs(px - pos.initial_stop)
@@ -470,11 +474,18 @@ class RiskAgent(Agent):
             self.log.warning("%s filled @ %s: risk $%.0f > budget $%.0f → cutting %g of %g units", sig.symbol, px,
                              qty * pos.risk_per_unit * mult, risk_ccy, cut, qty)
             if cut > 0:
+                before = pos.closed_qty
                 try:
                     await self.ctx.broker.reduce(pos, cut, px)
                     pos.log(now, "risk_trim", qty=cut, why="fill worse than the risk budget allows")
                 except OrderRejected as e:
                     pos.log(now, "risk_trim_failed", qty=cut, why=str(e)[:200])
+                trimmed = round(pos.closed_qty - before, 9)
+                if trimmed > 0 and pos.legs:
+                    # the trimmed units never were part of the trade: the initial size (partial size, journal R)
+                    # is what's left. Open quantity and the trim's booked cost are unchanged.
+                    pos.legs[0].qty = round(pos.legs[0].qty - trimmed, 9)
+                    pos.closed_qty = round(pos.closed_qty - trimmed, 9)
             qty = pos.open_qty
         pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),
                 bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3))
@@ -566,6 +577,10 @@ class PositionManagerAgent(Agent):
         pos.mfe_r = max(pos.mfe_r, pos.r_now(hi))
         pos.mae_r = min(pos.mae_r, pos.r_now(lo))
 
+        # 0) an earlier close (flatten, pre-news, target, time exit …) failed at the broker → retry it every bar
+        if pos.meta.get("pending_close"):
+            return await self.close(pos, bar.close, pos.meta["pending_close"])
+
         # 1) time exits (day trading)
         s = self.cfg["sessions"]
         mins = now.hour * 60 + now.minute
@@ -600,6 +615,11 @@ class PositionManagerAgent(Agent):
                         pos.log(now, "partial_failed", why=str(e)[:200])
                         self.log.warning("%s partial failed (retry next bar): %s", pos.symbol, e)
                         return
+                    if pos.status != "open":
+                        return              # closed meanwhile (flatten supervisor, stop): nothing was banked
+                    if px is None or pos.closed_qty - before <= 1e-9:
+                        pos.log(now, "partial_noop", why="broker reduced nothing")
+                        return              # nothing filled → not banked; the pending step retries next bar
                     pos.partial_done = True
                     pos.meta.pop("partial_got", None)
                     pos.log(now, "partial", price=px, qty=part, r=pos.rr)
@@ -613,12 +633,16 @@ class PositionManagerAgent(Agent):
                     pos.log(now, "stop_move_failed", why=str(e)[:200], stage=nxt)
                     self.log.warning("%s stop move failed (retry next bar): %s", pos.symbol, e)
                     return
+                if pos.status != "open":
+                    return
                 pos.log(now, "stop_moved", stop=pos.stop, stage=nxt)
                 await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
                                                             "msg": f"stop → {pos.stop} (locks +{pos.r_now(pos.stop):.2f}R)"})
             pos.stage = nxt
             if ((self.m.get("runner") or {}).get("add_mode", "step")) in ("step", "both"):
                 await self.maybe_pyramid(pos, level, mult, bar)
+            if pos.status != "open":
+                return
 
         # 3) runner rules after the first target (management.trail_gap_r / management.runner); each only
         #    ratchets the stop toward profit and is re-sent on a ≥0.1R improvement
@@ -644,6 +668,8 @@ class PositionManagerAgent(Agent):
                 if pos.meta.get("armed") and new_best:
                     pos.meta["armed"] = False
                     await self.maybe_pyramid(pos, bar.close, mult, bar, structure=True)
+                    if pos.status != "open":
+                        return
             if run.get("structure_trail"):
                 if piv is not None:
                     cands.append(("higher low" if pos.side > 0 else "lower high",
@@ -661,6 +687,8 @@ class PositionManagerAgent(Agent):
                         await broker.move_stop(pos, new_stop)
                     except OrderRejected as e:
                         pos.log(now, "stop_move_failed", why=str(e)[:200])
+                        return
+                    if pos.status != "open":
                         return
                     pos.log(now, "stop_moved", stop=pos.stop, stage=pos.stage, why=why)
                     await self.bus.publish("position_updated", {"position": pos, "event": "stop_to_profit",
@@ -694,7 +722,8 @@ class PositionManagerAgent(Agent):
 
     async def maybe_pyramid(self, pos: Position, level: float, mult: float, bar: Bar, structure: bool = False):
         pc = self.m["pyramid"]
-        if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled or pos.meta.get("no_pyramid"):
+        if not pc["enabled"] or pos.adds >= pc["max_adds"] or not self.state.trading_enabled or pos.meta.get("no_pyramid") \
+                or pos.status != "open" or self.state.entries_blocked:
             return
         if not structure and pos.stage < int(pc.get("from_step", 1)):
             return          # e.g. from_step 2: no add right after banking the first partial
@@ -728,6 +757,8 @@ class PositionManagerAgent(Agent):
             if res["prob"] < pc["min_continuation_prob"]:
                 pos.log(self.now(), "pyramid_skipped", why=f"continuation {res['prob']:.2f}")
                 return
+            if pos.status != "open" or self.state.entries_blocked:
+                return              # closed / session flatten started during the Jev call
         mpu = margin_per_unit(self.cfg["instruments"][pos.symbol], bar.close)
         if mpu:
             eq = self.state.equity or 0.0
@@ -748,11 +779,13 @@ class PositionManagerAgent(Agent):
         try:
             px = await self.ctx.broker.close(pos, price, limit=price if limit else None)
         except OrderRejected as e:
-            # whatever did fill is already booked by the broker; the position stays open and the next bar
-            # (or the flatten supervisor) tries again
+            # whatever did fill is already booked by the broker; the position stays open and every following
+            # bar retries the close with this reason (meta["pending_close"]), as does the flatten supervisor
+            pos.meta["pending_close"] = reason
             pos.log(self.now(), "close_failed", why=str(e)[:200], reason=reason)
             self.log.warning("%s close (%s) failed, will retry: %s", pos.symbol, reason, e)
             return False
+        pos.meta.pop("pending_close", None)
         await self.finalize(pos, px, reason)
         return True
 

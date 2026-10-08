@@ -48,6 +48,14 @@ class FakeOanda:
         # OANDA), "timeout_after" (executes, response lost) or an HTTP status (not executed)
         self.faults: list[list] = []
         self._closed: dict[str, tuple[float, float]] = {}   # trade id → (units closed, close value)
+        self.orders: dict[str, dict] = {}                     # client order id → order (GET /orders/@id)
+        self.deferred: list[tuple] = []                       # "defer" fault: requests that execute later
+
+    def flush_deferred(self) -> None:
+        """Execute requests held by a "defer" fault (an order that reaches OANDA after its response timed out)."""
+        held, self.deferred = self.deferred, []
+        for args in held:
+            self.route(*args)
 
     # ── helpers for tests ──
     def hit_stop(self, tid: str) -> None:
@@ -86,6 +94,9 @@ class FakeOanda:
                 if f[2] == "timeout_after":
                     self.route(req, path, q, body)
                     raise httpx.ReadTimeout("injected timeout (executed)", request=req)
+                if f[2] == "defer":
+                    self.deferred.append((req, path, q, body))
+                    raise httpx.ReadTimeout("injected timeout (executes later)", request=req)
                 return httpx.Response(f[2], json={"errorMessage": "injected failure"})
         return self.route(req, path, q, body)
 
@@ -117,6 +128,11 @@ class FakeOanda:
             return self.candles(path.split("/")[3], q)
         if path == f"{a}/orders" and req.method == "POST":
             return self.order(body["order"])
+        if path.startswith(f"{a}/orders/@"):
+            o = self.orders.get(path.split("@", 1)[1])
+            if o is None:
+                return httpx.Response(404, json={"errorCode": "ORDER_DOESNT_EXIST", "errorMessage": "no such order"})
+            return self.ok({"order": o})
         if path == f"{a}/openTrades":
             return self.ok({"trades": self.open_trades()})
         if path == f"{a}/openPositions":
@@ -187,13 +203,18 @@ class FakeOanda:
                                              "errorCode": "STOP_LOSS_ON_FILL_PRICE_PRECISION_EXCEEDED", "errorMessage": "precision"})
         if _dp(o["units"].lstrip("-")) > sp["tradeUnitsPrecision"]:
             return httpx.Response(400, json={"errorCode": "UNITS_PRECISION_EXCEEDED", "errorMessage": "units precision"})
+        cid = (o.get("clientExtensions") or {}).get("id")
         if self.cancel_next:
             why, self.cancel_next = self.cancel_next, None
+            if cid:
+                self.orders[cid] = {"id": str(self.next_id + 1), "state": "CANCELLED", "clientExtensions": o["clientExtensions"]}
             return self.ok({"orderCreateTransaction": {"id": str(self._id())},
                             "orderCancelTransaction": {"id": str(self._id()), "reason": why}}, 201)
         side = -1 if o["units"].startswith("-") else 1
         fill_px = self.prices[n] + side * self.spread.get(n, 0.0) / 2
         if o.get("priceBound") and (fill_px - float(o["priceBound"])) * side > 0:
+            if cid:
+                self.orders[cid] = {"id": str(self.next_id + 1), "state": "CANCELLED", "clientExtensions": o["clientExtensions"]}
             return self.ok({"orderCreateTransaction": {"id": str(self._id())},
                             "orderCancelTransaction": {"id": str(self._id()), "reason": "BOUNDS_VIOLATION"}}, 201)
         tid = str(self._id())
@@ -206,6 +227,9 @@ class FakeOanda:
             self.drop_stop_next = False
             t.pop("stopLossOrder")
         self.trades[tid] = t
+        if cid:
+            self.orders[cid] = {"id": str(int(tid) - 1), "state": "FILLED", "tradeOpenedID": tid,
+                                "clientExtensions": o["clientExtensions"]}
         return self.ok({"orderCreateTransaction": {"id": str(int(tid) - 1)},
                         "orderFillTransaction": {"id": str(self._id()), "price": px,
                                                  "tradeOpened": {"tradeID": tid, "units": o["units"], "price": px}}}, 201)

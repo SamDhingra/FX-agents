@@ -247,6 +247,21 @@ def test_F04_restart_restores_halt_baseline_and_positions(tmp_path):
     assert res["adopted"] and store.load()["positions"][0]["id"] == a.id
 
 
+def test_F04_startup_failure_is_not_persisted_as_a_halt(tmp_path):
+    from fxagents.state import STARTUP_FAILED, STARTUP_HALT, RuntimeStore, trading_day
+    store = RuntimeStore(tmp_path / "rt.json")
+    st = LiveState(); st.now = pd.Timestamp("2026-10-08 10:00", tz=TZ); st.trading_day = trading_day(st.now)
+    st.trading_enabled, st.halt_reason = False, f"{STARTUP_FAILED} (timeout) — retrying every minute"
+    store.save(st)
+    assert store.load()["trading_enabled"] and store.load()["halt_reason"] == ""
+    st.trading_enabled, st.halt_reason = False, "daily loss limit hit"
+    store.save(st)
+    for transient in (STARTUP_HALT, f"{STARTUP_FAILED} (x)"):   # a real halt already on file survives
+        st.halt_reason = transient
+        store.save(st)
+        assert store.load()["halt_reason"] == "daily loss limit hit" and not store.load()["trading_enabled"]
+
+
 def test_F04_new_day_clears_daily_halt_and_orphans_are_journaled(tmp_path):
     from fxagents.agents.ops import JournalAgent
     from fxagents.journal import Journal
@@ -292,14 +307,18 @@ def test_F05_lost_entry_response_registers_the_filled_trade():
 
 
 def test_F05_entry_not_filled_after_timeout_is_rejected_and_unblocked():
+    """OANDA never got the order: it stays unresolved for RESOLVE_TRIES clock ticks, then the symbol is freed."""
     cfg, fake, c, st, bus, feed, b = setup()
 
     async def go():
         await feed.qualify(); await b.connect()
         fake.faults.append(["POST", "/orders", "timeout_before", 1])
-        with pytest.raises(OrderRejected, match="not filled"):
+        with pytest.raises(OrderRejected, match="unknown"):
             await b.open(pos(), 2, 24500)
-        assert not b.unresolved and not fake.open_trades()
+        await b.on_clock(st.now)
+        assert b.unresolved                                     # first re-check: OANDA doesn't know it (yet)
+        await b.on_clock(st.now)
+        assert not b.unresolved and not fake.open_trades() and not st.positions
         await b.open(pos(), 2, 24500)                           # the symbol is free again
     run(go())
     assert len(fake.open_trades()) == 1
@@ -310,16 +329,44 @@ def test_F05_unknown_outcome_blocks_symbol_until_reconciled():
 
     async def go():
         await feed.qualify(); await b.connect()
-        fake.faults += [["POST", "/orders", "timeout_after", 1], ["GET", "/openTrades", 503, 4]]
+        fake.faults += [["POST", "/orders", "timeout_after", 1], ["GET", "/orders/@", 503, 4]]
+        p = pos()
         with pytest.raises(OrderRejected, match="unknown"):
-            await b.open(pos(), 2, 24500)
+            await b.open(p, 2, 24500)
         n = len(posts(fake))
         with pytest.raises(OrderRejected, match="still unknown"):
             await b.open(pos(), 2, 24500)
         assert len(posts(fake)) == n                            # nothing sent while unresolved
-        await b.on_clock(st.now)                                # OANDA readable again → resolved
-        assert not b.unresolved
+        await b.on_clock(st.now)                                # OANDA readable again → FILLED → adopted
+        assert not b.unresolved and st.positions.get(p.id) is p
+        assert p.open_qty == 2 and p.meta["trades"][0]["id"] in b.managed
     run(go())
+
+
+def test_F05_order_filling_after_the_first_lookup_is_adopted_not_orphaned():
+    from fxagents.agents.ops import MonitorAgent
+    cfg, fake, c, st, bus, feed, b = setup()
+    opened = []
+    bus.subscribe("position_opened", lambda p: opened.append(p))
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos()
+        fake.faults.append(["POST", "/orders", "defer", 1])     # reaches OANDA only after the lookup
+        with pytest.raises(OrderRejected, match="unknown"):
+            await b.open(p, 2, 24500)
+        fake.flush_deferred()                                   # ...now it fills
+        st.equity = st.day_start_equity = st.equity_peak = 10000.0
+        mon = MonitorAgent(Ctx(cfg, bus, st, None, b, None, None, None)); mon.start()
+        for _ in range(2):                                      # orphan check runs while it's unresolved
+            mon._last_check = 0
+            await mon.on_clock(st.now)
+        await b.on_clock(st.now)                                # first re-check → FILLED → adopted
+        return p
+    p = run(go())
+    assert opened == [p] and st.positions[p.id] is p and p.open_qty == 2
+    assert len(fake.open_trades()) == 1 and not b.unresolved   # managed, never orphan-closed
+    assert p.risk_per_unit == pytest.approx(100.0)
 
 
 def test_F05_failed_post_fill_check_still_registers_trade():
@@ -398,6 +445,64 @@ def test_F06_not_flat_at_deadline_is_alerted_and_retried():
     assert r3 is True and p.status == "closed" and not fake.open_trades()
 
 
+def test_F06_manager_does_not_act_on_a_position_the_supervisor_closed():
+    """Supervisor flattens while the manager is mid-way through banking a partial on the same position:
+    no fake 'banked' partial, no stop move, no add."""
+    cfg, fake, st, bus, feed, b, sup = _supervised()
+    pm = sup.pm
+    updates = []
+    bus.subscribe("position_updated", lambda ev: updates.append(ev["event"]))
+    real_close_trade = b._close_trade
+
+    async def slow_close_trade(p, t, units):
+        await asyncio.sleep(0.01)                               # the supervisor's close is in flight…
+        return await real_close_trade(p, t, units)
+    b._close_trade = slow_close_trade
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos()
+        await b.open(p, 2, 24500)
+        st.positions[p.id], st.last_prices["NDQ"] = p, 24500.0
+        st.now = pd.Timestamp("2026-10-08 15:40", tz=TZ)        # market clock: before flatten_at for the manager
+        p.opened_ts = st.now - pd.Timedelta("10min")            # (no max-hold exit either)
+        bar = Bar("NDQ", st.now, 24550, 24610, 24540, 24600)    # first target (24600) hit → partial
+        sup_t = asyncio.create_task(sup.tick(pd.Timestamp("2026-10-08 15:49:30", tz=TZ)))
+        await asyncio.sleep(0)                                  # supervisor takes the position lock first
+        assert p.status == "open"
+        await pm.manage(p, bar)                                 # the manager's bar pass runs meanwhile
+        return p, await sup_t
+    p, flat = run(go())
+    assert flat and p.status == "closed" and p.exit_reason == "session_flat"
+    assert not p.partial_done and "partial" not in updates and "stop_to_profit" not in updates
+    assert not [e for e in p.events if e["kind"] in ("partial", "stop_moved", "pyramid")]
+    assert len(puts(fake)) == 1 and p.adds == 0
+
+
+def test_F06_failed_flatten_all_close_is_retried_on_the_next_bar():
+    from fxagents.agents.trading import PositionManagerAgent
+    cfg = copy.deepcopy(BASE); cfg["mode"] = "sim"
+
+    class Flaky(PaperBroker):
+        fails = 1
+
+        async def close(self, p, ref, limit=None):
+            if self.fails:
+                self.fails -= 1
+                raise OrderRejected("timeout")
+            return await super().close(p, ref, limit)
+    st = LiveState(); st.now = pd.Timestamp("2026-10-08 10:00", tz=TZ)
+    br = Flaky(cfg, st, Bus()); br._slip = lambda s, side: 0.0
+    pm = PositionManagerAgent(Ctx(cfg, br.bus, st, None, br, None, None, None)); pm.start()
+    p = Position("NDQ", 1, "t", 24900.0, 24900.0, 100.0, 1.0, st.now)
+    run(br.open(p, 2, 25000.0)); st.positions[p.id] = p
+    run(br.bus.publish("flatten_all", "kill switch"))
+    assert p.status == "open" and p.meta["pending_close"] == "flatten: kill switch"
+    st.now += pd.Timedelta("1min")
+    run(pm.on_bar(Bar("NDQ", st.now, 25000, 25010, 24990, 25000)))      # an ordinary bar: no time exit
+    assert p.status == "closed" and p.exit_reason == "flatten: kill switch" and "pending_close" not in p.meta
+
+
 def test_F06_supervisor_runs_only_on_a_real_clock():
     from fxagents.agents.trading import FlattenSupervisor, PositionManagerAgent
 
@@ -473,6 +578,27 @@ def test_F11_post_fill_risk_overrun_is_trimmed():
     assert br.opened[0] == 250 and br.reduced == [125]          # risk 250×4 = 1000 > 550 → keep 500/4
     p = next(iter(st.positions.values()))
     assert p.open_qty == 125 and p.open_qty * p.risk_per_unit == pytest.approx(500)
+    assert p.initial_qty == 125 and p.closed_qty == 0          # partial size and journal R use the trimmed size
+
+
+def test_F11_shadow_fill_pays_half_spread_once():
+    """No live quote (paper/shadow): size from mid + s/2, but the broker gets the mid and adds s/2 itself."""
+    from fxagents.agents.setup_first import ShadowBroker
+    holder = {}
+
+    class SB(ShadowBroker):
+        def __init__(self):
+            cfg = copy.deepcopy(BASE)
+            super().__init__(cfg, LiveState(), Bus(), {"XAUUSD": 0.40})
+            self.commission = lambda s, q: 0.0
+
+        async def open(self, p, qty, ref):
+            holder["ref"] = ref
+            return await super().open(p, qty, ref)
+    br = SB()
+    st = _risk(br)
+    p = next(iter(st.positions.values()))
+    assert holder["ref"] == pytest.approx(100.0) and p.entry == pytest.approx(100.2)   # mid 100 + 0.40/2
 
 
 def test_F11_oanda_market_order_carries_price_bound():
@@ -504,5 +630,37 @@ def test_F27_failed_conversion_blocks_new_exposure():
             await b.open(pos(), 1, 24500)
         return eq
     eq = run(go())
-    assert eq != pytest.approx(13700.0)                         # never NAV × a guessed 1.0
+    assert eq is None                                           # unknown — never NAV × a guessed 1.0
     assert not posts(fake)
+
+
+def test_F27_restart_with_rate_unavailable_does_not_halt_or_close(tmp_path):
+    """Same-day restart while the CAD→USD rate is down: equity unknown must not look like a −100% day."""
+    from fxagents.agents.ops import JournalAgent, MonitorAgent
+    from fxagents.journal import Journal
+    from fxagents.state import RuntimeStore, startup_reconcile, trading_day
+    cfg, fake, c, st, bus, feed, b = setup(nav=13700.0, currency="CAD")
+    store = RuntimeStore(tmp_path / "rt.json")
+    st.trading_day, st.day_start_equity, st.equity_peak = trading_day(st.now), 10000.0, 10000.0
+    store.save(st)
+    fake.fx_down = True
+    flat = []
+    bus.subscribe("flatten_all", lambda why: flat.append(why))
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos(); fake.fx_down = False
+        await b.open(p, 1, 24500)                               # a position from before the restart
+        fake.fx_down, b._fx_cache = True, None
+        st2 = st
+        st2.positions = {p.id: p}
+        st2.equity = st2.day_start_equity = st2.equity_peak = (await b.equity()) or 0.0   # boot: unknown → 0
+        await startup_reconcile(st2, b, store, st2.now)
+        ctx = Ctx(cfg, bus, st2, None, b, Journal(str(tmp_path / "j.sqlite")), None, None)
+        JournalAgent(ctx).start(); MonitorAgent(ctx).start()
+        for _ in range(3):
+            await bus.publish("clock", st2.now)
+        return st2, p
+    st2, p = run(go())
+    assert st2.trading_enabled and not flat and p.status == "open" and len(fake.open_trades()) == 1
+    assert st2.day_start_equity == 10000.0 and store.load()["trading_enabled"]
