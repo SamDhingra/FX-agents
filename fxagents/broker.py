@@ -64,6 +64,8 @@ class Broker:
     async def broker_positions(self) -> dict[str, float]: return {}
     async def unprotected(self) -> list[str]: return []
     async def flatten_orphan(self, sym: str, qty: float) -> None: ...
+    async def quote(self, sym: str) -> tuple[float, float] | None: return None       # fresh (bid, ask) if the broker has one
+    async def adopt(self, positions: list[Position]) -> bool: return False           # re-manage persisted positions after a restart
 
 
 class PaperBroker(Broker):
