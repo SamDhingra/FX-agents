@@ -101,6 +101,26 @@ case "${1:-help}" in
                --from 2026-02-01 --until 2026-09-25 --splits 2026-06-30 2026-07-31 2026-09-25 \
                --label "same dates as Astra's vendor data" --out data/year_test/astra15_overlap </dev/null | grep -v candidates
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  export)    # OANDA bid/ask candles → data/export/<name>/<SYM>_<GRAN>.csv.gz + manifest.json (market prices only)
+             #   ./fx.sh export --name dev_m1 --gran M1 --from 2024-10-01 --until 2026-09-30
+             #   ./fx.sh export --name dev_d --gran D --from 2016-01-01 --until 2026-09-30 --symbols XAUUSD NDQ WTICO_USD …
+             need_env
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.export_history "${@:2}" </dev/null ;;
+  holdout)   # score a frozen outside strategy package on a holdout export, sandboxed: no network, no .env/token,
+             # read-only package and data. ./fx.sh holdout <package dir> <export name> <tag>
+             #   e.g. ./fx.sh holdout research/astra_v1 holdout_m1 astra_v1   → data/year_test/holdout_astra_v1, published
+             pkg="${2:?package dir}"; set_="${3:?export name under data/export}"; tag="${4:?tag}"
+             [[ -f "$pkg/backtest.py" ]] || { echo "no backtest.py in $pkg"; exit 1; }
+             [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
+             out="data/year_test/holdout_$tag"; mkdir -p "$out"; chmod 777 "$out"
+             $DC build fxagents </dev/null >/dev/null 2>&1
+             docker run --rm --network none --memory 1500m --user "$(id -u):$(id -g)" --entrypoint python \
+               -v "$(realpath "$pkg"):/pkg:ro" -v "$(realpath "data/export/$set_"):/data:ro" -v "$(realpath "$out"):/out" \
+               -w /pkg fx-agents:latest backtest.py --data-dir /data --out-dir /out </dev/null 2>&1 | tail -40
+             ( cd "$out" && sha256sum "$(realpath "$OLDPWD/$pkg")"/*.py > package_sha256.txt 2>/dev/null; \
+               { echo "# Holdout score: $tag on $set_"; echo; echo '```'; head -40 summary.csv 2>/dev/null; echo '```'; } > report.md
+               cp summary.csv cells.csv 2>/dev/null || true )
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -146,7 +166,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
