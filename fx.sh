@@ -104,7 +104,8 @@ case "${1:-help}" in
   export)    # OANDA bid/ask candles → data/export/<name>/<SYM>_<GRAN>.csv.gz + manifest.json (market prices only)
              #   ./fx.sh export --name dev_m1 --gran M1 --from 2024-10-01 --until 2026-09-30
              #   ./fx.sh export --name dev_d --gran D --from 2016-01-01 --until 2026-09-30 --symbols XAUUSD NDQ WTICO_USD …
-             need_env
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/export-build.log 2>&1 || { echo "build failed — see logs/export-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.export_history "${@:2}" </dev/null ;;
   holdout)   # score a frozen outside strategy package on a holdout export, sandboxed: no network, no .env/token,
              # read-only package and data. ./fx.sh holdout <package dir> <export name> <tag>
@@ -113,7 +114,7 @@ case "${1:-help}" in
              [[ -f "$pkg/backtest.py" ]] || { echo "no backtest.py in $pkg"; exit 1; }
              [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
              out="data/year_test/holdout_$tag"; mkdir -p "$out"; chmod 777 "$out"
-             $DC build fxagents </dev/null >/dev/null 2>&1
+             mkdir -p logs; BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/holdout-build.log 2>&1 || { echo "build failed — see logs/holdout-build.log"; exit 1; }
              docker run --rm --network none --memory 1500m --user "$(id -u):$(id -g)" --entrypoint python \
                -v "$(realpath "$pkg"):/pkg:ro" -v "$(realpath "data/export/$set_"):/data:ro" -v "$(realpath "$out"):/out" \
                -w /pkg fx-agents:latest backtest.py --data-dir /data --out-dir /out </dev/null 2>&1 | tail -40
