@@ -1,0 +1,51 @@
+{
+ "days": 365,
+ "costs": "oanda",
+ "tfs": null,
+ "classes": null,
+ "exits": [],
+ "window": 60,
+ "window_days": 60,
+ "window_units": "observed trade days",
+ "symbols": [
+  "XAUUSD",
+  "NDQ",
+  "US30",
+  "EURUSD",
+  "GBPUSD",
+  "AUDUSD"
+ ],
+ "portfolio_instruments": [
+  "XAUUSD",
+  "NDQ",
+  "US30"
+ ],
+ "spreads": {
+  "XAUUSD": 0.4,
+  "NDQ": 1.5,
+  "US30": 2.5,
+  "EURUSD": 0.00014,
+  "GBPUSD": 0.0002,
+  "AUDUSD": 0.00016
+ },
+ "manifest": {
+  "git_sha": "unknown",
+  "config_sha256": "5448d76fcf99a822",
+  "config_hashed": [
+   "instruments",
+   "management",
+   "risk",
+   "sessions",
+   "bias",
+   "playbook",
+   "research",
+   "shadow.spread"
+  ],
+  "history_dir": "/app/data/history_365d",
+  "data_span": {
+   "from": "2025-10-08 11:20:00-04:00",
+   "to": "2026-10-08 13:49:00-04:00",
+   "trade_days": 260
+  }
+ }
+}
