@@ -25,6 +25,7 @@ import itertools
 import json
 import logging
 import time
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -453,6 +454,11 @@ def manifest(cfg, t: pd.DataFrame | None = None, **extra) -> dict:
             "history_dir": str(history_dir(cfg)), "data_span": span, **extra}
 
 
+def run_job_frame(args) -> pd.DataFrame:
+    """run_job's trades as one DataFrame — far smaller to pickle back and to hold than a list of dicts."""
+    return pd.DataFrame(run_job(args))
+
+
 def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2) -> pd.DataFrame:
     symbols = symbols or [s for s in cfg["instruments"] if (history_dir(cfg) / f"{s}.pkl").exists()]
     tfs = tfs or TFS
@@ -460,11 +466,17 @@ def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2) -> pd.D
     # biggest jobs first so the two workers finish together
     jobs = sorted(((cfg, s, tf, classes) for s, tf in itertools.product(symbols, tfs)),
                   key=lambda j: pd.Timedelta(j[2]))
-    rows = []
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        for part in ex.map(run_job, jobs):
-            rows.extend(part)
-    df = pd.DataFrame(rows)
+    # Memory (the 365-day grid was OOM-killed twice at 1.1–1.5 GB): each worker hands back its job as a
+    # DataFrame (~0.2 KB a trade) instead of a list of dicts (~1.5 KB), and every worker process is
+    # replaced after one job, so nothing a job built stays resident while the next one runs.
+    parts = []
+    with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
+                             max_tasks_per_child=1) as ex:
+        for part in ex.map(run_job_frame, jobs):
+            if len(part):
+                parts.append(part)
+    df = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    del parts
     out = research_dir(cfg)
     out.mkdir(parents=True, exist_ok=True)
     df.to_pickle(out / "trades.pkl")
