@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -28,38 +30,39 @@ COLS = ["bid_o", "bid_h", "bid_l", "bid_c", "ask_o", "ask_h", "ask_l", "ask_c", 
 STEP = {"M1": pd.Timedelta("1min"), "M5": pd.Timedelta("5min"), "H1": pd.Timedelta("1h"), "D": pd.Timedelta("1D")}
 
 
-def rows(cs: list[dict]) -> list[dict]:
-    out = []
-    for c in cs:
-        if not c.get("complete") or "bid" not in c or "ask" not in c:
-            continue
-        b, a = c["bid"], c["ask"]
-        out.append({"time": c["time"], "bid_o": b["o"], "bid_h": b["h"], "bid_l": b["l"], "bid_c": b["c"],
-                    "ask_o": a["o"], "ask_h": a["h"], "ask_l": a["l"], "ask_c": a["c"], "volume": int(c.get("volume", 0))})
-    return out
+def stamp(t: str) -> str:
+    """OANDA RFC 3339 time ('2025-01-02T14:31:00.000000000Z') → '2025-01-02T14:31:00Z' (sortable as text)."""
+    return t[:19] + "Z"
 
 
-async def fetch(client, name: str, gran: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    """Every complete bid/ask candle with open time in [start, end). Pages forward; no page cap short of the end."""
-    out, cur = [], start - STEP[gran]
-    while True:
-        p = {"granularity": gran, "price": "BA", "count": "5000", "includeFirst": "false",
-             "from": cur.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S.000000000Z")}
-        cs = (await client.req("GET", f"/v3/instruments/{name}/candles", params=p)).get("candles", [])
-        if not cs:
-            break
-        out += rows(cs)
-        nxt = pd.Timestamp(cs[-1]["time"])
-        if nxt <= cur or nxt >= end:
-            break
-        cur = nxt
-    if not out:
-        return pd.DataFrame(columns=["time", *COLS])
-    df = pd.DataFrame(out)
-    t = pd.to_datetime(df["time"], utc=True)
-    df = df[(t >= start) & (t < end)].copy()
-    df["time"] = pd.to_datetime(df["time"], utc=True).dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return df.drop_duplicates("time").sort_values("time")[["time", *COLS]]
+async def export_one(client, name: str, gran: str, start: pd.Timestamp, end: pd.Timestamp, path: Path) -> dict:
+    """Stream every complete bid/ask candle with open time in [start, end) to a gzipped CSV, page by page
+    (5,000 candles at a time), so memory stays flat however long the window is. Returns rows/first/last."""
+    lo, hi = stamp(start.strftime("%Y-%m-%dT%H:%M:%S")), stamp(end.strftime("%Y-%m-%dT%H:%M:%S"))
+    n, first, last, cur = 0, None, None, start - STEP[gran]
+    tmp = path.with_suffix(".part")
+    with gzip.open(tmp, "wt", newline="", compresslevel=6) as fh:
+        w = csv.writer(fh)
+        w.writerow(["time", *COLS])
+        while True:
+            p = {"granularity": gran, "price": "BA", "count": "5000", "includeFirst": "false",
+                 "from": cur.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S.000000000Z")}
+            cs = (await client.req("GET", f"/v3/instruments/{name}/candles", params=p)).get("candles", [])
+            if not cs:
+                break
+            for c in cs:
+                t = stamp(c["time"])
+                if not c.get("complete") or "bid" not in c or "ask" not in c or t < lo or t >= hi or (last and t <= last):
+                    continue
+                b, a = c["bid"], c["ask"]
+                w.writerow([t, b["o"], b["h"], b["l"], b["c"], a["o"], a["h"], a["l"], a["c"], int(c.get("volume", 0))])
+                n, first, last = n + 1, first or t, t
+            nxt = pd.Timestamp(cs[-1]["time"])
+            if nxt <= cur or stamp(cs[-1]["time"]) >= hi:
+                break
+            cur = nxt
+    tmp.replace(path)
+    return {"rows": n, "first": first, "last": last}
 
 
 def main():
@@ -87,23 +90,31 @@ def main():
            "volume": "OANDA tick count (number of price updates), not traded volume",
            "instrument_names": {s: names[s] for s in syms}, "files": {}}
 
+    mf = out / "manifest.json"
+    if mf.exists():                                   # re-running adds/refreshes files, keeps the others' entries
+        prev = json.loads(mf.read_text())
+        if (prev.get("granularity"), prev.get("from"), prev.get("until")) == (a.gran, a.start, a.until):
+            man["files"] = prev.get("files", {})
+            man["instrument_names"] = {**prev.get("instrument_names", {}), **man["instrument_names"]}
+
     async def go():
         for s in syms:
+            f = out / f"{s}_{a.gran}.csv.gz"
             print(f"  {s} ({names[s]}) {a.gran} {a.start} → {a.until} …", flush=True)
             try:
-                df = await fetch(client, names[s], a.gran, start, end)
+                info = await export_one(client, names[s], a.gran, start, end, f)
             except Exception as e:  # noqa: BLE001 — an instrument this account can't trade: skip it, keep going
                 print(f"    skipped: {e}", flush=True)
-                man["files"][f"{s}_{a.gran}.csv.gz"] = {"error": str(e)[:200]}
-                continue
-            f = out / f"{s}_{a.gran}.csv.gz"
-            df.to_csv(f, index=False, compression={"method": "gzip", "mtime": 0})
-            man["files"][f.name] = {"rows": len(df), "first": df["time"].iloc[0] if len(df) else None,
-                                    "last": df["time"].iloc[-1] if len(df) else None,
-                                    "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
-            print(f"    {len(df):,} candles → {f} ({f.stat().st_size / 1e6:.1f} MB)", flush=True)
+                man["files"][f.name] = {"error": str(e)[:200]}
+            else:
+                h = hashlib.sha256()
+                with open(f, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(chunk)
+                man["files"][f.name] = {**info, "sha256": h.hexdigest()}
+                print(f"    {info['rows']:,} candles {info['first']} → {info['last']} ({f.stat().st_size / 1e6:.1f} MB)", flush=True)
+            mf.write_text(json.dumps(man, indent=2))   # after every instrument, so a stopped run keeps what it did
     asyncio.run(go())
-    (out / "manifest.json").write_text(json.dumps(man, indent=2))
     print(f"done: {out}/manifest.json")
 
 
