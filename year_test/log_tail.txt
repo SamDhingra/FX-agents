@@ -1,8 +1,4 @@
- Container fx-agents-fxagents-run-5379bc41468a Creating 
- Container fx-agents-fxagents-run-5379bc41468a Created 
+ Container fx-agents-fxagents-run-4ec23d453f6c Creating 
+ Container fx-agents-fxagents-run-4ec23d453f6c Created 
 [  0.0 min] fetching history
 [  0.0 min] research grid (every setup × variant × instrument × timeframe)
-
-On branch results
-nothing to commit, working tree clean
-published: https://github.com/SamDhingra/FX-agents/tree/results/year_test
