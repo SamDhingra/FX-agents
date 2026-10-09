@@ -1,0 +1,179 @@
+{
+  "rules": "ASTRA-INTRADAY-15-v0.2.0-simple",
+  "history": "data/history_730d",
+  "span": {
+    "XAUUSD": [
+      "2026-02-01",
+      "2026-09-25",
+      231595
+    ],
+    "NDQ": [
+      "2026-02-01",
+      "2026-09-25",
+      232853
+    ],
+    "US30": [
+      "2026-02-01",
+      "2026-09-25",
+      232825
+    ]
+  },
+  "splits": {
+    "development_end": "2026-06-30",
+    "validation_end": "2026-07-31",
+    "evaluation_end": "2026-09-25"
+  },
+  "verdicts": [
+    {
+      "id": "G-S1",
+      "trades": 32,
+      "avg_R": -0.2944643677903586,
+      "ci_low": -0.5859381621367311,
+      "ci_high": 0.0108073186739935,
+      "avg_R_2x": -0.3494998956963583,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "G-S2",
+      "trades": 84,
+      "avg_R": 0.1208817101719865,
+      "ci_low": -0.0932292727934938,
+      "ci_high": 0.3249446731667529,
+      "avg_R_2x": 0.0471216823600551,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "G-S3",
+      "trades": 20,
+      "avg_R": -0.2722307839776317,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.3355640957603925,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "G-H1",
+      "trades": 1,
+      "avg_R": -1.0000000000000069,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.9999999999999966,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "G-H2",
+      "trades": 40,
+      "avg_R": -0.084350572507093,
+      "ci_low": -0.3500234956898896,
+      "ci_high": 0.1949645347568141,
+      "avg_R_2x": -0.1087348619134395,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "N-S1",
+      "trades": 20,
+      "avg_R": -0.0291203827691398,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.0424828562210402,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "N-S2",
+      "trades": 67,
+      "avg_R": -0.0811382829965513,
+      "ci_low": -0.3510838671694385,
+      "ci_high": 0.198380999228576,
+      "avg_R_2x": -0.1290122042243544,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "N-S3",
+      "trades": 19,
+      "avg_R": -0.2628861642264056,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.5285333127754197,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "N-H1",
+      "trades": 4,
+      "avg_R": -0.3500880349726489,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.3543489346235515,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "N-H2",
+      "trades": 34,
+      "avg_R": 0.0832808775021033,
+      "ci_low": -0.3090448227752652,
+      "ci_high": 0.5167095533007054,
+      "avg_R_2x": 0.0625541757021753,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "U-S1",
+      "trades": 19,
+      "avg_R": -0.0522897000604569,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.0258188668335915,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "U-S2",
+      "trades": 58,
+      "avg_R": 0.0973465128427782,
+      "ci_low": -0.0964807807216424,
+      "ci_high": 0.3017061521153948,
+      "avg_R_2x": 0.0607891880373837,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "U-S3",
+      "trades": 24,
+      "avg_R": -0.1569530153865072,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.1340827230102366,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "U-H1",
+      "trades": 1,
+      "avg_R": 0.4226607407672403,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": 0.3884051729868409,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    },
+    {
+      "id": "U-H2",
+      "trades": 21,
+      "avg_R": -0.1508538102253892,
+      "ci_low": null,
+      "ci_high": null,
+      "avg_R_2x": -0.1668227793773061,
+      "q_primary_15": 1.0,
+      "verdict": "too few trades"
+    }
+  ],
+  "peak_rss_mb": 311
+}
