@@ -39,3 +39,6 @@ Positive weeks: 22 of 49 · weekly rw sums to -33.82R (= the total above)
 | dtfx_wick_fib | vol=impulse | XAUUSD | 3min | std | 62 | 65% | +0.304 | 2.3 | +0.47 | +0.04 | +0.15 | +0.70 | +0.28 | -0.20 |
 | smc_ifvg | default | XAUUSD | 15min | std | 147 | 60% | +0.182 | 2.3 | +0.11 | +0.25 | +0.02 | +0.21 | +0.25 | +0.25 |
 | ict_turtle_soup | level=session | US30 | 15min | std | 62 | 58% | +0.397 | 2.3 | +0.50 | +0.28 | +0.52 | +0.48 | +0.5
+On branch results
+nothing to commit, working tree clean
+published: https://github.com/SamDhingra/FX-agents/tree/results/year_test
