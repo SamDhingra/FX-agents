@@ -44,7 +44,7 @@ log = logging.getLogger("research")
 TFS = ["1min", "3min", "5min", "15min", "30min", "1h"]
 SCALP_TFS = {"1min", "3min", "5min"}
 PEERS = {"NDQ": ["US30"], "US30": ["NDQ"], "XAUUSD": []}
-DEFAULT_SPREAD = {"XAUUSD": 0.40, "SPX": 0.50, "NDQ": 1.50, "US30": 2.50,
+DEFAULT_SPREAD = {"XAUUSD": 0.62, "SPX": 0.50, "NDQ": 2.30, "US30": 3.00,   # OANDA 1m bid/ask medians, Oct 2024–Sep 2026
                   "EURUSD": 0.00014, "GBPUSD": 0.00020, "AUDUSD": 0.00016}
 # A raw-spread ECN account (0.0–1 pip + ~$7 per lot round turn), as an all-in spread per round trip:
 # FX 0.2–0.3 pip raw + 0.7 pip commission; gold 0.12 + 0.07; indices typically commission-free.

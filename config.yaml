@@ -256,14 +256,18 @@ shadow:
     symbols: [XAUUSD]
     risk_pct: 0.001             # constant 0.10% of the book's equity per trade
   mode: playbook                # what the shadow book runs (default: setup_first if the real book is hourly_pick)
-  modes: [playbook, h1_vol_trend]  # shadow books (overrides `mode`); several run side by side, each with its own journal.
+  ema21_rsi55:                  # Sam's EMA21 + RSI 55 rule on paper, rules frozen (agents/ema_rsi_trader.py)
+    symbols: [XAUUSD, US30]
+    risk_pct: 0.001             # 0.10% of the book's equity at the protective stop
+    stop_atr: 3.0               # protective stop (not part of the tested rule): 3 × ATR(14, 15m) below entry
+  modes: [playbook, h1_vol_trend, ema21_rsi55]  # shadow books (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
-  spread:                       # estimated full spread in price points (virtual fills pay half on entry and exit)
-    XAUUSD: 0.40
-    NDQ: 1.50
-    US30: 2.50
+  spread:                       # full spread in price points (virtual fills pay half on entry and exit)
+    XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
+    NDQ: 2.30                   # (was 0.40 / 1.50 / 2.50 — estimates that understated real costs)
+    US30: 3.00
     EURUSD: 0.00014
     GBPUSD: 0.00020
     AUDUSD: 0.00016
