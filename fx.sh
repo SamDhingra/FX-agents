@@ -122,6 +122,13 @@ case "${1:-help}" in
                { echo "# Holdout score: $tag on $set_"; echo; echo '```'; head -40 summary.csv 2>/dev/null; echo '```'; } > report.md
                cp summary.csv cells.csv 2>/dev/null || true )
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  rule)      # test a simple frozen rule (fxagents/simple_rules.py) on an export: ./fx.sh rule ema21_rsi55 dev_m1
+             need_env; mkdir -p logs; r="${2:?rule}"; set_="${3:-dev_m1}"
+             [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/rule-build.log 2>&1 || { echo "build failed — see logs/rule-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.simple_rules "$r" --data "$set_" \
+               --out "data/year_test/${r}_${set_}" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -167,7 +174,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
