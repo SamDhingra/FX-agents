@@ -30,3 +30,11 @@ def test_entry_and_exit_follow_the_rule():
         assert (held.c.iloc[:-1] >= held.ema21.iloc[:-1]).all() and held.c.iloc[-1] < held.ema21.iloc[-1]
         assert abs(t["entry"] - (m1.loc[t["entry_time"], "ask_o"])) < 1e-12      # bought at the ask
         assert abs(t["exit"] - (m1.loc[t["exit_time"], "bid_o"])) < 1e-12        # sold at the bid
+
+
+def test_cost_is_one_spread_per_round_trip():
+    rng = np.random.default_rng(5)
+    m1 = frame(100 + np.cumsum(rng.normal(0, 0.05, 15 * 400)))       # spread 0.2 everywhere
+    for t in run_ema21_rsi55(m1, "24h"):
+        assert abs(t["cost_R"] * t["atr"] - 0.2) < 1e-9
+        assert abs((t["R"] - t["R_2x"]) * t["atr"] - 0.2) < 1e-9

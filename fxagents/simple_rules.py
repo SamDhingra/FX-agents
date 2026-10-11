@@ -24,6 +24,20 @@ import numpy as np
 import pandas as pd
 
 NY = "America/New_York"
+# one pip in price units: FX majors 0.0001; gold 0.10 (the common retail convention); indices 1 point
+PIP = {"EURUSD": 0.0001, "GBPUSD": 0.0001, "AUDUSD": 0.0001, "NZDUSD": 0.0001, "USDCAD": 0.0001, "USDCHF": 0.0001,
+       "USDJPY": 0.01, "XAUUSD": 0.10, "XAGUSD": 0.01, "NDQ": 1.0, "US30": 1.0, "SPX": 1.0}
+
+
+def pip_stats(t: pd.DataFrame, pip: float) -> dict:
+    """Net pips after the real spread: winners vs losers, totals and averages, plus the spread paid."""
+    p = t.points / pip
+    w, l = p[p > 0], p[p <= 0]
+    sp = t.cost_R * t.atr / pip
+    return {"pips_won": float(w.sum()), "pips_lost": float(l.sum()), "pips_net": float(p.sum()),
+            "avg_win_pips": float(w.mean()) if len(w) else 0.0, "avg_loss_pips": float(l.mean()) if len(l) else 0.0,
+            "avg_pips": float(p.mean()), "spread_pips_avg": float(sp.mean()), "spread_pips_total": float(sp.sum()),
+            "largest_win_pips": float(p.max()), "largest_loss_pips": float(p.min())}
 
 
 def load(path: Path) -> pd.DataFrame:
@@ -106,8 +120,10 @@ def run_ema21_rsi55(m1: pd.DataFrame, version: str) -> list[dict]:
         sp_out = sp_o[jx]
         pts = px - entry
         out.append({"entry_time": t1[j0], "exit_time": t1[jx], "entry": entry, "exit": px, "atr": atr[i],
-                    "points": pts, "R": pts / atr[i], "R_2x": (pts - sp_in - sp_out) / atr[i],
-                    "cost_R": (sp_in + sp_out) / atr[i], "rsi": rsi[i], "exit_reason": why,
+                    "points": pts, "R": pts / atr[i],
+                    # vs mid, buying at the ask and selling at the bid costs half a spread on each side = one spread
+                    # per round trip (already inside `points`); 2× costs pays that again
+                    "R_2x": (pts - (sp_in + sp_out) / 2) / atr[i], "cost_R": (sp_in + sp_out) / 2 / atr[i], "rsi": rsi[i], "exit_reason": why,
                     "hold_min": (t1[jx] - t1[j0]).total_seconds() / 60,
                     "overnight": t1[jx].tz_convert(NY).date() != t1[j0].tz_convert(NY).date()})
         i = max(k, i + 1)
@@ -151,6 +167,8 @@ def main():
         for v in ("24h", "day"):
             t = pd.DataFrame(run_ema21_rsi55(m1, v))
             st = stats(t, days)
+            if len(t):
+                st |= pip_stats(t, PIP.get(sym, 1.0))
             rows.append({"symbol": sym, "version": v, **st})
             if len(t):
                 trades.append(t.assign(symbol=sym, version=v))
@@ -165,7 +183,7 @@ def main():
     md = [f"# Rule test: {a.rule} on {a.data}", "",
           "Rule (frozen before testing): 15m candle closes above EMA21 (previous close at/below it) with RSI(14) > 55 → buy "
           "at the ask on the next minute; exit at the bid on the next minute after the first 15m close below EMA21. Long only, "
-          "no stop. R = ATR(14) of 15m candles at entry. Real OANDA bid/ask; 2× costs pays the spread again on both sides. "
+          "no stop. R = ATR(14) of 15m candles at entry. Real OANDA bid/ask (one spread per round trip, already in every result); 2× costs pays that spread once more. "
           "Versions: 24h = as written (forced out before closures > 60 min); day = entries 02:00–15:30 NY, flat 15:50 NY.",
           "", f"Trades span {span}. Pass = ≥100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs.", "",
           "| Symbol | Version | Trades | Win | Avg R | 95% range | Total R | Avg R 2× costs | Spread paid (R) | Thirds | Median hold | Overnight | Pass |",
@@ -178,6 +196,16 @@ def main():
                   f"{r['ci_lo']:+.3f} to {r['ci_hi']:+.3f} | {r['total_R']:+.1f} | {r['avg_R_2x']:+.3f} | {r['cost_R']:.3f} | "
                   f"{' / '.join(f'{x:+.2f}' for x in r['thirds'])} | {r['hold_min_median']:.0f} min | {r['overnight']:.0%} | "
                   f"{'**PASS**' if r['pass'] else 'no'} |")
+    md += ["", "## Pips (after the real spread)", "",
+           "1 pip = 0.0001 for FX majors, 0.10 for gold, 1 point for NDQ/US30. Pips won = sum over winning trades; pips lost = "
+           "sum over losing trades; the spread is already inside both (it is shown separately so you can see its weight).", "",
+           "| Symbol | Version | Trades | Pips won | Pips lost | Net pips | Avg win | Avg loss | Avg per trade | Spread per trade | Spread total | Largest win / loss |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for r in rows:
+        if r.get("trades"):
+            md.append(f"| {r['symbol']} | {r['version']} | {r['trades']} | {r['pips_won']:+,.0f} | {r['pips_lost']:+,.0f} | "
+                      f"**{r['pips_net']:+,.0f}** | {r['avg_win_pips']:+.1f} | {r['avg_loss_pips']:+.1f} | {r['avg_pips']:+.1f} | "
+                      f"{r['spread_pips_avg']:.1f} | {r['spread_pips_total']:,.0f} | {r['largest_win_pips']:+.0f} / {r['largest_loss_pips']:+.0f} |")
     (a.out / "report.md").write_text("\n".join(md) + "\n")
     (a.out / "run.json").write_text(json.dumps({"rule": a.rule, "data": a.data, "rows": rows}, indent=2, default=str))
     print("\n".join(md[:6]))
