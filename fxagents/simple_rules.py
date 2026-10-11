@@ -57,37 +57,55 @@ def wilder(x: pd.Series, n: int) -> pd.Series:
     return x.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
 
 
-def bars15(m1: pd.DataFrame) -> pd.DataFrame:
-    """15-minute mid candles; label = candle END (the moment it is complete); empty quarters dropped."""
-    r = m1.resample("15min", label="right", closed="left")
+def bars(m1: pd.DataFrame, tf: str = "15min") -> pd.DataFrame:
+    """Mid candles of `tf`; label = candle END (the moment it is complete); empty candles dropped.
+    rvol = this candle's tick volume / median volume of the same time-of-day candle over the previous 20 days
+    (earlier days only — no look-ahead); NaN until 10 earlier days exist."""
+    r = m1.resample(tf, label="right", closed="left")
     b = pd.DataFrame({"o": r["m_o"].first(), "h": r["m_h"].max(), "l": r["m_l"].min(), "c": r["m_c"].last(),
-                      "n": r["m_c"].count()}).dropna()
+                      "n": r["m_c"].count(), "vol": r["volume"].sum() if "volume" in m1 else r["m_c"].count()}).dropna()
     b = b[b.n > 0]
     b["ema21"] = ema(b.c, 21)
     d = b.c.diff()
     b["rsi"] = 100 - 100 / (1 + wilder(d.clip(lower=0), 14) / wilder((-d).clip(lower=0), 14))
     tr = pd.concat([b.h - b.l, (b.h - b.c.shift()).abs(), (b.l - b.c.shift()).abs()], axis=1).max(axis=1)
     b["atr"] = wilder(tr, 14)
+    slot = b.index.tz_convert(NY).strftime("%H:%M")
+    med = b.groupby(slot).vol.transform(lambda x: x.shift(1).rolling(20, min_periods=10).median())
+    b["rvol"] = b.vol / med.replace(0, np.nan)
     return b
 
 
-def run_ema21_rsi55(m1: pd.DataFrame, version: str) -> list[dict]:
-    b = bars15(m1)
+def bars15(m1: pd.DataFrame) -> pd.DataFrame:
+    return bars(m1, "15min")
+
+
+def run_ema21_rsi55(m1: pd.DataFrame, version: str, tf: str = "15min", vol_min: float | None = None,
+                    add: bool = False, b: pd.DataFrame | None = None) -> list[dict]:
+    """The rule (see module doc). vol_min: also require rvol ≥ vol_min on the signal candle. add: once per trade,
+    on a later candle that closes above EMA21 with 58 < RSI ≤ 70 while that close is above the entry price, buy a
+    second, equal unit at the ask on the next minute; both units exit together. R is per INITIAL unit (ATR at entry),
+    so an added trade's R is the sum of both units."""
+    b = bars(m1, tf) if b is None else b
     t1 = m1.index
+    ns = t1.as_unit("ns").asi8
     ask_o, bid_o, bid_c = m1.ask_o.to_numpy(), m1.bid_o.to_numpy(), m1.bid_c.to_numpy()
     sp_o = (m1.ask_o - m1.bid_o).to_numpy()
-    gap = np.r_[np.diff(t1.as_unit("ns").asi8), 0] > 60 * 60 * 1_000_000_000
+    gap = np.r_[np.diff(ns), 0] > 60 * 60 * 1_000_000_000
     loc = b.index.tz_convert(NY)
     mins = loc.hour * 60 + loc.minute
-    c, e, rsi, atr = b.c.to_numpy(), b.ema21.to_numpy(), b.rsi.to_numpy(), b.atr.to_numpy()
-    first_min = np.searchsorted(t1.as_unit("ns").asi8, b.index.as_unit("ns").asi8)   # first minute at/after each bar end
+    c, e, rsi, atr, rv = (b[x].to_numpy() for x in ("c", "ema21", "rsi", "atr", "rvol"))
+    first_min = np.searchsorted(ns, b.index.as_unit("ns").asi8)       # first minute at/after each candle's end
     out, i, n = [], 1, len(b)
     while i < n:
         ok = np.isfinite(e[i]) and np.isfinite(e[i - 1]) and np.isfinite(rsi[i]) and np.isfinite(atr[i]) and atr[i] > 0
         if not (ok and c[i - 1] <= e[i - 1] and c[i] > e[i] and rsi[i] > 55):
             i += 1
             continue
-        if version == "day" and not (120 <= mins[i] <= 930):           # entries 02:00–15:30 NY (bar close time)
+        if vol_min is not None and not (np.isfinite(rv[i]) and rv[i] >= vol_min):
+            i += 1
+            continue
+        if version == "day" and not (120 <= mins[i] <= 930):           # entries 02:00–15:30 NY (candle close time)
             i += 1
             continue
         j0 = first_min[i]
@@ -95,35 +113,43 @@ def run_ema21_rsi55(m1: pd.DataFrame, version: str) -> list[dict]:
             i += 1
             continue
         entry, sp_in = ask_o[j0], sp_o[j0]
-        # exit: first later bar closing below EMA21 → next minute's bid open; or forced exits
-        k, jx, why = i + 1, None, None
+        k, jx, why, ja = i + 1, None, None, None
         flat = None
         if version == "day":
-            day = loc[i].normalize()
-            flat = (day + pd.Timedelta(hours=15, minutes=50)).tz_convert("UTC")
+            flat = (loc[i].normalize() + pd.Timedelta(hours=15, minutes=50)).tz_convert("UTC")
         nxt_gap = j0 + int(np.argmax(gap[j0:])) if gap[j0:].any() else None
         while k < n:
             jk = first_min[k] if first_min[k] < len(t1) else len(t1) - 1
-            if nxt_gap is not None and jk > nxt_gap:                    # market closed before this bar: out at the last bid
+            if nxt_gap is not None and jk > nxt_gap:                    # market closed before this candle: out at the last bid
                 jx, why = nxt_gap, "closure"
                 break
             if flat is not None and b.index[k] > flat:
-                jx, why = int(np.searchsorted(t1.as_unit("ns").asi8, flat.value)), "flat_1550"
+                jx, why = int(np.searchsorted(ns, flat.value)), "flat_1550"
                 break
             if c[k] < e[k]:
                 jx, why = jk, "close_below_ema"
                 break
+            if add and ja is None and 58 < rsi[k] <= 70 and c[k] > entry and first_min[k] < len(t1) \
+                    and t1[first_min[k]] - b.index[k] <= pd.Timedelta("5min") \
+                    and (flat is None or b.index[k] <= flat - pd.Timedelta("20min")):
+                ja = first_min[k]
             k += 1
         if jx is None or jx >= len(t1):
             break                                                       # still open at the end of the data
         px = bid_c[jx] if why == "closure" else bid_o[jx]
         sp_out = sp_o[jx]
         pts = px - entry
+        cost = (sp_in + sp_out) / 2                                    # vs mid: half a spread each side = one spread
+        add_pts, add_cost = 0.0, 0.0
+        if ja is not None and ja < jx:
+            add_pts = px - ask_o[ja]
+            add_cost = (sp_o[ja] + sp_out) / 2
+        tot = pts + add_pts
         out.append({"entry_time": t1[j0], "exit_time": t1[jx], "entry": entry, "exit": px, "atr": atr[i],
-                    "points": pts, "R": pts / atr[i],
-                    # vs mid, buying at the ask and selling at the bid costs half a spread on each side = one spread
-                    # per round trip (already inside `points`); 2× costs pays that again
-                    "R_2x": (pts - (sp_in + sp_out) / 2) / atr[i], "cost_R": (sp_in + sp_out) / 2 / atr[i], "rsi": rsi[i], "exit_reason": why,
+                    "points": tot, "points_base": pts, "added": ja is not None and ja < jx, "add_points": add_pts,
+                    "R": tot / atr[i], "R_base": pts / atr[i],
+                    "R_2x": (tot - cost - add_cost) / atr[i], "cost_R": (cost + add_cost) / atr[i],
+                    "rsi": rsi[i], "rvol": rv[i], "exit_reason": why,
                     "hold_min": (t1[jx] - t1[j0]).total_seconds() / 60,
                     "overnight": t1[jx].tz_convert(NY).date() != t1[j0].tz_convert(NY).date()})
         i = max(k, i + 1)
@@ -149,14 +175,28 @@ def stats(t: pd.DataFrame, days: pd.DatetimeIndex, seed: int = 7) -> dict:
             "pass": bool(len(t) >= 100 and r.mean() > 0 and lo > 0 and t.R_2x.mean() > 0)}
 
 
+VARIANTS = {
+    # name: (symbols or None for every file, [(tf, version, vol_min, add), ...])
+    "ema21_rsi55": (None, [("15min", v, None, False) for v in ("24h", "day")]),
+    # refinement (Sam, 2026-10-11, after seeing ema21_rsi55): indices + gold only; 15m and 1h; volume filter
+    # rvol ≥ 1.0 (signal candle at least as active as that time of day usually is); add one equal unit while in
+    # profit on a close above EMA21 with 58 < RSI ≤ 70. 2 × 2 × 2 × 2 = 16 variants × 3 instruments, fixed here.
+    "ema21_rsi55_v2": (["XAUUSD", "NDQ", "US30"],
+                       [(tf, v, vm, ad) for tf in ("15min", "1h") for v in ("24h", "day")
+                        for vm in (None, 1.0) for ad in (False, True)]),
+}
+RVOL_BUCKETS = [(0, 0.8, "< 0.8"), (0.8, 1.2, "0.8–1.2"), (1.2, 2.0, "1.2–2.0"), (2.0, np.inf, "≥ 2.0")]
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("rule", choices=["ema21_rsi55"])
+    ap.add_argument("rule", choices=sorted(VARIANTS))
     ap.add_argument("--data", required=True, help="export name under data/export/")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
+    want, grid = VARIANTS[a.rule]
     src = Path("data/export") / a.data
-    files = sorted(src.glob("*_M1.csv.gz"))
+    files = [f for f in sorted(src.glob("*_M1.csv.gz")) if want is None or f.name.split("_M1")[0] in want]
     a.out.mkdir(parents=True, exist_ok=True)
     rows, trades = [], []
     for f in files:
@@ -164,48 +204,84 @@ def main():
         m1 = load(f)
         days = pd.DatetimeIndex(sorted(set(m1.index.tz_convert(NY).normalize())))
         days = days[days.dayofweek < 5]
-        for v in ("24h", "day"):
-            t = pd.DataFrame(run_ema21_rsi55(m1, v))
+        cache = {}
+        for tf, v, vm, ad in grid:
+            if tf not in cache:
+                cache[tf] = bars(m1, tf)
+            t = pd.DataFrame(run_ema21_rsi55(m1, v, tf, vm, ad, cache[tf]))
             st = stats(t, days)
             if len(t):
                 st |= pip_stats(t, PIP.get(sym, 1.0))
-            rows.append({"symbol": sym, "version": v, **st})
+                st["added_share"] = float(t.added.mean())
+                st["add_R_added"] = float((t.R - t.R_base)[t.added].mean()) if t.added.any() else None
+            key = {"symbol": sym, "tf": tf, "version": v, "volume": "rvol≥1" if vm else "—", "add": "yes" if ad else "—"}
+            rows.append({**key, **st})
             if len(t):
-                trades.append(t.assign(symbol=sym, version=v))
-            print(f"  {sym:7s} {v:3s} {st.get('trades', 0):5d} trades  avg {st.get('avg_R', float('nan')):+.3f}R  "
-                  f"95% [{st.get('ci_lo', float('nan')):+.3f}, {st.get('ci_hi', float('nan')):+.3f}]  "
-                  f"2×cost {st.get('avg_R_2x', float('nan')):+.3f}  spread {st.get('cost_R', float('nan')):.3f}R", flush=True)
-        del m1
+                trades.append(t.assign(**key))
+            print(f"  {sym:7s} {tf:5s} {v:3s} vol={key['volume']:6s} add={key['add']:3s} {st.get('trades', 0):5d} trades  "
+                  f"avg {st.get('avg_R', float('nan')):+.3f}R  95% [{st.get('ci_lo', float('nan')):+.3f}, "
+                  f"{st.get('ci_hi', float('nan')):+.3f}]  2×cost {st.get('avg_R_2x', float('nan')):+.3f}", flush=True)
+        del m1, cache
     T = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     if len(T):
         T.to_csv(a.out / "trades.csv.gz", index=False)
     span = f"{T.entry_time.min():%Y-%m-%d} → {T.exit_time.max():%Y-%m-%d}" if len(T) else "—"
+    npass = sum(bool(r.get("pass")) for r in rows)
     md = [f"# Rule test: {a.rule} on {a.data}", "",
-          "Rule (frozen before testing): 15m candle closes above EMA21 (previous close at/below it) with RSI(14) > 55 → buy "
-          "at the ask on the next minute; exit at the bid on the next minute after the first 15m close below EMA21. Long only, "
-          "no stop. R = ATR(14) of 15m candles at entry. Real OANDA bid/ask (one spread per round trip, already in every result); 2× costs pays that spread once more. "
-          "Versions: 24h = as written (forced out before closures > 60 min); day = entries 02:00–15:30 NY, flat 15:50 NY.",
-          "", f"Trades span {span}. Pass = ≥100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs.", "",
-          "| Symbol | Version | Trades | Win | Avg R | 95% range | Total R | Avg R 2× costs | Spread paid (R) | Thirds | Median hold | Overnight | Pass |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "Base rule (frozen before testing): candle closes above EMA21 (previous close at/below it) with RSI(14) > 55 → buy "
+          "at the ask on the next minute; exit at the bid on the next minute after the first close below EMA21. Long only, "
+          "no stop. R = ATR(14) of that timeframe at entry. Real OANDA bid/ask (one spread per round trip, already in every "
+          "result); 2× costs pays that spread once more. Versions: 24h = as written (forced out before closures > 60 min); "
+          "day = entries 02:00–15:30 NY, flat 15:50 NY. Volume rvol≥1 = the signal candle's tick volume at least the median of "
+          "the same time-of-day candle over the previous 20 days. Add = one extra equal unit, once, on a later close above "
+          "EMA21 with 58 < RSI ≤ 70 while above the entry price; R is per initial unit, so an added trade's R counts both units.",
+          "", f"Trades span {span}. Pass = ≥100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs. "
+          f"**{npass} of {len(rows)} variants pass.** With {len(rows)} variants, about {len(rows) * 0.025:.0f} could pass by "
+          "luck alone, so anything that passes here goes to the holdout once, unchanged, before it counts.", "",
+          "| Symbol | TF | Version | Volume | Add | Trades | Win | Avg R | 95% range | Total R | Avg R 2× costs | Spread (R) | Thirds | Median hold | Pass |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
+        k = f"| {r['symbol']} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} |"
         if not r.get("trades"):
-            md.append(f"| {r['symbol']} | {r['version']} | 0 | | | | | | | | | | no |")
+            md.append(k + " 0 | | | | | | | | | no |")
             continue
-        md.append(f"| {r['symbol']} | {r['version']} | {r['trades']} | {r['win']:.0%} | {r['avg_R']:+.3f} | "
-                  f"{r['ci_lo']:+.3f} to {r['ci_hi']:+.3f} | {r['total_R']:+.1f} | {r['avg_R_2x']:+.3f} | {r['cost_R']:.3f} | "
-                  f"{' / '.join(f'{x:+.2f}' for x in r['thirds'])} | {r['hold_min_median']:.0f} min | {r['overnight']:.0%} | "
+        md.append(f"{k} {r['trades']} | {r['win']:.0%} | {r['avg_R']:+.3f} | {r['ci_lo']:+.3f} to {r['ci_hi']:+.3f} | "
+                  f"{r['total_R']:+.1f} | {r['avg_R_2x']:+.3f} | {r['cost_R']:.3f} | "
+                  f"{' / '.join(f'{x:+.2f}' for x in r['thirds'])} | {r['hold_min_median']:.0f} min | "
                   f"{'**PASS**' if r['pass'] else 'no'} |")
     md += ["", "## Pips (after the real spread)", "",
-           "1 pip = 0.0001 for FX majors, 0.10 for gold, 1 point for NDQ/US30. Pips won = sum over winning trades; pips lost = "
-           "sum over losing trades; the spread is already inside both (it is shown separately so you can see its weight).", "",
-           "| Symbol | Version | Trades | Pips won | Pips lost | Net pips | Avg win | Avg loss | Avg per trade | Spread per trade | Spread total | Largest win / loss |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "1 pip = 0.0001 for FX majors, 0.10 for gold, 1 point for NDQ/US30. With adds, pips count both units.", "",
+           "| Symbol | TF | Version | Volume | Add | Trades | Pips won | Pips lost | Net pips | Avg win | Avg loss | Spread per trade | Largest win / loss |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if r.get("trades"):
-            md.append(f"| {r['symbol']} | {r['version']} | {r['trades']} | {r['pips_won']:+,.0f} | {r['pips_lost']:+,.0f} | "
-                      f"**{r['pips_net']:+,.0f}** | {r['avg_win_pips']:+.1f} | {r['avg_loss_pips']:+.1f} | {r['avg_pips']:+.1f} | "
-                      f"{r['spread_pips_avg']:.1f} | {r['spread_pips_total']:,.0f} | {r['largest_win_pips']:+.0f} / {r['largest_loss_pips']:+.0f} |")
+            md.append(f"| {r['symbol']} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} | {r['trades']} | "
+                      f"{r['pips_won']:+,.0f} | {r['pips_lost']:+,.0f} | **{r['pips_net']:+,.0f}** | {r['avg_win_pips']:+.1f} | "
+                      f"{r['avg_loss_pips']:+.1f} | {r['spread_pips_avg']:.1f} | {r['largest_win_pips']:+.0f} / {r['largest_loss_pips']:+.0f} |")
+    if len(T) and "rvol" in T:
+        base = T[(T["volume"] == "—") & (T["add"] == "—")]
+        md += ["", "## Volume: how the base rule did by the signal candle's relative volume", "",
+               "Descriptive only (no add, no volume filter). Buckets were fixed before the run; reading the best bucket and "
+               "filtering on it would be fitting to this data.", "",
+               "| Symbol | TF | Version | " + " | ".join(f"rvol {lab}: trades / win / avg R" for _, _, lab in RVOL_BUCKETS) + " |",
+               "|---|---|---|" + "---|" * len(RVOL_BUCKETS)]
+        for (sym, tf, v), g in base.groupby(["symbol", "tf", "version"], sort=False):
+            cells = []
+            for lo, hi, _ in RVOL_BUCKETS:
+                x = g[(g.rvol >= lo) & (g.rvol < hi)]
+                cells.append(f"{len(x)} / {(x.R > 0).mean():.0%} / {x.R.mean():+.2f}" if len(x) else "0")
+            md.append(f"| {sym} | {tf} | {v} | " + " | ".join(cells) + " |")
+    adds = [r for r in rows if r.get("trades") and r["add"] == "yes"]
+    if adds:
+        md += ["", "## Adds: what the second unit contributed", "",
+               "| Symbol | TF | Version | Volume | Trades | Share with an add | Avg R of the added unit (on trades that added) |",
+               "|---|---|---|---|---|---|---|"]
+        for r in adds:
+            ar = r.get("add_R_added")
+            md.append(f"| {r['symbol']} | {r['tf']} | {r['version']} | {r['volume']} | {r['trades']} | {r['added_share']:.0%} | "
+                      f"{'—' if ar is None else f'{ar:+.3f}'} |")
+    md += ["", "Jev (the bot's LLM grader) is not in this backtest: asking a model today to grade 2024–2026 candles is not a "
+           "clean test (it may know what happened next). It can only be tested forward, by logging its grade on live signals."]
     (a.out / "report.md").write_text("\n".join(md) + "\n")
     (a.out / "run.json").write_text(json.dumps({"rule": a.rule, "data": a.data, "rows": rows}, indent=2, default=str))
     print("\n".join(md[:6]))

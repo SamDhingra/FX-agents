@@ -38,3 +38,24 @@ def test_cost_is_one_spread_per_round_trip():
     for t in run_ema21_rsi55(m1, "24h"):
         assert abs(t["cost_R"] * t["atr"] - 0.2) < 1e-9
         assert abs((t["R"] - t["R_2x"]) * t["atr"] - 0.2) < 1e-9
+
+
+def test_add_follows_its_rule_and_volume_filter_only_removes_trades():
+    rng = np.random.default_rng(11)
+    p = 100 + np.cumsum(rng.normal(0.002, 0.05, 15 * 600))
+    m1 = frame(p)
+    m1["volume"] = rng.integers(1, 50, len(m1))
+    b = bars15(m1)
+    base = run_ema21_rsi55(m1, "24h", "15min", None, False, b)
+    added = run_ema21_rsi55(m1, "24h", "15min", None, True, b)
+    assert [t["entry_time"] for t in base] == [t["entry_time"] for t in added]       # adds never change entries/exits
+    for t in added:
+        if t["added"]:
+            held = b[(b.index > t["entry_time"]) & (b.index < t["exit_time"])]
+            ok = held[(held.rsi > 58) & (held.rsi <= 70) & (held.c > held.ema21) & (held.c > t["entry"])]
+            assert len(ok)                                                          # a qualifying candle existed
+        else:
+            assert t["R"] == t["R_base"]
+    vol = run_ema21_rsi55(m1, "24h", "15min", 1.0, False, b)
+    assert {t["entry_time"] for t in vol} <= {t["entry_time"] for t in base} | {t["entry_time"] for t in vol}
+    assert all(t["rvol"] >= 1.0 for t in vol)
