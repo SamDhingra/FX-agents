@@ -939,7 +939,7 @@ function renderAgents(s){
 
 /* ── compare (live vs shadow) ── */
 const MODE_NAMES = {hourly_pick:"hourly pick", setup_first:"setup-first", playbook:"playbook",
-  h1_vol_trend:"gold H1 trend", ema21_rsi55:"EMA21 + RSI 55"};
+  playbook_regime:"playbook + chop filter", h1_vol_trend:"gold H1 trend", ema21_rsi55:"EMA21 + RSI 55"};
 const modeName = m => MODE_NAMES[m] || String(m || "").replace(/_/g, " ");
 const ModeName = m => { const x = modeName(m); return x.charAt(0).toUpperCase() + x.slice(1); };
 let cmpRange = "week", CMP = null, cmpVs = null;

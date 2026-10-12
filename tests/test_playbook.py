@@ -377,3 +377,25 @@ def test_pinned_cells_join_the_weekly_selection():
     assert P.with_pinned(cfg, data)["cells"] == data["cells"]            # never twice
     from fxagents.agents.playbook_trader import Cell
     assert Cell(data["cells"][0]).st.params["min_body_atr"] == 0.5
+
+
+def test_playbook_regime_book_drops_scalps_in_a_trend(tmp_path):
+    ctx = make_ctx(tmp_path, [cell("XAUUSD", "smc_bos_retest", "scalp", e=0.2), cell("XAUUSD", "ict_ote", "std", e=0.1)])
+    ctx.regime_route = True
+    t = PlaybookTrader(ctx); t.start()
+
+    async def forced(sym):
+        return {"regime": "trend", "chop": 30.0, "measured": "trend", "jev": None, "why": "CHOP 30.0"}
+    t.regime_now = forced
+    reqs = []
+
+    async def risk(r):
+        reqs.append(r)
+        sg = r["signal"]
+        ctx.state.positions[sg.strategy] = Position(sg.symbol, sg.side, sg.strategy, sg.stop, sg.stop,
+                                                    abs(sg.entry - sg.stop), 1.0, NOW)
+    ctx.bus.subscribe("entry_request", risk)
+    fire(ctx, t, "XAUUSD")
+    assert len(reqs) == 1 and reqs[0]["signal"].strategy.startswith("ict_ote")      # the scalp cell was skipped
+    why = [s["why"] for s in ctx.journal.signals(10) if s["strategy"].startswith("smc_bos_retest")]
+    assert why and why[0].startswith("regime trend")

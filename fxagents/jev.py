@@ -146,6 +146,24 @@ class JevScorer:
                 "htf_aligned": {"value": 0.7 if s.get("htf_bias", 0) * (1 if s["side"] == "LONG" else -1) > 0 else 0.35,
                                 "confidence": 0.4}}
 
+    # ── 2b. market regime: choppy / consolidating or trending ─────────────
+    async def market_regime(self, info: dict) -> dict:
+        """Jev's read of the market state. `info` carries the measured Choppiness Index (`chop`), recent 15m
+        candles, ADX, ATR percentile and the higher-timeframe bias. Returns chop_prob (0 = clearly trending,
+        1 = clearly choppy), its confidence and the source. Without Jev, the measured CHOP stands in."""
+        questions: dict[str, Any] = {}
+        if self.live:
+            questions["choppy"] = Noul(instructions=(
+                f"Look at the recent 15-minute candles of {info.get('symbol')}. Is the market choppy or "
+                "consolidating (overlapping candles, no follow-through, range-bound) rather than trending in "
+                "either direction? Answer yes for chop/consolidation, no for a clean trend."))
+        ch = info.get("chop")
+        v = 0.5 if ch is None else min(1.0, max(0.0, (float(ch) - 38.2) / (61.8 - 38.2)))
+        fb = {"choppy": {"value": round(v, 4), "confidence": 0.3}}
+        res = await self._ask("market_regime", info, questions, fb, {"symbol": info.get("symbol")})
+        a = res["answers"].get("choppy", fb["choppy"])
+        return {"chop_prob": a["value"], "confidence": a["confidence"], "source": res["source"]}
+
     # ── 3. pyramid add: is continuation likely ────────────────────────────
     async def continuation(self, info: dict) -> dict:
         questions: dict[str, Any] = {}

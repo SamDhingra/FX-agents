@@ -282,7 +282,7 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-MODES = ("hourly_pick", "setup_first", "playbook", "h1_vol_trend", "ema21_rsi55")
+MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "h1_vol_trend", "ema21_rsi55")
 
 
 def shadow_db_path(main_path: str, mode: str | None = None) -> str:
@@ -339,9 +339,10 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     elif mode == "ema21_rsi55":
         from .ema_rsi_trader import EmaRsiTrader
         trader = EmaRsiTrader(sctx)
-    elif mode == "playbook":
+    elif mode in ("playbook", "playbook_regime"):
         from .playbook_trader import PlaybookHolder, PlaybookTrader
         sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
+        sctx.regime_route = mode == "playbook_regime"     # same cells, plus the chop/trend routing (regime.py)
         trader = PlaybookTrader(sctx)
     else:
         trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)

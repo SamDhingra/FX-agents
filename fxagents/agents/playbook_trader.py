@@ -17,6 +17,7 @@ import logging
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .. import structure as sx
@@ -24,6 +25,7 @@ from .. import playbook as pbk
 from ..models import Signal
 from ..strategies import build_strategy
 from .core import Agent
+from .. import regime as rx
 from .trading import TraderAgent, jev_gate, jev_gate_why
 
 log = logging.getLogger("playbook")
@@ -240,6 +242,19 @@ class PlaybookTrader(TraderAgent):
                 cands.append((cell, sig, rec))
         if not cands:
             return
+        if self.regime_route:
+            rg = await self.regime_now(sym)
+            kept = []
+            for cell, sig, rec in cands:
+                if rx.allowed(rg["regime"], cell.mgmt):
+                    kept.append((cell, sig, rec))
+                else:
+                    self.ctx.journal.add_signal(rec | {"action": "skipped", "why": (
+                        f"regime {rg['regime']} ({rg['why']}): "
+                        + ("scalps only" if rg["regime"] == "chop" else "no scalps in a trend"))})
+            cands = kept
+            if not cands:
+                return
         cands.sort(key=lambda c: (-c[0].e, -c[0].p))        # highest expectancy first (win rate only breaks ties)
         taken = False
         for cell, sig, rec in cands:
@@ -264,6 +279,46 @@ class PlaybookTrader(TraderAgent):
                 "playbook": {"max_per_symbol": rule.max_positions, "mgmt": cell.mgmt,
                              "group": {"members": list(pol.index_group), "max": pol.index_group_max}}})
             taken = any(p.id not in before and p.symbol == sym for p in self.state.positions.values())
+
+    @property
+    def regime_route(self) -> bool:
+        """Chop/trend routing (fxagents/regime.py): on for the `playbook_regime` shadow book, or for any playbook
+        book with `playbook.regime_route: true` in the config."""
+        return bool(getattr(self.ctx, "regime_route", False) or (self.cfg.get("playbook") or {}).get("regime_route"))
+
+    async def regime_now(self, sym: str) -> dict:
+        """The market state for `sym` on the last completed 15m candle, decided once per candle: Jev's answer when
+        it is confident (chop_prob ≥ 0.6 → chop, ≤ 0.4 → trend), otherwise the measured Choppiness Index."""
+        df = self.ctx.store.tf(sym, rx.TF)
+        key = (sym, df.index[-1] if len(df) else None)
+        cache = self.__dict__.setdefault("_regime", {})
+        if key in cache:
+            return cache[key]
+        ch = rx.chop_index(df).iloc[-1] if len(df) > rx.N + 1 else float("nan")
+        measured = rx.classify(ch)
+        out = {"regime": measured, "chop": None if not np.isfinite(ch) else round(float(ch), 1),
+               "measured": measured, "jev": None, "why": f"CHOP {ch:.1f}" if np.isfinite(ch) else "no CHOP yet"}
+        jev = getattr(self.ctx, "jev", None)
+        if jev is not None and hasattr(jev, "market_regime") and len(df) > 20:
+            b = self.state.bias.get(sym, {})
+            info = {"symbol": sym, "chop": out["chop"], "measured_regime": measured,
+                    "recent_15m": df.iloc[-16:][["open", "high", "low", "close"]].round(4).to_dict("split")["data"],
+                    "htf_bias": {k: b.get(k) for k in ("label", "score", "d", "h4", "h1", "state")},
+                    "time_ny": str(self.now())}
+            try:
+                j = await jev.market_regime(info)
+                out["jev"] = j
+                if j.get("source") == "jev" and j.get("confidence", 0) >= 0.4:
+                    p = float(j["chop_prob"])
+                    if p >= 0.6 or p <= 0.4:
+                        out["regime"] = "chop" if p >= 0.6 else "trend"
+                        out["why"] = f"Jev chop {p:.2f}, CHOP {out['chop']}"
+            except Exception as e:  # noqa: BLE001 — Jev down: the measured regime stands
+                self.log.warning("regime: Jev failed for %s: %s", sym, e)
+        if len(cache) > 64:
+            cache.clear()
+        cache[key] = out
+        return out
 
     async def grade(self, cell: Cell, sig: Signal, ctx: dict, df: pd.DataFrame) -> dict:
         b = self.state.bias.get(sig.symbol, {})
