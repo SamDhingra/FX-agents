@@ -1127,14 +1127,15 @@ function pbStats(w){
 }
 function roleBadge(role){
   return role === "core" ? `<span class="role core">Core · priority &amp; capacity</span>`
-    : role === "selective" ? `<span class="role selective">Selective · ≥50% win probability only</span>` : `<span class="role off">Watch-only</span>`;
+    : role === "selective" ? `<span class="role selective">Selective · stricter expectancy test</span>` : `<span class="role off">Watch-only</span>`;
 }
 function ruleText(inst, pol){
   const r = inst.rule;
   if(r.role === "off") return "Not traded by the playbook (switched to watch-only). Its prices still feed the bias, the setup map and SMT divergence for NDQ/US30.";
-  return `Up to <b>${r.max_positions}</b> open position${r.max_positions>1?"s":""} and <b>${r.max_cells}</b> cells. A cell qualifies with an estimated win probability ≥ <b>${Math.round(r.min_p*100)}%</b>`
-    + ` and ≥ <b>${sR(r.min_e)}</b> per trade after spread, at least <b>${r.min_n || pol.min_n}</b> trades and a profit in both halves of the last ${pol.window_days} days.`
-    + (r.k_p ? ` Estimates are shrunk harder here (${r.k_p} pseudo-trades), because high win rates regress.` : "")
+  return `Up to <b>${r.max_positions}</b> open position${r.max_positions>1?"s":""} and <b>${r.max_cells}</b> cells. A cell qualifies with an estimated expectancy ≥ <b>${sR(r.min_e)}</b> per trade after spread`
+    + (r.min_p ? ` and an estimated win probability ≥ <b>${Math.round(r.min_p*100)}%</b>` : ` (any win rate: what counts is that winners outweigh losers)`)
+    + `, at least <b>${r.min_n || pol.min_n}</b> trades and a profit in both halves of the last ${pol.window_days} days.`
+    + (r.k_p ? ` Estimates are shrunk harder here (${r.k_p} pseudo-trades), because good-looking records regress.` : "")
     + (pol.index_group && pol.index_group.includes(inst.sym) ? ` One index position at a time across NDQ/US30.` : "");
 }
 function wfCurve(trades){
@@ -1170,7 +1171,7 @@ function renderResearch(){
   });
 }
 function cellsTable(cells, withSym, role){
-  if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the 50% bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
+  if(!cells.length) return `<div class="empty">${role === "selective" ? "No cell clears the expectancy bar right now, so this index sits out. The watchlist shows the closest; they switch on by themselves once their record is strong enough." : "No cell qualifies right now."}</div>`;
   return `<div class="tbl"><table><tr>${withSym?"<th>Symbol</th>":""}<th>Setup</th><th>TF</th><th class="hide-m">Exit</th><th class="hide-m">Variant</th><th class="r hide-m">Trades</th><th class="r hide-m">Win</th><th class="r">Est. win</th><th class="r">Avg R</th></tr>${
     cells.map(c => `<tr>${withSym?`<td><b>${c.sym}</b></td>`:""}<td>${esc(sname(c.setup))}${c.pinned?' <span class="tag acc" title="always traded (config playbook.pinned), not chosen by the weekly selection">pinned</span>':""}</td><td>${tfl(c.tf)}</td><td class="hide-m">${c.mgmt==="std"||!c.mgmt?"standard":`<span class="tag gh">${esc(c.mgmt)}</span>`}</td>
       <td class="hide-m"><small class="mut">${esc(c.variant)}</small></td><td class="r num hide-m">${c.n}</td><td class="r num hide-m">${Math.round(c.win_rate*100)}%</td>
@@ -1220,9 +1221,9 @@ function pbInstrument(sym){
       <div class="hmleg"><span>${legend}</span><span><i class="thin"></i> under 15 trades</span><span><i style="display:inline-block;width:14px;height:12px;border-radius:3px;outline:2px solid var(--accent);outline-offset:-2px"></i> in the playbook now</span>
         <span>· in-sample ${md(RS.data.from)}–${md(RS.data.oos_from)}, out-of-sample after</span></div></div>
     <div class="card ${inst.role==="selective"?"c7":"c12"}"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">${cells.length} cell${cells.length===1?"":"s"} · as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(cells, false, inst.role)}</div>
-    ${inst.role==="selective" ? `<div class="card c5"><h3>Watchlist · closest to 50%</h3>${watch.length ? `<div class="tbl"><table><tr><th>Setup</th><th>TF</th><th class="r">Trades</th><th class="r">Raw win</th><th class="r">Est.</th></tr>${
-        watch.slice(0,8).map(w => `<tr><td>${esc(sname(w.setup))}${w.mgmt==="scalp"?' <span class="tag gh">scalp</span>':""}</td><td>${tfl(w.tf)}</td><td class="r num">${w.n}</td><td class="r num">${Math.round(w.win_rate*100)}%</td><td class="r num ${w.eligible?"ok":"no"}">${Math.round(w.p*100)}%</td></tr>`).join("")}</table></div>` : `<div class="empty">Nothing close yet.</div>`}
-      <div class="mut" style="font-size:12px;margin-top:10px">“Est.” is the shrunk win probability the 50% rule uses. A raw 70% over 30 trades isn't enough: combinations chosen for a high win rate tend to fall back toward average on the following weeks (see the calibration table under All).</div></div>` : ""}
+    ${inst.role==="selective" ? `<div class="card c5"><h3>Watchlist · closest to qualifying</h3>${watch.length ? `<div class="tbl"><table><tr><th>Setup</th><th>TF</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Est. R</th></tr>${
+        watch.slice(0,8).map(w => `<tr><td>${esc(sname(w.setup))}${w.mgmt==="scalp"?' <span class="tag gh">scalp</span>':""}</td><td>${tfl(w.tf)}</td><td class="r num">${w.n}</td><td class="r num">${Math.round(w.win_rate*100)}%</td><td class="r num ${w.eligible?"ok":"no"}">${sR(w.e)}</td></tr>`).join("")}</table></div>` : `<div class="empty">Nothing close yet.</div>`}
+      <div class="mut" style="font-size:12px;margin-top:10px">“Est. R” is the shrunk expectancy per trade after spread, the number the selection uses. A good raw record over 30 trades isn't enough: combinations picked for a strong record tend to fall back toward average on the following weeks.</div></div>` : ""}
     <div class="card c5"><h3>Costs &amp; size per timeframe</h3><div class="tbl"><table><tr><th>Timeframe</th><th class="r">Spread (R)</th><th class="r">Size taken</th></tr>${
       PB_TFS.map(tf => { const c = costs.find(x => x.tf === tf); return c ? `<tr><td>${tfl(tf)}${tf==="1min"?' <span class="mut">(not traded)</span>':""}</td><td class="r num down">${sR(-c.cost_r)}</td><td class="r num">${c.size!=null && c.size<=1 ? Math.round(c.size*100)+"%" : "—"}</td></tr>` : ""; }).join("")}</table></div>
       <div class="mut" style="font-size:12px;margin-top:10px">Spread: average paid per trade, in units of the trade's risk. Size taken: the average share of the 0.5% risk budget Risk can really use. Tight stops hit the 25% margin cap per position, so small-timeframe trades are sized down.</div></div>
@@ -1246,7 +1247,7 @@ function pbAll(){
   const liveTxt = Object.entries(live).map(([b,x]) => `${b === "shadow" ? "Shadow" : "Live"} book since it started: <b>${x.trades}</b> trades · ${Math.round(x.win_rate*100)}% win · <b class="${cls(x.sum_r)}">${sR(x.sum_r)}</b>`).join("<br>");
   return `<div class="grid">${pbVerdict()}
     <div class="card c5"><h3>The playbook <span class="sp"></span><span class="mut" style="font-weight:500">${(RS.playbook.cells||[]).length} cells now</span></h3>
-      <div class="rule">Cells are setup × instrument × timeframe × exit, re-chosen every week from the last ${pol.window_days} days of research. Gold is the core instrument; NDQ and US30 only trade cells whose estimated win probability is ≥ 50%. Your bias rule, Jev (advisory sizing) and every risk limit apply as usual.</div>
+      <div class="rule">Cells are setup × instrument × timeframe × exit, re-chosen every week from the last ${pol.window_days} days of research. Cells are chosen on expectancy (what the winners earn minus what the losers cost, per unit of risk), not win rate; NDQ and US30 need more trades and stronger evidence than gold. Your bias rule, Jev (advisory sizing) and every risk limit apply as usual.</div>
       ${pbStats(wf.summary)}
       <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward ${md(RS.data.walk_forward_from)} → ${md(RS.data.to)}: each week traded with cells chosen only from earlier data.</div>
       ${liveTxt ? `<div class="t2" style="font-size:12.5px;margin-top:10px">${liveTxt}</div>` : ""}</div>
@@ -1259,11 +1260,11 @@ function pbAll(){
     <div class="card c12"><h3>In the playbook now <span class="sp"></span><span class="mut" style="font-weight:500">as of ${md(RS.playbook.asof)}</span></h3>${cellsTable(RS.playbook.cells||[], true)}</div>
     <div class="card c6"><h3>Is the win-probability estimate honest?</h3><div class="tbl"><table><tr><th>Estimate</th><th class="r">Trades</th><th class="r">Estimated</th><th class="r">Actual win</th><th class="r">Avg R</th></tr>${
       (RS.calibration||[]).map(c => `<tr><td>${esc(c.bucket)}</td><td class="r num">${c.n}</td><td class="r num">${Math.round(c.p_est*100)}%</td><td class="r num">${Math.round(c.win_rate*100)}%</td><td class="r num ${cls(c.avg_r)}">${sR(c.avg_r)}</td></tr>`).join("")}</table></div>
-      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward trades grouped by the estimate made the week before. If the estimate were informative, the actual win rate would rise with it. Small groups are noisy. Cells picked for a high win rate tend to fall back toward average, so the 50% rule for indices demands much more evidence than a raw win rate.</div></div>
+      <div class="mut" style="font-size:12px;margin-top:10px">Walk-forward trades grouped by the estimate made the week before. If the estimate were informative, the actual win rate would rise with it. Small groups are noisy. Win rate is shown for information; selection uses expectancy.</div></div>
     <div class="card c6"><h3>Robustness <span class="sp"></span><span class="mut" style="font-weight:500">${pos} of ${rob.length} settings positive</span></h3>
-      <div class="pbnote">The same walk-forward with ${rob.length} alternative settings: window 30/45/60 days, minimum trades 20/25/35, 5 or 10 gold cells, gold win estimate ≥45% or ≥50%. ${pos} ended positive, median ${med==null?"—":sR(med)}. The most favourable still had a ${rob.length ? Math.round(Math.min(...rob.map(r=>r.p_boot==null?1:r.p_boot))*100) : "—"}% chance of being luck.</div>
-      <div class="tbl" style="max-height:260px;overflow:auto;margin-top:10px"><table><tr><th>Window</th><th>Min n</th><th>Gold cells</th><th>Gold p</th><th class="r">Trades</th><th class="r">Total</th><th class="r">DD</th></tr>${
-        rob.map(r => `<tr><td>${r.window}d</td><td>${r.min_n}</td><td>${r.xau_cells}</td><td>${Math.round(r.xau_min_p*100)}%</td><td class="r num">${r.trades}</td><td class="r num ${cls(r.sum_r)}">${sR(r.sum_r)}</td><td class="r num down">${sR(r.max_dd_r)}</td></tr>`).join("")}</table></div></div>
+      <div class="pbnote">The same walk-forward with ${rob.length} alternative settings: window 30/45/60 days, minimum trades 20/25/35, 5 or 10 gold cells, gold expectancy ≥ +0.02R or ≥ +0.05R. ${pos} ended positive, median ${med==null?"—":sR(med)}. The most favourable still had a ${rob.length ? Math.round(Math.min(...rob.map(r=>r.p_boot==null?1:r.p_boot))*100) : "—"}% chance of being luck.</div>
+      <div class="tbl" style="max-height:260px;overflow:auto;margin-top:10px"><table><tr><th>Window</th><th>Min n</th><th>Gold cells</th><th>Gold min R</th><th class="r">Trades</th><th class="r">Total</th><th class="r">DD</th></tr>${
+        rob.map(r => `<tr><td>${r.window}d</td><td>${r.min_n}</td><td>${r.xau_cells}</td><td>${r.xau_min_e!=null?sR(r.xau_min_e):(r.xau_min_p!=null?Math.round(r.xau_min_p*100)+"%":"—")}</td><td class="r num">${r.trades}</td><td class="r num ${cls(r.sum_r)}">${sR(r.sum_r)}</td><td class="r num down">${sR(r.max_dd_r)}</td></tr>`).join("")}</table></div></div>
     <div class="card c12"><h3>How this was built</h3><ul class="pbnote" style="padding-left:18px;margin:0">
       <li>${fmt(RS.data.trades,0)} simulated trades: ${(RS.data.grid.classes||[]).length || 24} setups (ICT 2022, Silver Bullet, Turtle Soup, AMD, SMT, displacement, BOS, MSS, CHoCH, four formal DTFX definitions, plus the existing book) × every variant × 4 instruments × 1m/3m/5m/15m/30m/1h × standard and scalp exits.</li>
       <li>Every trade follows the live rules: session windows, your bias rule (neutral and counter-bias skipped), stops ≥0.5 ATR and the bot's exits. They are <b>executed like OANDA on 1-minute bars</b>: buy at the ask, stops on the bid, partials, adds and exits at market.</li>

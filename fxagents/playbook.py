@@ -536,12 +536,12 @@ def build(cfg, robustness: bool = True) -> dict:
         for win in (30, 45, 60):
             for mn in (20, 25, 35):
                 for ncell in (5, 10):
-                    for mp in (0.45, 0.5):
+                    for me in (0.02, 0.05):
                         q = deepcopy(pol); q.window_days, q.min_n = win, mn
                         q.instruments["XAUUSD"] = InstrumentRule(**{**asdict(q.instruments.get("XAUUSD", InstrumentRule("core"))),
-                                                                    "max_cells": ncell, "min_p": mp})
+                                                                    "max_cells": ncell, "min_e": me})
                         x = portfolio(walk_forward(trades, q, start_day=wf_start, cube=cube), q)
-                        rob.append({"window": win, "min_n": mn, "xau_cells": ncell, "xau_min_p": mp, **summarize(x)})
+                        rob.append({"window": win, "min_n": mn, "xau_cells": ncell, "xau_min_e": me, **summarize(x)})
     # does a cell's past predict its future? (in-sample vs out-of-sample expectancy across cells)
     val = cube.val
     tt = own.assign(_oos=own["day"] >= oos_from)
@@ -557,10 +557,10 @@ def build(cfg, robustness: bool = True) -> dict:
                          .rename(columns={False: "in_sample", True: "out_of_sample"}).reset_index().to_json(orient="records"))
     asof = (pd.Timestamp(days[-1]) + pd.Timedelta(days=1)).date()
     current = with_pinned(cfg, select_asof(cfg, asof, pol))
-    # watchlist: index cells closest to the 60% bar
+    # watchlist: index cells closest to qualifying, by shrunk expectancy
     st = score(cube.window(len(days) - pol.window_days, len(days)), pol)
     idx = st[st["sym"].map(lambda s: _rule(pol, s).role == "selective") & (st["n"] >= 15) & st["tf"].isin(pol.tfs)]
-    watch = idx.sort_values("p", ascending=False).drop_duplicates(["sym", "tf", "setup", "mgmt"]).head(12)
+    watch = idx.sort_values("e", ascending=False).drop_duplicates(["sym", "tf", "setup", "mgmt"]).head(12)
     watch = [{**c, "eligible": bool(e)} for c, e in zip(cells_json(watch), eligible(watch, pol))]
     meta = json.loads((research_dir(cfg) / "trades_meta.json").read_text()) if (research_dir(cfg) / "trades_meta.json").exists() else {}
     per = {}
