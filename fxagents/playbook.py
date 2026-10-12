@@ -55,10 +55,11 @@ class Policy:
     tfs: tuple = ("3min", "5min", "15min", "30min", "1h")
     instruments: dict = field(default_factory=lambda: {
         "XAUUSD": InstrumentRule("core", 0.45, 0.02, 10, 2),
-        # indices: 50% bar (was 60% until Oct 2026 — nothing cleared it), still with heavier shrinkage and
-        # more trades before an estimate is believed (estimates of 0.60–0.65 realised ~0.45 in walk-forward)
-        "NDQ": InstrumentRule("selective", 0.50, 0.03, 4, 1, k_p=40.0, min_n=30),
-        "US30": InstrumentRule("selective", 0.50, 0.03, 4, 1, k_p=40.0, min_n=30),
+        # indices: no win-rate bar (Sam, 12 Oct 2026 — the 50% bar (60% before) left NDQ/US30 untraded; trend
+        # cells win < 50% and earn through size). Still selected on shrunk expectancy ≥ 0.03R after spread,
+        # both halves positive, heavier shrinkage and 30 trades minimum.
+        "NDQ": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
+        "US30": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
         # forex majors: gold-like selection, one position each (they all move with the dollar → max_open caps the total)
         "EURUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
         "GBPUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
