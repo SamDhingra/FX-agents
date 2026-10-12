@@ -35,7 +35,8 @@ TF_MIN = {"1min": 1, "3min": 3, "5min": 5, "15min": 15, "30min": 30, "1h": 60}
 @dataclass
 class InstrumentRule:
     role: str = "selective"          # core | selective | off
-    min_p: float = 0.60              # shrunk win probability needed
+    min_p: float = 0.0               # shrunk win-rate floor — off: profit = expectancy (avg win × win% − avg loss × loss%),
+                                     # a 35–45% win rate is fine when winners are bigger than losers
     min_e: float = 0.03              # shrunk expectancy (R, after spread) needed
     max_cells: int = 6
     max_positions: int = 1
@@ -54,16 +55,15 @@ class Policy:
     # 1-minute cells are excluded: the spread is 13–30% of a 1m bar, and in walk-forward they hurt
     tfs: tuple = ("3min", "5min", "15min", "30min", "1h")
     instruments: dict = field(default_factory=lambda: {
-        "XAUUSD": InstrumentRule("core", 0.45, 0.02, 10, 2),
-        # indices: no win-rate bar (Sam, 12 Oct 2026 — the 50% bar (60% before) left NDQ/US30 untraded; trend
-        # cells win < 50% and earn through size). Still selected on shrunk expectancy ≥ 0.03R after spread,
-        # both halves positive, heavier shrinkage and 30 trades minimum.
+        "XAUUSD": InstrumentRule("core", 0.0, 0.02, 10, 2),
+        # no win-rate bars (Sam, 12 Oct 2026): cells are chosen and ranked on expectancy after spread — what the
+        # wins earn minus what the losses cost, per unit of risk. Indices keep heavier shrinkage, 30 trades minimum.
         "NDQ": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
         "US30": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
         # forex majors: gold-like selection, one position each (they all move with the dollar → max_open caps the total)
-        "EURUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
-        "GBPUSD": InstrumentRule("core", 0.50, 0.02, 4, 1),
-        "AUDUSD": InstrumentRule("core", 0.50, 0.02, 4, 1)})
+        "EURUSD": InstrumentRule("core", 0.0, 0.02, 4, 1),
+        "GBPUSD": InstrumentRule("core", 0.0, 0.02, 4, 1),
+        "AUDUSD": InstrumentRule("core", 0.0, 0.02, 4, 1)})
     index_group: tuple = ("NDQ", "US30")
     index_group_max: int = 1          # NDQ / US30 move together: one index position at a time
     max_open: int = 3

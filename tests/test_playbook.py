@@ -167,9 +167,9 @@ def make_ctx(tmp_path, cells, bias=1.0):
     return ctx
 
 
-def cell(sym, setup="smc_bos_retest", mgmt="std", p=0.55):
+def cell(sym, setup="smc_bos_retest", mgmt="std", p=0.55, e=0.1):
     return {"id": P.cell_id(setup, "5min", "default", mgmt, sym), "sym": sym, "tf": "5min", "setup": setup,
-            "variant": "default", "params": {}, "mgmt": mgmt, "n": 40, "win_rate": p, "p": p, "exp_r": 0.2, "e": 0.1}
+            "variant": "default", "params": {}, "mgmt": mgmt, "n": 40, "win_rate": p, "p": p, "exp_r": 0.2, "e": e}
 
 
 def fire(ctx, trader, sym, side=1):
@@ -181,7 +181,8 @@ def fire(ctx, trader, sym, side=1):
 
 
 def test_trader_sends_playbook_limits_and_respects_capacity(tmp_path):
-    ctx = make_ctx(tmp_path, [cell("XAUUSD"), cell("XAUUSD", "ict_ote", p=0.6), cell("NDQ", "smc_mss", "scalp")])
+    # smc_bos_retest wins more often (p 0.65) but ict_ote earns more per trade (e 0.15): expectancy decides
+    ctx = make_ctx(tmp_path, [cell("XAUUSD", p=0.65), cell("XAUUSD", "ict_ote", p=0.4, e=0.15), cell("NDQ", "smc_mss", "scalp")])
     t = PlaybookTrader(ctx); t.start()
     reqs = []
 
@@ -192,10 +193,10 @@ def test_trader_sends_playbook_limits_and_respects_capacity(tmp_path):
         ctx.state.positions[p.id] = p
     ctx.bus.subscribe("entry_request", risk)
     fire(ctx, t, "XAUUSD")
-    assert len(reqs) == 1 and reqs[0]["signal"].strategy.startswith("ict_ote")     # higher p first
+    assert len(reqs) == 1 and reqs[0]["signal"].strategy.startswith("ict_ote")     # higher expectancy first
     assert reqs[0]["playbook"]["max_per_symbol"] == 2 and reqs[0]["playbook"]["mgmt"] == "std"
     why = {r["strategy"].split(":")[0]: r["why"] for r in ctx.journal.signals(10)}
-    assert why["smc_bos_retest"].startswith("a higher-probability")
+    assert why["smc_bos_retest"].startswith("a higher-expectancy")
     # two gold positions already open → the third is refused before Risk is even asked
     ctx.state.positions.clear()
     for k in range(2):

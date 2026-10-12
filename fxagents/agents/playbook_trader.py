@@ -240,11 +240,11 @@ class PlaybookTrader(TraderAgent):
                 cands.append((cell, sig, rec))
         if not cands:
             return
-        cands.sort(key=lambda c: (-c[0].p, -c[0].e))
+        cands.sort(key=lambda c: (-c[0].e, -c[0].p))        # highest expectancy first (win rate only breaks ties)
         taken = False
         for cell, sig, rec in cands:
             if taken:
-                self.ctx.journal.add_signal(rec | {"action": "skipped", "why": "a higher-probability playbook cell fired on this bar"})
+                self.ctx.journal.add_signal(rec | {"action": "skipped", "why": "a higher-expectancy playbook cell fired on this bar"})
                 continue
             why = self.capacity_block(sym, cell, sig.side)
             if why:
