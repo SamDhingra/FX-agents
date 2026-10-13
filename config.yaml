@@ -57,37 +57,8 @@ instruments:
     sim_start_price: 46500
     sim_daily_vol: 0.009
     oanda: {instrument: US30_USD, multiplier: 1, commission_per_unit: 0, max_units: 20}
-  # Forex (USD-quoted, so 1 unit moving 1.0 = $1). Watch-only until the year test says otherwise.
-  EURUSD:
-    trade: false
-    contract: {secType: CASH, symbol: EUR, currency: USD, exchange: IDEALPRO}
-    multiplier: 1
-    tick_size: 0.00005
-    commission_per_unit: 0.00002
-    max_units: 500000
-    sim_start_price: 1.10
-    sim_daily_vol: 0.005
-    oanda: {instrument: EUR_USD, multiplier: 1, commission_per_unit: 0, max_units: 1000000}
-  GBPUSD:
-    trade: false
-    contract: {secType: CASH, symbol: GBP, currency: USD, exchange: IDEALPRO}
-    multiplier: 1
-    tick_size: 0.00005
-    commission_per_unit: 0.00002
-    max_units: 500000
-    sim_start_price: 1.30
-    sim_daily_vol: 0.006
-    oanda: {instrument: GBP_USD, multiplier: 1, commission_per_unit: 0, max_units: 1000000}
-  AUDUSD:
-    trade: false
-    contract: {secType: CASH, symbol: AUD, currency: USD, exchange: IDEALPRO}
-    multiplier: 1
-    tick_size: 0.00005
-    commission_per_unit: 0.00002
-    max_units: 500000
-    sim_start_price: 0.66
-    sim_daily_vol: 0.006
-    oanda: {instrument: AUD_USD, multiplier: 1, commission_per_unit: 0, max_units: 1000000}
+  # Forex majors (EURUSD/GBPUSD/AUDUSD) were removed in Oct 2026: watch-only since they were added, never traded,
+  # and clearly negative after OANDA spreads in every test. To watch one again, add it here with `trade: false`.
 
 timeframes:
   entry: [5min, 15min]    # every strategy runs on both; the 5m and 15m versions compete each hour
@@ -268,9 +239,6 @@ shadow:
     XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
     NDQ: 2.30                   # (was 0.40 / 1.50 / 2.50 — estimates that understated real costs)
     US30: 3.00
-    EURUSD: 0.00014
-    GBPUSD: 0.00020
-    AUDUSD: 0.00016
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal
 
 # ── Playbook strategy (selector.mode or shadow.mode = playbook) ──

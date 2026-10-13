@@ -191,7 +191,7 @@ def test_year_test_trades_only_the_mandate_and_report_reconciles(cfg, tmp_path):
     out.mkdir()
     t.to_pickle(out / "trades.pkl")
     cfg["playbook"] = {"window_days": 30}
-    assert cfg["instruments"]["EURUSD"].get("trade") is False           # watch-only in config.yaml
+    cfg["instruments"]["EURUSD"] = {**copy.deepcopy(cfg["instruments"]["XAUUSD"]), "trade": False}   # a watch-only instrument
     mandate = [s for s, ic in cfg["instruments"].items() if ic.get("trade", True) is not False]
     research_cfg = copy.deepcopy(cfg)
     for s in research_cfg["instruments"]:

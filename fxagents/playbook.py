@@ -60,10 +60,7 @@ class Policy:
         # wins earn minus what the losses cost, per unit of risk. Indices keep heavier shrinkage, 30 trades minimum.
         "NDQ": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
         "US30": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
-        # forex majors: gold-like selection, one position each (they all move with the dollar → max_open caps the total)
-        "EURUSD": InstrumentRule("core", 0.0, 0.02, 4, 1),
-        "GBPUSD": InstrumentRule("core", 0.0, 0.02, 4, 1),
-        "AUDUSD": InstrumentRule("core", 0.0, 0.02, 4, 1)})
+})                              # forex majors removed Oct 2026 (never traded; negative after spread)
     index_group: tuple = ("NDQ", "US30")
     index_group_max: int = 1          # NDQ / US30 move together: one index position at a time
     max_open: int = 3

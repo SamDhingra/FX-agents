@@ -19,8 +19,16 @@ from tests.fake_oanda import ACCT, TOKEN, FakeOanda
 BASE = load_config("config.yaml")
 
 
-def setup(**kw):
+FX_WATCH = {"trade": False, "contract": {"secType": "CASH", "symbol": "AUD", "currency": "USD", "exchange": "IDEALPRO"},
+            "multiplier": 1, "tick_size": 0.00005, "commission_per_unit": 0.00002, "max_units": 500000,
+            "sim_start_price": 0.66, "sim_daily_vol": 0.006,
+            "oanda": {"instrument": "AUD_USD", "multiplier": 1, "commission_per_unit": 0, "max_units": 1000000}}
+
+
+def setup(watch_fx=False, **kw):
     cfg = copy.deepcopy(BASE)
+    if watch_fx:
+        cfg["instruments"]["AUDUSD"] = copy.deepcopy(FX_WATCH)
     cfg["mode"], cfg["broker"] = "paper", "oanda"
     cfg.pop("_broker_applied", None)
     apply_broker(cfg)
@@ -324,7 +332,7 @@ def test_catch_up_bars_are_backfilled_not_published_as_live():
 
 
 def test_watch_only_instrument_missing_at_the_broker_is_dropped_not_fatal():
-    cfg, fake, c, st, bus, feed, b = setup()
+    cfg, fake, c, st, bus, feed, b = setup(watch_fx=True)
     from tests.fake_oanda import SPECS
     saved = SPECS.pop("AUD_USD")
     try:

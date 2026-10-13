@@ -227,6 +227,8 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
 .drawer .dback{display:block;width:100%;margin-top:18px;min-height:46px}
 body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
 .drawer.on{transform:none}
+.drawer .card{padding:14px 12px}
+@media (max-width:760px){.drawer td,.drawer th{padding:9px 5px;font-size:13px}.drawer th{font-size:11.5px}.drawer td:first-child,.drawer th:first-child{padding-left:2px}.drawer td:first-child{white-space:normal}}
 .drawer h2{margin:0 0 4px;font-size:20px}
 .tl{position:relative;margin:18px 0 0 8px;padding-left:18px;border-left:2px solid var(--line)}
 .tl div{position:relative;padding:0 0 16px}
@@ -460,6 +462,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <section class="page" id="p-trades">
       <div class="filters grouped" id="tfilters"></div>
       <div class="card" style="margin-bottom:12px"><div id="pipsum"></div></div>
+      <div class="card" style="margin-bottom:12px"><h3>By strategy <span class="sp"></span><span class="mut" style="font-weight:500">tap a strategy for its timeframes</span></h3><div id="byStrat"></div></div>
       <div class="card"><div class="tbl" id="trades"></div></div>
     </section>
 
@@ -673,7 +676,7 @@ function bias(s){
     const arrow = v => v>0 ? `<b class="up">▲</b>` : v<0 ? `<b class="down">▼</b>` : `<b class="mut">•</b>`;
     const pos = Math.round((b.score+1)/2*100);
     const pd = b.pd_pos==null ? null : Math.round(b.pd_pos*100);
-    return `<div class="bias">
+    return `<div class="bias" data-sym="${sym}" role="button" tabindex="0" style="cursor:pointer" title="${sym}: trades, best strategy and timeframe">
       <div style="display:flex;align-items:center;gap:8px"><div><div class="sym">${sym}</div><div class="px num">${fpx(s.prices[sym]??b.price)}</div></div>
       <span class="sp" style="flex:1"></span><span class="state ${st}">${esc(b.state)}</span></div>
       <div class="tfs"><div class="tf">Daily${arrow(b.d)}</div><div class="tf">4H${arrow(b.h4)}</div><div class="tf">1H${arrow(b.h1)}</div></div>
@@ -682,6 +685,7 @@ function bias(s){
       <div class="mini"><span>PDH ${fpx(b.pdh)}</span><span>PDL ${fpx(b.pdl)}</span>${b.accuracy!=null?`<span>accuracy ${Math.round(b.accuracy*100)}% (${b.accuracy_n})</span>`:""}${b.audit_p!=null?`<span>Jev audit ${fmt(b.audit_p,2)}</span>`:""}</div>
     </div>`;
   }).join("");
+  $$("#bias .bias[data-sym]").forEach(x => { x.onclick = () => openInstrument(x.dataset.sym); x.onkeydown = e => { if(e.key==="Enter") openInstrument(x.dataset.sym); }; });
 }
 function positions(s){
   $("#posCount").textContent = s.positions.length;
@@ -857,6 +861,9 @@ function renderTrades(){
   chips($("#tfilters"), [["sym", syms], ["res", ["ALL","Winners","Losers"]], ["tf", tfs]]);
   const rows = tradeRows.filter(t => (tf.sym==="ALL"||t.symbol===tf.sym) && (tf.res==="ALL"||(tf.res==="Winners"?t.realized>0:t.realized<=0)) && (tf.tf==="ALL"||t.tf===tf.tf));
   const ps = pipSummary(rows); $("#pipsum").innerHTML = ps; $("#pipsum").parentElement.style.display = ps ? "" : "none";
+  $$("#pipsum .pt").forEach(x => { x.style.cursor = "pointer"; x.onclick = () => openInstrument(x.dataset.sym); });
+  $("#byStrat").innerHTML = groupTable(rows, stratOf, "Strategy", {open:"strat", name: sname});
+  $$("#byStrat tr[data-open]").forEach(x => x.onclick = () => openStrategy(x.dataset.k));
   if(matchMedia("(max-width:760px)").matches){   // phone: tappable cards instead of a wide table
     $("#trades").innerHTML = rows.length ? rows.map((t,i)=>`<div class="tc" data-i="${i}">
       <div class="rw"><span class="side ${t.side[0]}">${t.side}</span><b>${t.symbol}</b>${t.tf?`<span class="tag">${t.tf}</span>`:""}<span class="sp"></span><b class="num pl ${cls(t.realized)}">${smoney(t.realized)}</b></div>
@@ -886,7 +893,7 @@ function pipSummary(rows){
     const lt = ts.reduce((x,t)=>x+(t.lots||0),0)/ts.length, wr = w.length/ts.length;
     const mw = Math.abs(aw||0), ml = Math.abs(al||0), tot = mw + ml || 1;
     const payoff = aw!=null && al ? mw/ml : null;
-    return `<div class="pt">
+    return `<div class="pt" data-sym="${sym}" role="button" tabindex="0" title="${sym}: all details">
       <div class="pt-h"><b>${sym}</b><span class="tag">${ts.length} trade${ts.length===1?"":"s"}</span><span class="sp"></span><span class="num ${cls(usd)}">${smoney(usd)}</span></div>
       <div class="pt-net"><span class="num ${cls(net)}">${pp(net)}</span><small>net pips</small></div>
       <div class="pt-bar" title="average win vs average loss, in pips"><i class="w" style="flex:${mw/tot}"></i><i class="l" style="flex:${ml/tot}"></i></div>
@@ -898,7 +905,8 @@ function pipSummary(rows){
 function openTrade(t){
   const ev = t.events || [];
   $("#drawer").innerHTML = `<div class="dh"><button class="btn" id="dclose" aria-label="Back">‹ Back</button><span class="side ${t.side[0]}">${t.side}</span><h2 style="margin:0">${t.symbol}</h2><span class="sp" style="flex:1"></span><b class="num ${cls(t.realized)}">${smoney(t.realized)}</b></div>
-    <div class="mut" style="margin:10px 0 14px">${esc(t.strategy)} · ${esc(t.reason||"")}</div>
+    <div class="mut" style="margin:10px 0 10px">${esc(t.strategy)} · ${esc(t.reason||"")}</div>
+    <div class="labbtns" style="margin:0 0 14px"><button class="btn" id="dSym">All ${esc(t.symbol)} trades</button><button class="btn" id="dStrat">All ${esc(sname(stratOf(t)))} trades</button></div>
     <div class="hero" style="grid-template-columns:1fr 1fr;gap:10px">
       <div class="card kpi"><div class="l">P&amp;L</div><div class="v num ${cls(t.realized)}">${smoney(t.realized,2)}</div></div>
       <div class="card kpi"><div class="l">R multiple</div><div class="v num ${cls(t.r_multiple)}">${sR(t.r_multiple)}</div></div>
@@ -915,6 +923,7 @@ function openTrade(t){
     try{ history.pushState({drawer:1}, ""); }catch(e){}     // phone back button / swipe-back closes the trade, not the app
   }
   $("#dclose").onclick = $("#dback").onclick = closeDrawer;
+  $("#dSym").onclick = () => openInstrument(t.symbol); $("#dStrat").onclick = () => openStrategy(stratOf(t));
 }
 function hideDrawer(){ $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); document.body.classList.remove("noscroll"); }
 function closeDrawer(){
@@ -931,6 +940,97 @@ document.addEventListener("keydown", e => { if(e.key === "Escape") closeDrawer()
 })();
 $("#scrim").onclick = () => { $("#moreSheet").classList.remove("on"); closeDrawer(); };
 
+
+/* ── strategy & instrument detail (tap a strategy or an instrument anywhere) ── */
+let ALLTR = null, ALLTR_KEY = "";
+async function allTrades(){
+  const key = BOOK + "|" + Math.floor(Date.now()/30000);
+  if(ALLTR && ALLTR_KEY === key) return ALLTR;
+  try{ ALLTR = await (await fetch(q("api/trades?limit=5000"),{credentials:"same-origin"})).json(); ALLTR_KEY = key; }catch(e){ ALLTR = ALLTR || []; }
+  return ALLTR;
+}
+const stratOf = t => String(t.strategy||"").split(":")[0];
+const tfOrder = v => { const m = /^(\d+)\s*(m|min|h)/.exec(v||""); return m ? +m[1] * (m[2]==="h"?60:1) : 9999; };
+function agg(rows){
+  const n = rows.length, w = rows.filter(t=>(t.realized||0)>0), l = rows.filter(t=>(t.realized||0)<=0);
+  const R = rows.map(t=>t.r_multiple).filter(x=>x!=null), sum = a => a.reduce((x,y)=>x+y,0);
+  const pw = w.map(t=>t.pips).filter(x=>x!=null), pl = l.map(t=>t.pips).filter(x=>x!=null);
+  return {n, wins:w.length, wr: n ? w.length/n : 0, sumR: sum(R), avgR: R.length ? sum(R)/R.length : null,
+    pnl: sum(rows.map(t=>t.realized||0)), pips: sum(rows.map(t=>t.pips||0)),
+    avgWinPips: pw.length ? sum(pw)/pw.length : null, avgLossPips: pl.length ? sum(pl)/pl.length : null};
+}
+const pp1 = x => x==null ? "—" : (x>0?"+":x<0?"−":"") + fmt(Math.abs(x), Math.abs(x)>=100?0:1);
+function groupTable(rows, keyFn, label, opts={}){
+  const g = {}; rows.forEach(t => { const k = keyFn(t); if(k==null || k==="") return; (g[k] = g[k] || []).push(t); });
+  let list = Object.entries(g).map(([k, ts]) => [k, agg(ts)]);
+  list.sort(opts.order ? ((a,b)=>opts.order(a[0])-opts.order(b[0])) : ((a,b)=>b[1].sumR-a[1].sumR));
+  if(!list.length) return `<div class="empty">No trades yet.</div>`;
+  const pipsCol = !!opts.pips;
+  return `<div class="tbl"><table><tr><th>${label}</th><th class="r">Trades</th><th class="r">Win</th><th class="r">Avg R</th><th class="r">Total R</th>${pipsCol?`<th class="r hide-m">Net pips</th>`:""}<th class="r hide-m">P&amp;L</th></tr>${
+    list.map(([k, a]) => `<tr ${opts.open?`class="row" data-open="${opts.open}" data-k="${esc(k)}"`:""}><td><b style="font-weight:600">${esc(opts.name ? opts.name(k) : k)}</b></td>
+      <td class="r num">${a.n}</td><td class="r num">${Math.round(a.wr*100)}%</td><td class="r num ${cls(a.avgR)}">${sR(a.avgR)}</td>
+      <td class="r num ${cls(a.sumR)}"><b>${sR(a.sumR)}</b></td>${pipsCol?`<td class="r num hide-m ${cls(a.pips)}">${pp1(a.pips)}</td>`:""}<td class="r num hide-m ${cls(a.pnl)}">${smoney(a.pnl)}</td></tr>`).join("")}</table></div>`;
+}
+function tiles(a, withPips){
+  const payoff = a.avgWinPips!=null && a.avgLossPips ? Math.abs(a.avgWinPips/a.avgLossPips) : null;
+  return `<div class="hero" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="card kpi"><div class="l">Trades</div><div class="v num">${a.n}</div><div class="s">${a.wins} won · ${a.n-a.wins} lost</div></div>
+    <div class="card kpi"><div class="l">Win rate</div><div class="v num">${Math.round(a.wr*100)}%</div><div class="s">${a.n<20?"small sample":"&nbsp;"}</div></div>
+    <div class="card kpi"><div class="l">Total R</div><div class="v num ${cls(a.sumR)}">${sR(a.sumR)}</div><div class="s">avg ${sR(a.avgR)} per trade</div></div>
+    <div class="card kpi"><div class="l">P&amp;L</div><div class="v num ${cls(a.pnl)}">${smoney(a.pnl)}</div></div>
+    ${withPips ? `<div class="card kpi"><div class="l">Net pips</div><div class="v num ${cls(a.pips)}">${pp1(a.pips)}</div></div>
+    <div class="card kpi"><div class="l">Avg win / loss</div><div class="v num"><span class="up">${pp1(a.avgWinPips)}</span> <span class="mut">/</span> <span class="down">${pp1(a.avgLossPips)}</span></div><div class="s">pips${payoff?` · winners ${fmt(payoff,2)}× losers`:""}</div></div>` : ""}</div>`;
+}
+function recentList(rows){
+  return rows.slice(0, 12).map((t,i)=>`<div class="tc" data-ti="${i}"><div class="rw"><span class="side ${t.side[0]}">${t.side}</span><b>${t.symbol}</b>${t.tf?`<span class="tag">${t.tf}</span>`:""}
+    <span class="ell s2">${esc(sname(stratOf(t)))}</span><span class="sp"></span><b class="num ${cls(t.realized)}">${sR(t.r_multiple)}</b></div>
+    <div class="rw s3"><span class="num">${md(t.closed)} ${hm(t.closed)}</span><span class="sp"></span><span class="num">${sPip(t.pips)} · ${smoney(t.realized)}</span></div></div>`).join("") || `<div class="empty">No trades yet.</div>`;
+}
+function bestLine(rows){
+  const g = {}; rows.forEach(t => { const k = sname(stratOf(t)) + " on " + (t.tf || "?"); (g[k] = g[k] || []).push(t); });
+  const c = Object.entries(g).map(([k, ts]) => [k, agg(ts)]).filter(([,a]) => a.n >= 5).sort((a,b)=>b[1].sumR-a[1].sumR);
+  if(!c.length) return `<div class="mut" style="font-size:13px;margin-bottom:14px">Not enough trades yet to say what works best (needs 5+ trades in one strategy and timeframe).</div>`;
+  const [k, a] = c[0];
+  return `<div class="banner" style="margin-bottom:14px"><div><b>Best so far: ${esc(k)}</b><small>${a.n} trades, ${Math.round(a.wr*100)}% won, ${sR(a.sumR)} total (${sR(a.avgR)} per trade).${a.n < 30 ? " Under 30 trades, so this can still be luck." : ""}</small></div></div>`;
+}
+function openDrawer(html){
+  const d = $("#drawer"); d.innerHTML = html; d.scrollTop = 0;
+  if(!d.classList.contains("on")){
+    d.classList.add("on"); $("#scrim").classList.add("on"); document.body.classList.add("noscroll");
+    try{ history.pushState({drawer:1}, ""); }catch(e){}
+  }
+  d.querySelectorAll("[data-close]").forEach(b => b.onclick = closeDrawer);
+}
+function wireDetail(rows){
+  const d = $("#drawer");
+  d.querySelectorAll("[data-ti]").forEach(x => x.onclick = () => openTrade(rows[+x.dataset.ti]));
+  d.querySelectorAll("tr[data-open]").forEach(x => x.onclick = () => x.dataset.open === "inst" ? openInstrument(x.dataset.k) : openStrategy(x.dataset.k));
+}
+const bookNote = () => `<div class="mut" style="font-size:12px;margin:-6px 0 14px">${esc(bookLabel(BOOK))} book · closed trades</div>`;
+async function openStrategy(name){
+  const rows = (await allTrades()).filter(t => stratOf(t) === name);
+  openDrawer(`<div class="dh"><button class="btn" data-close aria-label="Back">‹ Back</button><h2 style="margin:0">${esc(sname(name))}</h2></div>${bookNote()}
+    ${tiles(agg(rows), false)}
+    <div class="card" style="margin-bottom:12px"><h3>By timeframe</h3>${groupTable(rows, t => t.tf || "—", "TF", {order: tfOrder})}</div>
+    <div class="card" style="margin-bottom:12px"><h3>By instrument <span class="sp"></span><span class="mut" style="font-weight:500">tap for details</span></h3>${groupTable(rows, t => t.symbol, "Symbol", {open:"inst", pips:true})}</div>
+    <div class="card" style="margin-bottom:12px"><h3>Instrument × timeframe</h3>${groupTable(rows, t => t.symbol + " " + (t.tf || "—"), "Where")}</div>
+    <div class="card"><h3>Recent trades</h3>${recentList(rows)}</div>
+    <button class="btn dback" data-close>Back</button>`);
+  wireDetail(rows);
+}
+async function openInstrument(sym){
+  const rows = (await allTrades()).filter(t => t.symbol === sym);
+  openDrawer(`<div class="dh"><button class="btn" data-close aria-label="Back">‹ Back</button><h2 style="margin:0">${esc(sym)}</h2></div>${bookNote()}
+    ${tiles(agg(rows), true)}${bestLine(rows)}
+    <div class="card" style="margin-bottom:12px"><h3>By strategy <span class="sp"></span><span class="mut" style="font-weight:500">tap for details</span></h3>${groupTable(rows, stratOf, "Strategy", {open:"strat", pips:true, name: sname})}</div>
+    <div class="card" style="margin-bottom:12px"><h3>By timeframe</h3>${groupTable(rows, t => t.tf || "—", "TF", {order: tfOrder, pips:true})}</div>
+    <div class="card" style="margin-bottom:12px"><h3>Long vs short</h3>${groupTable(rows, t => t.side === "LONG" ? "Long" : "Short", "Side", {pips:true})}</div>
+    <div class="card" style="margin-bottom:12px"><h3>By hour opened (NY)</h3>${groupTable(rows, t => t.opened ? hm(t.opened).slice(0,2) + ":00" : null, "Hour", {order: k => +k.slice(0,2), pips:true})}</div>
+    <div class="card"><h3>Recent trades</h3>${recentList(rows)}</div>
+    <button class="btn dback" data-close>Back</button>`);
+  wireDetail(rows);
+}
+
 /* ── strategies ── */
 let sf = {sym:"ALL", tfk:"ALL"};
 function renderBoard(s){
@@ -942,10 +1042,11 @@ function renderBoard(s){
   const rows = s.board.filter(b=>b.n>0&&(sf.sym==="ALL"||b.symbol===sf.sym)&&(sf.tfk==="ALL"||b.tf===sf.tfk)).sort((a,b)=>b.expectancy-a.expectancy).slice(0,60);
   const mx = Math.max(.5, ...rows.map(r=>Math.abs(r.expectancy)));
   $("#board").innerHTML = rows.length ? `<table><tr><th>Symbol</th><th>Strategy</th><th>TF</th><th>Status</th><th class=r>Trades</th><th class=r>Win</th><th>Expectancy</th><th class=r>PF</th><th class=r>This hour</th></tr>` +
-    rows.map(r=>`<tr><td><b>${r.symbol}</b></td><td>${esc(r.id.split(":")[0])}</td><td><span class="tag">${r.tf||""}</span></td><td><span class="tag ${r.status==="live"?"acc":""}">${r.status}</span></td>
+    rows.map(r=>`<tr class="row" data-strat="${esc(r.id.split(":")[0])}"><td><b>${r.symbol}</b></td><td>${esc(r.id.split(":")[0])}</td><td><span class="tag">${r.tf||""}</span></td><td><span class="tag ${r.status==="live"?"acc":""}">${r.status}</span></td>
       <td class="r num">${r.n}</td><td class="r num">${Math.round(r.win_rate*100)}%</td>
       <td><span class="num ${cls(r.expectancy)}" style="display:inline-block;min-width:58px">${sR(r.expectancy)}</span><span style="display:inline-block;height:7px;border-radius:4px;vertical-align:middle;width:${Math.round(Math.abs(r.expectancy)/mx*70)}px;background:var(${r.expectancy>=0?"--up":"--down"})"></span></td>
       <td class="r num">${r.pf}</td><td class="r num ${r.hour?cls(r.hour.exp):""}">${r.hour?sR(r.hour.exp)+` (${r.hour.n})`:"—"}</td></tr>`).join("") + `</table>` : `<div class="empty">No statistics yet.</div>`;
+  $$("#board tr[data-strat]").forEach(x => x.onclick = () => openStrategy(x.dataset.strat));
   $("#learner").innerHTML = s.learner.map(l=>`<div class="fi"><span class="when">${md(l.ts)}</span><span>${esc(l.msg)}</span></div>`).join("") || `<div class="empty">First learning cycle pending.</div>`;
 }
 
