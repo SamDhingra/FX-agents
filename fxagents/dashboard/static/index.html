@@ -446,7 +446,7 @@ html[data-surface="glass"]{background:var(--bg)}
 /* Dense data and overlays stay opaque for legibility. Blur is limited to navigation. */
 [data-surface="glass"] .tbl{background:var(--card);border-radius:9px}[data-surface="glass"] .drawer,[data-surface="glass"] .bookpane,[data-surface="glass"] .sheet,[data-surface="glass"] dialog{background:var(--card)}
 .appearance-trigger{gap:7px;font-size:10px!important;min-height:34px!important}.accent-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-#appearanceDialog{width:min(520px,calc(100% - 32px));padding:26px;background:var(--card);color:var(--text);border:1px solid var(--line-2);border-radius:21px;box-shadow:0 30px 100px #0005;max-height:calc(100dvh - 32px);overflow:auto}
+#appearanceDialog{width:min(520px,calc(100% - 32px));padding:26px;background:var(--card);color:var(--text);border:1px solid var(--line-2);border-radius:21px;box-shadow:0 30px 100px #0005;max-height:calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 #appearanceDialog::backdrop{background:rgb(11 15 31 / .46);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .appearance-header{display:flex;align-items:center;justify-content:space-between;gap:15px}.appearance-header h2{font-size:25px;letter-spacing:-.9px;margin:5px 0 0}.appearance-header .btn{font-size:24px;min-width:36px;line-height:1}.appearance-header .eyebrow{font-size:9px}
 .appearance-intro{color:var(--muted);font-size:12px;margin:12px 0 24px}
@@ -468,7 +468,7 @@ html[data-surface="glass"]{background:var(--bg)}
 :root[data-motion="off"] *, :root[data-motion="off"] *::before, :root[data-motion="off"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @supports not (backdrop-filter:blur(1px)){[data-surface="glass"] .top,[data-surface="glass"] .tabbar{background:var(--card)}}
-@media(max-width:760px){[data-surface="glass"] .top{padding:9px 10px;margin-top:10px;top:7px;min-height:53px;gap:8px}[data-surface="glass"] .page-heading{padding-top:24px}.appearance-trigger{padding:7px!important;min-width:32px}.appearance-label{display:none}.top #clock{font-size:8px}.top .connection{font-size:8px}.top .workspace-name{font-size:9px}.top .sp{flex:1}.theme-preset small{font-size:8px}.theme-sample{height:65px}.accent-options button{padding:7px 9px;gap:6px}#appearanceDialog{padding:21px}.appearance-header h2{font-size:23px}[data-surface="glass"] .hero .card{min-height:112px}}
+@media(max-width:760px){[data-surface="glass"] .top{padding:9px 10px;margin-top:calc(10px + env(safe-area-inset-top));top:calc(7px + env(safe-area-inset-top));min-height:53px;gap:8px}[data-surface="glass"] .page-heading{padding-top:24px}.appearance-trigger{padding:7px!important;min-width:32px}.appearance-label{display:none}.top #clock{font-size:8px}.top .connection{font-size:8px}.top .workspace-name{font-size:9px}.top .sp{flex:1}.theme-preset small{font-size:8px}.theme-sample{height:65px}.accent-options button{padding:7px 9px;gap:6px}#appearanceDialog{padding:21px}.appearance-header h2{font-size:23px}[data-surface="glass"] .hero .card{min-height:112px}}
 
 </style>
 </head>
@@ -692,6 +692,7 @@ html[data-surface="glass"]{background:var(--bg)}
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
   <button data-p="news"><svg><use href="#i-news"/></svg>News</button>
   <button data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
+  <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
@@ -783,6 +784,7 @@ function setAppearance(values){
 }
 $("#theme").onclick=()=>setAppearance({theme:document.documentElement.dataset.theme==='dark'?'light':'dark'});
 $("#appearance").onclick=()=>{syncAppearance();$("#appearanceDialog").showModal()};
+$("#moreAppearance").onclick=()=>{ $("#moreSheet").classList.remove("on"); $("#scrim").classList.remove("on"); syncAppearance(); $("#appearanceDialog").showModal(); };
 $("#closeAppearance").onclick=$("#appearanceDone").onclick=()=>$("#appearanceDialog").close();
 $$("[data-preset]").forEach(b=>b.onclick=()=>{
   const preset=b.dataset.preset;
