@@ -5,48 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0d0f14">
+<meta name="theme-color" content="#16181d">
 <title>FX-Agents</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   color-scheme: dark;
-  --bg:#0d0f14; --bg-2:#12151c; --card:#161a23; --card-2:#1c212c; --line:#262c39; --line-2:#313848;
-  --text:#f3f5f9; --text-2:#aab2c2; --muted:#737d90;
-  --accent:#4f8ff7; --accent-2:#7aa9ff; --accent-soft:rgb(79 143 247 / .14);
-  --up:#22c55e; --up-text:#4ade80; --up-soft:rgb(34 197 94 / .14);
-  --down:#ef4444; --down-text:#f87171; --down-soft:rgb(239 68 68 / .14);
-  --warn:#f5a524; --warn-soft:rgb(245 165 36 / .14);
-  --ghost:#a78bfa; --ghost-soft:rgb(167 139 250 / .16);
-  --radius:16px; --shadow:0 10px 30px rgb(0 0 0 / .35);
-  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:#16181d; --bg-2:#1a1d23; --card:#1f2229; --card-2:#262a32; --line:#2e333d; --line-2:#3a404c;
+  --text:#eef0f3; --text-2:#b4bac6; --muted:#878e9c;
+  --accent:#5b9cf6; --accent-2:#86b6fa; --accent-soft:rgb(91 156 246 / .15);
+  --up:#3fb67e; --up-text:#5fcf98; --up-soft:rgb(63 182 126 / .15);
+  --down:#ea6560; --down-text:#f38a85; --down-soft:rgb(234 101 96 / .15);
+  --warn:#e3a944; --warn-soft:rgb(227 169 68 / .15);
+  --ghost:#a593f5; --ghost-soft:rgb(165 147 245 / .16);
+  --book:var(--accent); --book-soft:var(--accent-soft);
+  --radius:14px; --shadow:none;
+  --mono:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
 }
 :root[data-theme="light"]{
   color-scheme: light;
-  --bg:#f3f5f9; --bg-2:#eef1f6; --card:#ffffff; --card-2:#f6f8fb; --line:#e4e8ef; --line-2:#d5dbe5;
-  --text:#0f1420; --text-2:#475166; --muted:#7a8497;
-  --accent:#2a6fe0; --accent-2:#2a6fe0; --accent-soft:rgb(42 111 224 / .10);
-  --up:#16a34a; --up-text:#15803d; --up-soft:rgb(22 163 74 / .12);
-  --down:#dc2626; --down-text:#b91c1c; --down-soft:rgb(220 38 38 / .10);
-  --warn:#d97706; --warn-soft:rgb(217 119 6 / .12); --shadow:0 8px 24px rgb(15 20 32 / .08);
-  --ghost:#7c3aed; --ghost-soft:rgb(124 58 237 / .10);
+  --bg:#f2f3f5; --bg-2:#eceef1; --card:#ffffff; --card-2:#f6f7f9; --line:#e1e4e9; --line-2:#cfd4dc;
+  --text:#14171c; --text-2:#4a5160; --muted:#737b8a;
+  --accent:#2f6fd8; --accent-2:#2f6fd8; --accent-soft:rgb(47 111 216 / .10);
+  --up:#1f9a62; --up-text:#17804f; --up-soft:rgb(31 154 98 / .11);
+  --down:#d2463f; --down-text:#b53a34; --down-soft:rgb(210 70 63 / .10);
+  --warn:#b97d12; --warn-soft:rgb(185 125 18 / .12); --shadow:0 1px 2px rgb(20 23 28 / .06);
+  --ghost:#6d4fe0; --ghost-soft:rgb(109 79 224 / .10);
 }
 @media (prefers-color-scheme: light){
   :root:where(:not([data-theme="dark"])){
     color-scheme: light;
-    --bg:#f3f5f9; --bg-2:#eef1f6; --card:#ffffff; --card-2:#f6f8fb; --line:#e4e8ef; --line-2:#d5dbe5;
-    --text:#0f1420; --text-2:#475166; --muted:#7a8497;
-    --accent:#2a6fe0; --accent-2:#2a6fe0; --accent-soft:rgb(42 111 224 / .10);
-    --up:#16a34a; --up-text:#15803d; --up-soft:rgb(22 163 74 / .12);
-    --down:#dc2626; --down-text:#b91c1c; --down-soft:rgb(220 38 38 / .10);
-    --warn:#d97706; --warn-soft:rgb(217 119 6 / .12); --shadow:0 8px 24px rgb(15 20 32 / .08);
-    --ghost:#7c3aed; --ghost-soft:rgb(124 58 237 / .10);
+    --bg:#f2f3f5; --bg-2:#eceef1; --card:#ffffff; --card-2:#f6f7f9; --line:#e1e4e9; --line-2:#cfd4dc;
+    --text:#14171c; --text-2:#4a5160; --muted:#737b8a;
+    --accent:#2f6fd8; --accent-2:#2f6fd8; --accent-soft:rgb(47 111 216 / .10);
+    --up:#1f9a62; --up-text:#17804f; --up-soft:rgb(31 154 98 / .11);
+    --down:#d2463f; --down-text:#b53a34; --down-soft:rgb(210 70 63 / .10);
+    --warn:#b97d12; --warn-soft:rgb(185 125 18 / .12); --shadow:0 1px 2px rgb(20 23 28 / .06);
+    --ghost:#6d4fe0; --ghost-soft:rgb(109 79 224 / .10);
   }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text)}
-body{font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1,"cv11" 1}
+html,body{margin:0;background:var(--bg);color:var(--text);overflow-x:clip}
+body{font:14px/1.5 "IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 button{font:inherit;color:inherit;cursor:pointer}
 .num{font-variant-numeric:tabular-nums}
 .up{color:var(--up-text)} .down{color:var(--down-text)} .mut{color:var(--muted)} .t2{color:var(--text-2)}
@@ -55,7 +58,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
 aside{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--bg-2);display:flex;flex-direction:column;gap:6px}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 10px 18px}
-.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:grid;place-items:center;font-weight:800;color:#fff;box-shadow:0 6px 18px rgb(79 143 247 / .35)}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;font-weight:700;color:#fff}
 .brand b{font-size:16px;letter-spacing:.2px} .brand small{display:block;color:var(--muted);font-size:11px}
 .nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:var(--text-2);border:0;background:none;text-align:left;font-weight:500}
 .nav svg{width:19px;height:19px;flex:none}
@@ -63,7 +66,7 @@ aside{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px soli
 .side-foot{margin-top:auto;display:grid;gap:8px}
 main{min-width:0;padding:0 28px 60px}
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:16px 0 14px;background:linear-gradient(var(--bg) 70%,transparent)}
-.top h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.2px}
+.top h1{font-size:22px;margin:0;font-weight:600;letter-spacing:-.3px}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--text-2);white-space:nowrap}
 .chip.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 0 0 rgb(34 197 94 / .6);animation:pulse 1.8s infinite}
 .chip.halt::before{content:"";width:7px;height:7px;border-radius:2px;background:var(--down)}
@@ -84,9 +87,9 @@ main{min-width:0;padding:0 28px 60px}
 /* hero */
 .hero{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr;gap:16px}
 .kpi .l{font-size:12px;color:var(--text-2);font-weight:500}
-.kpi .v{font-size:26px;font-weight:700;letter-spacing:-.4px;margin-top:4px}
+.kpi .v{font-size:26px;font-weight:600;letter-spacing:-.5px;margin-top:4px}
 .kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
-.kpi.main{background:radial-gradient(120% 140% at 0% 0%,var(--accent-soft),transparent 60%),var(--card)}
+.kpi.main{box-shadow:inset 4px 0 0 var(--book)}
 .kpi.main .v{font-size:32px}
 .delta{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:13px;padding:3px 8px;border-radius:8px}
 .delta.up{background:var(--up-soft)} .delta.down{background:var(--down-soft)}
@@ -147,7 +150,7 @@ main{min-width:0;padding:0 28px 60px}
 .msum{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .msum .card{padding:14px}
 .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
-.dow{font-size:11px;font-weight:600;color:var(--muted);text-align:center;padding-bottom:4px;text-transform:uppercase;letter-spacing:.6px}
+.dow{font-size:12px;font-weight:500;color:var(--muted);text-align:center;padding-bottom:4px}
 .day{position:relative;min-width:0;overflow:hidden;min-height:96px;border-radius:12px;padding:10px;background:var(--card-2);border:1px solid var(--line);display:flex;flex-direction:column;gap:2px;text-align:left;transition:transform .12s,border-color .12s}
 .day:hover{transform:translateY(-2px);border-color:var(--line-2)}
 .day.out{opacity:.35} .day.wk{background:transparent}
@@ -167,7 +170,7 @@ main{min-width:0;padding:0 28px 60px}
 
 /* lists / tables */
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 td{padding:11px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 tr.row{cursor:pointer} tr.row:hover td{background:var(--card-2)}
 .r{text-align:right}
@@ -209,7 +212,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
 .hc{padding:12px;border-radius:12px;background:var(--card-2);border:1px solid var(--line)}
 .hc b{display:flex;align-items:center;gap:7px;font-size:13px} .hc b::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--up)}
 .hc.stale b::before{background:var(--warn)} .hc small{color:var(--muted)}
-.news-day{font-size:12px;font-weight:700;color:var(--text-2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.6px}
+.news-day{font-size:13px;font-weight:600;color:var(--text-2);margin:16px 0 8px}
 .ev{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--card-2);border:1px solid var(--line);margin-bottom:8px}
 .ev .tm{font-family:var(--mono);font-weight:600;min-width:48px}
 .tier{font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;letter-spacing:.4px}
@@ -245,11 +248,36 @@ body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
   .sheet a{color:var(--down-text);border-top:1px solid var(--line);border-radius:0 0 12px 12px;margin-top:4px}
 }
 
+/* book switcher: one button for the book you're viewing; a sheet (phone) / dropdown (desktop) lists them all */
+.bookbtn{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px 6px 10px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--card);font-weight:600;font-size:13px;max-width:100%}
+.bookbtn .bd{width:10px;height:10px;border-radius:50%;background:var(--book);flex:none}
+.bookbtn .bn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.bookbtn .bk{font-weight:500;color:var(--muted);font-size:12px;white-space:nowrap}
+.bookbtn svg{width:14px;height:14px;color:var(--muted);flex:none;transform:rotate(90deg)}
+.bookbtn[hidden]{display:none}
+.bookpane{position:fixed;z-index:46;background:var(--card);border:1px solid var(--line-2);border-radius:16px;padding:8px;display:none;
+  box-shadow:0 18px 40px rgb(0 0 0 / .35);width:min(380px,calc(100vw - 20px))}
+.bookpane.on{display:block}
+.bookpane h4{margin:6px 10px 8px;font-size:13px;font-weight:600;color:var(--text-2)}
+.bookpane .bi{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:12px;width:100%;padding:12px 10px;border:0;background:none;border-radius:11px;text-align:left}
+.bookpane .bi:hover{background:var(--card-2)} .bookpane .bi.on{background:var(--card-2)}
+.bookpane .bi .bd{width:12px;height:12px;border-radius:50%}
+.bookpane .bi b{display:block;font-size:14.5px;font-weight:600} .bookpane .bi small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.bookpane .bi .bs{text-align:right;font-size:13px;font-weight:600;white-space:nowrap} .bookpane .bi .bs small{font-weight:500}
+.bookpane .foot{font-size:12px;color:var(--muted);padding:8px 10px 4px;border-top:1px solid var(--line);margin-top:4px}
+.vsel{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);font-weight:500}
+.vsel[hidden]{display:none}
+@media (max-width:760px){.filters.cmpbar{flex-wrap:wrap;overflow:visible;margin:0 0 12px;padding:0}}
+.vsel select{font:600 13px "IBM Plex Sans",system-ui,sans-serif;color:var(--text);background:var(--card);border:1px solid var(--line-2);border-radius:999px;padding:7px 30px 7px 12px;
+  appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat;max-width:60vw}
 /* shadow book + compare */
 .seg button.ghost.on{background:var(--ghost-soft);color:var(--ghost);box-shadow:none}
-.shbar{display:none;align-items:center;gap:10px;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--ghost-soft);color:var(--ghost);font-size:13px;font-weight:600}
+.shbar{display:none;align-items:center;gap:8px;margin:0 0 14px;font-size:12.5px;color:var(--text-2)}
+.shbar::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--book);flex:none}
 body.shadow .shbar{display:flex}
-body.shadow .kpi.main{background:radial-gradient(120% 140% at 0% 0%,var(--ghost-soft),transparent 60%),var(--card)}
+
 body.shadow #pause, body.shadow #flatten{display:none}
 .tag.gh{background:var(--ghost-soft);border-color:transparent;color:var(--ghost)}
 .verdict{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -305,7 +333,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .bn{display:grid;gap:8px}
 .bn .it{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);font-size:13px}
 .seg button{white-space:nowrap}
-@media (max-width:760px){ a.btn.hide-m{display:none} .top{flex-wrap:wrap} #bookSeg{order:9;width:100%;display:flex} #bookSeg[hidden]{display:none} #bookSeg button{flex:1;padding:7px 0}
+@media (max-width:760px){ a.btn.hide-m{display:none} .top{flex-wrap:wrap} .bookbtn{order:9;width:100%;justify-content:flex-start;min-height:42px;padding:8px 14px 8px 12px} .bookbtn .bk{margin-left:auto}
+  .bookpane{left:10px!important;right:10px;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom));width:auto;border-radius:20px;padding:10px 8px calc(8px + env(safe-area-inset-bottom))}
   .vs td,.vs th{padding:9px 6px;font-size:12.5px} .fun .row{grid-template-columns:86px 1fr} .hrl span:nth-child(odd){visibility:hidden} .verdict b{font-size:17px} }
 
 /* ── responsive ── */
@@ -321,7 +350,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     margin:0 -14px;padding:0 14px 4px;scrollbar-width:none}
   .bias-row::-webkit-scrollbar{display:none} .bias{scroll-snap-align:start}
   .hero{grid-template-columns:1fr 1fr;gap:10px}.hero .kpi.main{grid-column:span 2}
-  .kpi .v{font-size:21px}.kpi.main .v{font-size:30px}
+  .kpi .v{font-size:21px}.kpi.main .v{font-size:30px} .hero .card{padding:12px 14px}
   .card{padding:14px;border-radius:14px}
   .c3{grid-column:span 12}
   .filters{flex-wrap:nowrap;overflow-x:auto;margin:0 -14px 12px;padding:0 14px;scrollbar-width:none} .fchip{flex:none}
@@ -387,13 +416,13 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
       <span class="chip hide-m" id="mode">SIM</span>
       <span class="chip hide-m num" id="clock">—</span>
       <span class="sp"></span>
-      <div class="seg" id="bookSeg" hidden><button data-b="live" class="on">Live</button></div>
+      <button class="bookbtn" id="bookBtn" hidden aria-haspopup="listbox" aria-expanded="false"><i class="bd"></i><span class="bn" id="bookName">Live</span><span class="bk" id="bookKind">account</span><svg><use href="#i-right"/></svg></button>
       <button class="btn icon" id="theme" title="Theme"><svg><use href="#i-sun"/></svg></button>
       <button class="btn icon" id="pause" title="Pause / resume"><svg><use href="#i-pause"/></svg></button>
       <button class="btn red" id="flatten">Flatten</button>
     </div>
 
-    <div class="shbar" id="shbar">👻 <span id="shtext">Shadow book — virtual fills, no orders are sent</span></div>
+    <div class="shbar" id="shbar"><span id="shtext">Paper book: virtual fills, no orders are sent</span></div>
 
     <!-- OVERVIEW -->
     <section class="page on" id="p-home">
@@ -436,9 +465,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
     <!-- COMPARE -->
     <section class="page" id="p-compare">
-      <div class="filters" style="align-items:center">
+      <div class="filters cmpbar" style="align-items:center">
         <div class="seg" id="cmpSeg"><button data-r="today">Today</button><button data-r="week" class="on">7 days</button><button data-r="all">Since start</button></div>
-        <div class="seg" id="cmpVs" hidden></div>
+        <label class="vsel" id="cmpVsWrap" hidden><span>Live vs</span><select id="cmpVs" aria-label="Book to compare with live"></select></label>
         <span class="sp" style="flex:1"></span>
         <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" id="shCsv" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
       </div>
@@ -548,6 +577,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   <button data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
 </div>
+<div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
 <div class="drawer" id="drawer"></div>
 <div class="toasts" id="toasts"></div>
@@ -949,9 +979,9 @@ async function loadCompare(){
   try{ CMP = await (await fetch("api/compare?range="+cmpRange+(cmpVs?"&vs="+encodeURIComponent(cmpVs):""),{credentials:"same-origin"})).json(); }catch(e){ CMP = null; }
   const bs = (CMP && CMP.book_list) || [];
   if(CMP && CMP.vs) cmpVs = CMP.vs;
-  const vsEl = $("#cmpVs"); vsEl.hidden = bs.length < 2;
-  vsEl.innerHTML = bs.map(b => `<button data-v="${b}" class="ghost ${b===cmpVs?"on":""}">vs ${modeName(b)}</button>`).join("");
-  vsEl.querySelectorAll("button").forEach(x => x.onclick = () => { cmpVs = x.dataset.v; loadCompare(); });
+  const vsEl = $("#cmpVs"); $("#cmpVsWrap").hidden = bs.length < 2;
+  vsEl.innerHTML = bs.map(b => `<option value="${b}" ${b===cmpVs?"selected":""}>${esc(ModeName(b))}</option>`).join("");
+  vsEl.onchange = () => { cmpVs = vsEl.value; loadCompare(); };
   if(cmpVs) $("#shCsv").href = "api/journal.csv?book=" + encodeURIComponent(cmpVs);
   renderCompare();
 }
@@ -960,19 +990,20 @@ function renderCompare(){
   if(!CMP){ el.innerHTML = `<div class="card"><div class="empty">Couldn't load the comparison.</div></div>`; return; }
   if(!CMP.enabled){ el.innerHTML = `<div class="card"><div class="empty">The shadow book is off. Set <code>shadow.enabled: true</code> in config.yaml and restart.</div></div>`; return; }
   const L = CMP.books.live, G = CMP.books.shadow;
-  const nl = `Live · ${modeName(L.mode)}`, ng = `Shadow · ${modeName(G.mode)}`;
+  const gname = ModeName(G.mode), nl = "Live", ng = gname;
+  el.style.setProperty("--ghost", bookColor(G.mode)); el.style.setProperty("--ghost-soft", bookColor(G.mode) + "26");
   const LG = CMP.league && CMP.league.rows || [];
   const bestR = Math.max(...LG.map(r=>r.sum_r)), anyT = LG.some(r=>r.trades);
-  const league = LG.length > 2 ? `<div class="card c12"><h3>All books <span class="sp"></span><span class="mut" style="font-weight:500">same period for every book${CMP.league.since ? " · since " + md(CMP.league.since) + " " + hm(CMP.league.since) + " NY" : ""}</span></h3>
-    <div class="tbl"><table><tr><th>Book</th><th class="r">Trades</th><th class="r">Winners</th><th class="r">Win rate</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r">P&amp;L</th><th class="r hide-m">Open</th></tr>
-    ${LG.map(r => `<tr><td><b>${r.book==="live"?"Live":"Shadow"}</b> <span class="tag ${r.book==="live"?"acc":"gh"}">${modeName(r.mode)}</span>${anyT && r.sum_r===bestR ? ` <span class="mut" title="most R">●</span>` : ""}</td>
-      <td class="r num">${r.trades}</td><td class="r num">${r.wins}</td><td class="r num">${r.trades?Math.round(r.win_rate*100)+"%":"—"}</td>
-      <td class="r num ${cls(r.sum_r)}"><b>${sR(r.sum_r)}</b></td><td class="r num hide-m ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num ${cls(r.pnl)}">${smoney(r.pnl)}</td><td class="r num hide-m">${r.open}</td></tr>`).join("")}</table></div>
-    <div class="mut" style="font-size:12px;margin-top:8px">Judge on total R and trade count together — a book with a handful of trades can lead by luck. Under ~20 trades each, it's too early to switch.</div></div>` : "";
+  const league = LG.length > 2 ? `<div class="card c12"><h3>All books <span class="sp"></span><span class="mut" style="font-weight:500">${CMP.league.since ? "since " + md(CMP.league.since) + ", " + hm(CMP.league.since) + " NY" : ""}</span></h3>
+    <div class="tbl"><table><tr><th>Book</th><th class="r">Trades</th><th class="r hide-m">Winners</th><th class="r hide-m">Win rate</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r hide-m">P&amp;L</th><th class="r hide-m">Open</th></tr>
+    ${LG.map(r => `<tr><td><i class="dot" style="background:${bookColor(r.book)}"></i><b>${esc(r.book==="live"?"Live":ModeName(r.mode||r.book))}</b>${anyT && r.sum_r===bestR ? ` <span class="tag acc" title="most R">top</span>` : ""}</td>
+      <td class="r num">${r.trades}</td><td class="r num hide-m">${r.wins}</td><td class="r num hide-m">${r.trades?Math.round(r.win_rate*100)+"%":"—"}</td>
+      <td class="r num ${cls(r.sum_r)}"><b>${sR(r.sum_r)}</b></td><td class="r num hide-m ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num hide-m ${cls(r.pnl)}">${smoney(r.pnl)}</td><td class="r num hide-m">${r.open}</td></tr>`).join("")}</table></div>
+    <div class="mut" style="font-size:12px;margin-top:8px">Every book is measured over the same period. Read total R together with the trade count: with fewer than about 20 trades, a lead can be luck.</div></div>` : "";
   const diff = +(G.sum_r - L.sum_r).toFixed(2), few = Math.min(L.trades, G.trades) < 20;
   let verdict;
   if(!L.trades && !G.trades) verdict = `<b>No closed trades yet</b><span class="mut">The comparison fills in as trades close in either book.</span>`;
-  else verdict = `<b>${diff === 0 ? "Level" : (diff > 0 ? "Shadow" : "Live") + " ahead by " + sR(Math.abs(diff))}</b>
+  else verdict = `<b>${diff === 0 ? "Level" : (diff > 0 ? gname : "Live") + " ahead by " + sR(Math.abs(diff))}</b>
     <span class="tag ${few ? "" : "acc"}">${few ? "too early to call — under 20 trades in a book" : "enough trades to start reading"}</span>`;
   const rows = [["Trades","trades",v=>fmt(v,0),0],["Win rate","win_rate",v=>Math.round(v*100)+"%",1],["Total R","sum_r",v=>sR(v),1],
     ["Avg R / trade","avg_r",v=>sR(v),1],["P&L","pnl",v=>smoney(v),1],["Best day","best_day",v=>smoney(v),1],["Worst day","worst_day",v=>smoney(v),1],
@@ -997,21 +1028,21 @@ function renderCompare(){
   const hlab = Array.from({length:24},(_,h)=>`<span>${h}</span>`).join("");
   const reasons = (G.funnel.reasons||[]).map(([r,n])=>`<div class="fi"><span class="when num">${n}×</span><span>${esc(r)}</span></div>`).join("") || `<div class="empty">Nothing filtered yet.</div>`;
   const days = CMP.days.map(d => {
-    const better = d.shadow.r > d.live.r ? `<span class="tag gh">shadow</span>` : d.live.r > d.shadow.r ? `<span class="tag acc">live</span>` : `<span class="mut">—</span>`;
+    const better = d.shadow.r > d.live.r ? `<span class="tag gh">${esc(gname)}</span>` : d.live.r > d.shadow.r ? `<span class="tag acc">live</span>` : `<span class="mut">—</span>`;
     return `<tr><td>${md(d.date)}</td><td class="r num hide-m">${d.live.trades}</td><td class="r num ${cls(d.live.r)}">${sR(d.live.r)}</td><td class="r num ${cls(d.live.pnl)} hide-m">${smoney(d.live.pnl)}</td>
       <td class="r num hide-m">${d.shadow.trades}</td><td class="r num ${cls(d.shadow.r)}">${sR(d.shadow.r)}</td><td class="r num ${cls(d.shadow.pnl)} hide-m">${smoney(d.shadow.pnl)}</td><td class="r">${better}</td></tr>`; }).join("");
   el.innerHTML = `
     <div class="grid">${league}
       <div class="card c12"><div class="verdict">${verdict}</div>
-        <div class="mut" style="font-size:12px;margin-top:6px">${CMP.started ? "Shadow started " + md(CMP.started) + " " + hm(CMP.started) + " NY · " : ""}both books trade the same live bars; shadow fills are simulated with an estimated spread.</div></div>
+        <div class="mut" style="font-size:12px;margin-top:6px">${CMP.started ? esc(gname) + " started " + md(CMP.started) + " " + hm(CMP.started) + " NY. " : ""}Both books trade the same live prices; paper fills are simulated with the measured spread.</div></div>
       <div class="card c5"><h3>Head to head</h3><table class="vs"><tr><th></th><th class="r l">${nl}</th><th class="r g">${ng}</th></tr>${vs}</table></div>
-      <div class="card c7"><h3>Cumulative R <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>live <i class="dot" style="background:var(--ghost);margin-left:8px"></i>shadow</span></h3>
+      <div class="card c7"><h3>Cumulative R <span class="sp"></span><span class="mut" style="font-weight:500"><i class="dot" style="background:var(--accent)"></i>Live <i class="dot" style="background:var(--ghost);margin-left:8px"></i>${esc(gname)}</span></h3>
         <div class="chart"><svg id="cmpChart" height="230"></svg></div></div>
-      <div class="card c12"><h3>Setups seen → what happened</h3><div class="fun">${fun(L.funnel, "Live")}${fun(G.funnel, "Shadow")}</div></div>
-      <div class="card c7"><h3>Shadow · by setup type</h3>${setups ? `<div class="tbl"><table><tr><th>Setup</th><th class="r">Seen</th><th class="r">Taken</th><th class="r">Rate</th><th class="r hide-m">Filtered</th><th class="r hide-m">Jev skip</th></tr>${setups}</table></div>` : `<div class="empty">No setups seen yet.</div>`}</div>
-      <div class="card c5"><h3>Shadow · why setups were passed</h3><div class="feed" style="max-height:300px">${reasons}</div></div>
-      <div class="card c12"><h3>Shadow · setups by hour (NY) <span class="sp"></span><span class="mut" style="font-weight:500">bar = seen · fill = share taken</span></h3><div class="hrs">${hbars}</div><div class="hrl">${hlab}</div></div>
-      <div class="card c12"><h3>By day</h3>${days ? `<div class="tbl"><table><tr><th>Day</th><th class="r hide-m">Live #</th><th class="r">Live R</th><th class="r hide-m">Live P&amp;L</th><th class="r hide-m">Shadow #</th><th class="r">Shadow R</th><th class="r hide-m">Shadow P&amp;L</th><th class="r">Better</th></tr>${days}</table></div>` : `<div class="empty">No closed trades in this range yet.</div>`}</div>
+      <div class="card c12"><h3>Setups seen → what happened</h3><div class="fun">${fun(L.funnel, "Live")}${fun(G.funnel, esc(gname))}</div></div>
+      <div class="card c7"><h3>${esc(gname)}: setups by type</h3>${setups ? `<div class="tbl"><table><tr><th>Setup</th><th class="r">Seen</th><th class="r">Taken</th><th class="r">Rate</th><th class="r hide-m">Filtered</th><th class="r hide-m">Jev skip</th></tr>${setups}</table></div>` : `<div class="empty">No setups seen yet.</div>`}</div>
+      <div class="card c5"><h3>${esc(gname)}: why setups were passed</h3><div class="feed" style="max-height:300px">${reasons}</div></div>
+      <div class="card c12"><h3>${esc(gname)}: setups by hour (NY) <span class="sp"></span><span class="mut" style="font-weight:500">bar = seen, fill = share taken</span></h3><div class="hrs">${hbars}</div><div class="hrl">${hlab}</div></div>
+      <div class="card c12"><h3>By day</h3>${days ? `<div class="tbl"><table><tr><th>Day</th><th class="r hide-m">Live #</th><th class="r">Live R</th><th class="r hide-m">Live P&amp;L</th><th class="r hide-m">${esc(gname)} #</th><th class="r">${esc(gname)} R</th><th class="r hide-m">${esc(gname)} P&amp;L</th><th class="r">Better</th></tr>${days}</table></div>` : `<div class="empty">No closed trades in this range yet.</div>`}</div>
     </div>`;
   cmpChart($("#cmpChart"), CMP.curve);
 }
@@ -1476,8 +1507,8 @@ function render(s){
   const sh = s.shadow && s.shadow.enabled, books = sh ? (s.shadow.books || [s.shadow.mode]) : [];
   bookButtons(books);
   if(BOOK !== "live" && !books.includes(BOOK)) setBook(BOOK !== "live" && books.length ? books[0] : "live");
-  if(sh && BOOK !== "live") $("#shtext").textContent = `Shadow book · ${modeName(BOOK)} on the same live bars — virtual fills, no orders are sent`;
-  $("#mode").textContent = s.book !== "live" ? "SHADOW" : s.mode.toUpperCase();
+  if(sh && BOOK !== "live") $("#shtext").textContent = "Paper book: virtual fills, no orders are sent";
+  $("#mode").textContent = s.book !== "live" ? "Paper" : ({sim:"Simulation", paper:"Practice", live:"Live money"}[s.mode] || s.mode);
   const st = $("#status"); st.className = "chip " + (s.trading_enabled?"live":"halt"); st.textContent = s.trading_enabled ? "Trading" : "Halted";
   st.title = s.halt_reason || "";
   $("#pause").innerHTML = `<svg><use href="#i-${s.trading_enabled?"pause":"play"}"/></svg>`;
@@ -1515,26 +1546,67 @@ function connect(){
   ws.onmessage = e => { if(ws === WS) render(JSON.parse(e.data)); };
   ws.onclose = () => { if(ws === WS) setTimeout(connect, 2000); };
 }
-let BOOKS_SIG = "";
-function bookButtons(books){
-  // Live + one button per shadow book ("Shadow" when there's only one, the mode's name when there are several)
-  const sig = books.join(","); if(sig === BOOKS_SIG) return; BOOKS_SIG = sig;
-  const el = $("#bookSeg"); el.hidden = !books.length;
-  el.innerHTML = `<button data-b="live">Live</button>` + books.map(b => `<button data-b="${b}" class="ghost">${books.length > 1 ? ModeName(b) : "Shadow"}</button>`).join("");
-  el.querySelectorAll("button").forEach(x => { x.classList.toggle("on", x.dataset.b === BOOK); x.onclick = () => setBook(x.dataset.b); });
+let BOOKS = [];
+// every book keeps one colour wherever it appears (switcher, account card edge, paper-book note)
+const BOOK_COLORS = {live:"#5b9cf6", playbook:"#a593f5", playbook_regime:"#e48cc4", h1_vol_trend:"#45c2c6",
+  ema21_rsi55:"#e9a15b", setup_first:"#8fc46b", hourly_pick:"#d7c45a"};
+const BOOK_SPARE = ["#8fc46b", "#d7c45a", "#6fb8f0", "#f08a7a"];
+const BOOK_ABOUT = {live:"practice account · real orders", playbook:"weekly picked cells", playbook_regime:"playbook, chop/trend filter",
+  h1_vol_trend:"gold, hourly trend", ema21_rsi55:"gold + US30, 15m trend", setup_first:"best setup first", hourly_pick:"hourly strategy pick"};
+const bookColor = b => BOOK_COLORS[b] || BOOK_SPARE[Math.abs([...String(b)].reduce((a,c)=>a+c.charCodeAt(0),0)) % BOOK_SPARE.length];
+const bookLabel = b => b === "live" ? "Live" : (BOOKS.length > 1 ? ModeName(b) : "Shadow");
+function paintBook(){
+  const c = bookColor(BOOK);
+  document.documentElement.style.setProperty("--book", c);
+  document.documentElement.style.setProperty("--book-soft", c + "26");
+  $("#bookName").textContent = bookLabel(BOOK);
+  $("#bookKind").textContent = BOOK === "live" ? "account" : "paper";
 }
+function bookButtons(books){
+  const sig = books.join(","); if(sig === BOOKS.join(",") && $("#bookBtn").dataset.ready) return;
+  BOOKS = books; $("#bookBtn").dataset.ready = "1";
+  $("#bookBtn").hidden = !books.length;
+  paintBook();
+}
+let LEAGUE = null;
+async function openBooks(){
+  const pane = $("#bookPane"), btn = $("#bookBtn");
+  const draw = () => {
+    const rows = {}; ((LEAGUE && LEAGUE.rows) || []).forEach(r => rows[r.book] = r);
+    pane.innerHTML = `<h4>Books${LEAGUE && LEAGUE.since ? ` · since ${md(LEAGUE.since)}` : ""}</h4>` + ["live", ...BOOKS].map(b => {
+      const r = rows[b];
+      const stat = r ? `<span class="num ${cls(r.sum_r)}">${sR(r.sum_r)}</span><small>${r.trades} trade${r.trades===1?"":"s"}${r.open?` · ${r.open} open`:""}</small>` : `<small>—</small>`;
+      return `<button class="bi ${b===BOOK?"on":""}" role="option" aria-selected="${b===BOOK}" data-b="${b}"><i class="bd" style="background:${bookColor(b)}"></i>
+        <span><b>${esc(bookLabel(b))}</b><small>${esc(BOOK_ABOUT[b] || (b==="live"?"account":"paper book"))}</small></span><span class="bs">${stat}</span></button>`;
+    }).join("") + `<div class="foot">Paper books trade the same live prices with virtual fills. Compare them side by side under Compare.</div>`;
+    pane.querySelectorAll(".bi").forEach(x => x.onclick = () => { closeBooks(); setBook(x.dataset.b); });
+  };
+  draw();
+  if(!matchMedia("(max-width:760px)").matches){
+    const r = btn.getBoundingClientRect();
+    pane.style.top = (r.bottom + 8) + "px"; pane.style.left = Math.max(10, Math.min(r.right - 380, innerWidth - 390)) + "px";
+  } else { pane.style.left = ""; pane.style.top = ""; }
+  pane.classList.add("on"); $("#scrim").classList.add("on"); btn.setAttribute("aria-expanded", "true");
+  try{ LEAGUE = (await (await fetch("api/compare?range=today",{credentials:"same-origin"})).json()).league; if(pane.classList.contains("on")) draw(); }catch(e){}
+}
+function closeBooks(){
+  $("#bookPane").classList.remove("on"); $("#bookBtn").setAttribute("aria-expanded", "false");
+  if(!$("#drawer").classList.contains("on")) $("#scrim").classList.remove("on");
+}
+$("#bookBtn").onclick = () => $("#bookPane").classList.contains("on") ? closeBooks() : openBooks();
+$("#scrim").addEventListener("click", closeBooks);
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeBooks(); });
 function setBook(b){
   if(b === BOOK) return;
   BOOK = b;
   try{ localStorage.setItem("fx-book", b); }catch(e){}
-  $$("#bookSeg button").forEach(x => x.classList.toggle("on", x.dataset.b === b));
   document.body.classList.toggle("shadow", b !== "live");
+  paintBook();
   const old = WS; WS = null; if(old) old.close();
   connect();
   fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
   if(page==="calendar") loadCalendar(); if(page==="trades") loadTrades();
 }
-$$("#bookSeg button").forEach(x => x.onclick = () => setBook(x.dataset.b));
 try{ const b = localStorage.getItem("fx-book"); if(b && b !== "live"){ BOOK = b; document.body.classList.add("shadow"); } }catch(e){}
 fetch(q("api/state"),{credentials:"same-origin"}).then(r=>r.json()).then(render).catch(()=>{});
 connect();
