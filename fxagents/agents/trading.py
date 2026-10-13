@@ -353,6 +353,12 @@ class RiskAgent(Agent):
     def start(self):
         super().start()
         self.bus.subscribe("entry_request", self.on_request)
+        # heartbeat = "alive", not "busy": Risk only works when a setup asks to enter, so without this the
+        # dashboard showed it stale for hours on a quiet day
+        self.bus.subscribe("clock", self.on_clock)
+
+    async def on_clock(self, now):
+        self.beat()
 
     def _reject(self, rec: dict, why: str):
         self.ctx.journal.add_signal(rec | {"action": "rejected", "why": why})

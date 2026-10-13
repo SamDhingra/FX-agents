@@ -143,6 +143,7 @@ class NotifierAgent(Agent):
             await self.send(event, title, body, record=False)
 
     async def on_clock(self, now):
+        self.beat()                     # alive even when there is nothing to send
         if self.last_flush is None:
             self.last_flush = now
         if self.digest and (now - self.last_flush).total_seconds() >= self.digest_minutes * 60:
