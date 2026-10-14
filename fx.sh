@@ -142,12 +142,13 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.cisd_test --data "$set_" \
                --out "data/year_test/cisd_${set_}" </dev/null | grep -v "^  " ; tail -n +5 "data/year_test/cisd_${set_}/report.md" | head -3
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
-  breakout)  # Gold Breakout 15M (WillyAlgoTrader) defaults + earlier closes, with coin-flip control: ./fx.sh breakout [dev_m1]
+  breakout)  # Gold Breakout 15M (WillyAlgoTrader) defaults + earlier closes, with coin-flip control: ./fx.sh breakout [dev_m1|holdout_m1]
+             # holdout runs score only the frozen dev passers (fxagents/breakout_test.py FROZEN)
              need_env; mkdir -p logs; set_="${2:-dev_m1}"
              [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/breakout-build.log 2>&1 || { echo "build failed — see logs/breakout-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.breakout_test --data "$set_" \
-               --out "data/year_test/breakout_${set_}" </dev/null | grep -v "^  "
+               $([[ "$set_" == holdout* ]] && echo --frozen) --out "data/year_test/breakout_${set_}" </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"

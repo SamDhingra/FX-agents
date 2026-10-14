@@ -17,6 +17,9 @@ Earlier close hours (Sam: "see if we can reduce the time"), fixed here before an
 lone pass among them is weaker evidence.
 
 R = stop distance at entry. One spread per round trip is in R through the real fills; "2× costs" pays one more.
+Holdout (--frozen): only the cells that passed on dev_m1 (2026-10-14) are scored, unchanged — gold, 1% stop at the 20:00
+(primary) and 16:00 closes, and the range-boundary stop at 20:00 — each with its control. Nothing else runs on holdout data.
+
 Control: at the same minute as each breakout fill, a coin-flip direction with the same stop distance and close.
 If the breakout direction carries information, the rule beats its control.
 """
@@ -36,6 +39,7 @@ BROKER_UTC_OFFSET = 3                     # hours (fixed GMT+3)
 RANGE_END = 7 * 60                        # range bars open 00:00–06:59 broker → minutes [0, 420)
 SL_PCT = 1.0
 CLOSE_HOURS = (20, 16, 14, 12)            # broker time; 20 = the author's default
+FROZEN = [("XAUUSD", "pct", 20), ("XAUUSD", "pct", 16), ("XAUUSD", "range", 20)]   # dev_m1 passers, 2026-10-14
 STOP_MODES = ("pct", "range")
 MIN_RANGE_MIN = 60                        # need at least an hour of range data (Mondays open ~01:00 broker)
 
@@ -147,20 +151,26 @@ def main():
     ap.add_argument("--data", required=True, help="export name under data/export/")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--frozen", action="store_true", help="score only the dev_m1 passers (required on holdout data)")
     a = ap.parse_args()
+    if a.data.startswith("holdout") and not a.frozen:
+        raise SystemExit("holdout data is scored only with --frozen (the dev_m1 passers, unchanged)")
+    cells = FROZEN if a.frozen else [(s_, m_, h_) for s_ in SYMS for m_ in STOP_MODES for h_ in CLOSE_HOURS]
     src = Path("data/export") / a.data
     a.out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(a.seed)
     rows, allt = [], []
     for sym in SYMS:
         f = src / f"{sym}_M1.csv.gz"
-        if not f.exists():
+        if not f.exists() or not any(c[0] == sym for c in cells):
             continue
         m1 = load(f)
         days = pd.DatetimeIndex(sorted(set(m1.index.tz_convert(NY).normalize())))
         days = days[days.dayofweek < 5]
         for stop_mode in STOP_MODES:
             for ch in CLOSE_HOURS:
+                if (sym, stop_mode, ch) not in cells:
+                    continue
                 tr, ctl = run(m1, ch, stop_mode, rng)
                 for name, t in (("breakout", tr), ("coin-flip control", ctl)):
                     T = pd.DataFrame(t)
@@ -187,7 +197,7 @@ def main():
     pv = ("—" if not prim.get("trades") else
           f"{prim['trades']} trades, avg {prim['avg_R']:+.3f}R (95% {prim['ci_lo']:+.2f} to {prim['ci_hi']:+.2f}), "
           f"2× costs {prim['avg_R_2x']:+.3f}R → {'PASS' if prim.get('pass') else 'no pass'}")
-    md = [f"# Gold Breakout 15M (WillyAlgoTrader) on {a.data}", "",
+    md = [f"# Gold Breakout 15M (WillyAlgoTrader) on {a.data}" + (" — frozen dev passers only" if a.frozen else ""), "",
           "Author's defaults (fxagents/breakout_test.py docstring): range = high/low 00:00–07:00 GMT+3; from 07:00 a buy stop "
           "at the range high and a sell stop at the range low (one cancels the other, one trade a day); stop 1% of entry "
           "(or the opposite side of the range); no target; flat at the close hour (default 20:00 GMT+3 = 17:00 UTC). "
