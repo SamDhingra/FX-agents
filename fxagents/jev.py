@@ -164,6 +164,26 @@ class JevScorer:
         a = res["answers"].get("choppy", fb["choppy"])
         return {"chop_prob": a["value"], "confidence": a["confidence"], "source": res["source"]}
 
+    # ── 2c. range breakout: will it follow through (gold_breakout book, logged only) ─
+    async def breakout_follow(self, info: dict) -> dict:
+        """Probability that a range breakout keeps going in its direction until the planned exit (17:00 UTC)
+        rather than falling back into the range. Advisory only; without Jev a neutral answer (HTF alignment nudges
+        it) stands in, flagged by source='heuristic'."""
+        questions: dict[str, Any] = {}
+        if self.live:
+            questions["follow"] = Noul(instructions=(
+                f"Price on {info.get('symbol')} has just broken {('above' if info.get('side') == 'LONG' else 'below')} "
+                "its overnight range (00:00–07:00 GMT+3). The trade has no target and is held until 17:00 UTC unless "
+                "a 1% stop is hit. Given the recent 15-minute candles, the higher-timeframe bias, where the range sits "
+                "and the session ahead (London, then New York), is the breakout likely to follow through in its "
+                "direction rather than fail back into the range?"))
+        al = info.get("htf_bias", 0) * (1 if info.get("side") == "LONG" else -1)
+        fb = {"follow": {"value": 0.55 if al > 0 else 0.45 if al < 0 else 0.5, "confidence": 0.2}}
+        res = await self._ask("breakout_follow", info, questions, fb, {"symbol": info.get("symbol"),
+                                                                      "strategy": info.get("strategy")})
+        a = res["answers"].get("follow", fb["follow"])
+        return {"prob": a["value"], "confidence": a["confidence"], "source": res["source"]}
+
     # ── 3. pyramid add: is continuation likely ────────────────────────────
     async def continuation(self, info: dict) -> dict:
         questions: dict[str, Any] = {}
