@@ -33,7 +33,7 @@ for(const [width,scheme] of [[1440,'dark'],[390,'light'],[390,'dark']]){
  await page.keyboard.press('Escape');await page.waitForTimeout(200);
  await page.locator('#askFab').click();await page.waitForTimeout(200);await page.locator('#askIdeas button').first().click();await page.waitForTimeout(600);
  assert((await page.locator('#askLog').textContent()).includes('bias rule'));
- await page.screenshot({path:path.join(out,`v4-ask-${tag}.png`)});await page.locator('#askClose').click();
+ await page.screenshot({path:path.join(out,`v4-ask-${tag}.png`)});await page.evaluate(()=>document.querySelector('#askDialog').close());
  await ctx.close();
 }
 await browser.close();

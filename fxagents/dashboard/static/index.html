@@ -622,7 +622,24 @@ html[data-surface="glass"]{background:var(--bg)}
   .askfab{right:14px;bottom:calc(84px + env(safe-area-inset-bottom));padding:12px}
   .askfab span{display:none}
   .scrow{grid-template-columns:1fr auto}.scrow .meter{grid-column:1/-1;grid-row:2}
-  #askDialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0}
+}
+
+/* ── phone dialogs: full-screen sheets that fit the visible screen (notch, keyboard), scroll inside, Back closes ── */
+.only-m{display:none}
+html.dlg-open,html.dlg-open body{overflow:hidden}
+@media (max-width:760px){
+  .only-m{display:inline-flex}
+  input,select,textarea{font-size:16px!important}          /* below 16px iOS zooms in on focus and stays zoomed */
+  #appearanceDialog[open],#askDialog[open]{position:fixed;left:0;right:0;top:var(--vvt,0px);bottom:auto;width:100vw;max-width:100vw;
+    height:var(--vvh,100dvh);max-height:var(--vvh,100dvh);margin:0;border:0;border-radius:0;transform:none}
+  #appearanceDialog{padding:0 18px calc(18px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  #appearanceDialog .appearance-header{position:sticky;top:0;z-index:3;background:var(--card);margin:0 -18px 8px;padding:calc(10px + env(safe-area-inset-top)) 18px 10px;border-bottom:1px solid var(--line)}
+  #askDialog .askhead{padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+  #askDialog .asklog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;min-height:0}
+  #askDialog .askideas{flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+  #askDialog .askideas .chipbtn{flex:none}
+  .dlgback{font-size:15px;padding:9px 12px}
+  #askClose,#closeAppearance{display:none}
 }
 </style>
 </head>
@@ -862,13 +879,13 @@ html[data-surface="glass"]{background:var(--bg)}
 <div class="scrim" id="scrim"></div>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Trading details" inert></div>
 <button class="askfab" id="askFab" type="button" aria-label="Ask the bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5"/><circle cx="12" cy="16.5" r=".6" fill="currentColor"/></svg><span>Ask the bot</span></button>
-<dialog id="askDialog" aria-labelledby="askTitle"><div class="askhead"><h2 id="askTitle">Ask the bot</h2><span class="mut hide-m" style="font-size:12px">answers from its own records</span><span class="sp" style="flex:1"></span><button class="btn" id="askClear" type="button">Clear</button><button class="btn icon" id="askClose" type="button" aria-label="Close">×</button></div>
+<dialog id="askDialog" aria-labelledby="askTitle"><div class="askhead"><button class="btn dlgback only-m" type="button" data-dlgback>‹ Back</button><h2 id="askTitle">Ask the bot</h2><span class="mut hide-m" style="font-size:12px">answers from its own records</span><span class="sp" style="flex:1"></span><button class="btn" id="askClear" type="button">Clear</button><button class="btn icon" id="askClose" type="button" aria-label="Close">×</button></div>
   <div class="asklog" id="askLog" aria-live="polite"></div><div class="askideas" id="askIdeas"></div>
   <form class="askform" id="askForm"><input id="askIn" maxlength="500" autocomplete="off" placeholder="e.g. Why didn't you trade gold at 9:30?" aria-label="Your question"><button class="btn" id="askGo" type="submit">Ask</button></form></dialog>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="hmtip" id="hmtip"></div>
 <dialog id="appearanceDialog" aria-labelledby="appearanceTitle">
-  <div class="appearance-header"><div><span class="eyebrow">MAKE IT YOURS</span><h2 id="appearanceTitle">A clearer view.</h2></div><button class="btn icon" id="closeAppearance" aria-label="Close appearance settings">×</button></div>
+  <div class="appearance-header"><button class="btn dlgback only-m" type="button" data-dlgback>‹ Back</button><div style="flex:1;min-width:0"><span class="eyebrow">MAKE IT YOURS</span><h2 id="appearanceTitle">A clearer view.</h2></div><button class="btn icon" id="closeAppearance" aria-label="Close appearance settings">×</button></div>
   <p class="appearance-intro">Choose your workspace finish, accent and motion.</p>
   <fieldset class="appearance-section"><legend>Workspace theme</legend><div class="theme-presets">
     <button type="button" class="theme-preset" data-preset="frost" aria-pressed="false"><span class="theme-sample sample-frost" aria-hidden="true"><i></i><b></b><em></em></span><strong>Frost</strong><small>Light · translucent</small></button>
@@ -950,8 +967,8 @@ function setAppearance(values){
   if(S) render(S);
 }
 $("#theme").onclick=()=>setAppearance({theme:document.documentElement.dataset.theme==='dark'?'light':'dark'});
-$("#appearance").onclick=()=>{syncAppearance();$("#appearanceDialog").showModal()};
-$("#moreAppearance").onclick=()=>{ $("#moreSheet").classList.remove("on"); $("#scrim").classList.remove("on"); syncAppearance(); $("#appearanceDialog").showModal(); };
+$("#appearance").onclick=()=>{syncAppearance();openDlg($("#appearanceDialog"))};
+$("#moreAppearance").onclick=()=>{ $("#moreSheet").classList.remove("on"); $("#scrim").classList.remove("on"); syncAppearance(); openDlg($("#appearanceDialog")); };
 $("#closeAppearance").onclick=$("#appearanceDone").onclick=()=>$("#appearanceDialog").close();
 $$("[data-preset]").forEach(b=>b.onclick=()=>{
   const preset=b.dataset.preset;
@@ -2648,7 +2665,7 @@ function openAsk(){
   const d = $("#askDialog"); if(!d) return;
   $("#askIdeas").innerHTML = ASK_IDEAS.map(x => `<button class="chipbtn" type="button">${esc(x)}</button>`).join("");
   $$("#askIdeas button").forEach(b => b.onclick = () => askSend(b.textContent));
-  renderAsk(); d.showModal(); setTimeout(() => $("#askIn").focus(), 50);
+  renderAsk(); openDlg(d); if(!matchMedia("(max-width:760px)").matches) setTimeout(() => $("#askIn").focus(), 50);
 }
 $("#askFab").onclick = openAsk;
 $("#askClose").onclick = () => $("#askDialog").close();
@@ -2661,6 +2678,25 @@ const _go1 = go;
 go = function(p){ _go1(p); if(p === "compare") loadGhosts(); };
 const _replay0 = replay;
 replay = async function(t){ await _replay0(t); await replayGhosts(t); };
+
+/* ── dialogs: phone Back button / swipe-back closes them, page behind is locked, size follows the visible screen ── */
+function fitViewport(){ const v = window.visualViewport, r = document.documentElement.style;
+  if(v){ r.setProperty("--vvh", v.height + "px"); r.setProperty("--vvt", v.offsetTop + "px"); } }
+if(window.visualViewport){ visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
+fitViewport();
+function openDlg(d){
+  if(d.open) return;
+  fitViewport(); d.showModal(); d.scrollTop = 0; document.documentElement.classList.add("dlg-open");
+  try{ history.pushState({dlg:d.id}, ""); }catch(e){}
+}
+for(const d of [$("#appearanceDialog"), $("#askDialog")]){
+  d.addEventListener("close", () => {
+    if(!document.querySelector("dialog[open]")) document.documentElement.classList.remove("dlg-open");
+    if(history.state && history.state.dlg === d.id) history.back();
+  });
+  d.querySelectorAll("[data-dlgback]").forEach(b => b.onclick = () => d.close());
+}
+window.addEventListener("popstate", () => { for(const d of $$("dialog[open]")) if(d.id === "appearanceDialog" || d.id === "askDialog") d.close(); });
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);
