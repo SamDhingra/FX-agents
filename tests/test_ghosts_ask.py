@@ -80,3 +80,43 @@ def test_ask_endpoint_without_key_returns_facts(tmp_path, monkeypatch):
     assert f["setups_in_window"][0]["action"] == "taken" and f["record"]["n"] == 41
     g = c.get("/api/ghosts").json()
     assert "scorecard" in g and "recent" in g
+
+
+class _Resp:
+    def __init__(self, body, status=200):
+        self._b, self.status_code, self.text, self.reason_phrase = body, status, str(body), "x"
+    def json(self):
+        return self._b
+
+
+def _fake_client(body, status=200, seen=None):
+    class C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, headers=None, json=None):
+            if seen is not None:
+                seen.append(json)
+            return _Resp(body, status)
+    return C
+
+
+def test_claude_answer_paths(tmp_path, monkeypatch):
+    import httpx
+    ctx = make_ctx(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    seen = []
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client({"content": [{"type": "text", "text": "Trend breakout is best."}],
+                                                             "stop_reason": "end_turn"}, seen=seen))
+    a = ask.Asker(ctx)
+    r = asyncio.run(a.answer("What is the best NDQ strategy so far?"))
+    assert r["source"] == "claude" and r["answer"] == "Trend breakout is best."
+    assert seen[0]["max_tokens"] >= 2000
+    assert "record_by_instrument_and_strategy" in seen[0]["messages"][-1]["content"]
+    # no text back (e.g. the token budget went to thinking): say so, don't dress the raw facts up as Claude's answer
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client({"content": [], "stop_reason": "max_tokens"}))
+    r = asyncio.run(ask.Asker(ctx).answer("why?"))
+    assert r["source"] == "facts" and "no answer" in r["answer"] and "max_tokens" in r["answer"]
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client({"error": {"message": "model not found"}}, 404))
+    r = asyncio.run(ask.Asker(ctx).answer("why?"))
+    assert r["source"] == "facts" and "404" in r["answer"] and "model not found" in r["answer"]

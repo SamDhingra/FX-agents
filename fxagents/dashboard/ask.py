@@ -15,7 +15,11 @@ import os
 import re
 import time
 
+import logging
+
 import pandas as pd
+
+log = logging.getLogger("ask")
 
 SYMS = {"XAUUSD": r"gold|xau", "NDQ": r"nasdaq|ndq|nq|nas100|us100", "US30": r"us30|dow|dji|ym"}
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -25,7 +29,9 @@ SYSTEM = (
     "Be brief and concrete: lead with the answer in one or two sentences, then at most a few short bullet points with "
     "times (New York) and numbers. Explain jargon in plain words. Never give financial advice, never suggest changing "
     "risk or going live, and never invent trades, prices or reasons. R = profit or loss in units of the risk taken. "
-    "A ghost trade is a setup the bot passed on, played out with a fixed yardstick exit (stop, 1.5R target or 4 hours).")
+    "A ghost trade is a setup the bot passed on, played out with a fixed yardstick exit (stop, 1.5R target or 4 hours). "
+    "For 'best/worst so far' questions use record_by_instrument_and_strategy, and say how many trades stand behind a "
+    "number: under ~30 trades a result is mostly luck. Keep the whole answer under 180 words.")
 
 
 def when_of(q: str, now: pd.Timestamp) -> tuple[pd.Timestamp | None, pd.Timestamp, pd.Timestamp]:
@@ -68,6 +74,22 @@ def symbols_of(q: str) -> list[str]:
 
 def books_of(main) -> list[tuple[str, object]]:
     return [("live", main)] + list((getattr(main, "shadows", None) or {}).items())
+
+
+def by_sym_strat(journal, syms: list[str]) -> list[dict]:
+    """Every closed trade of a book, grouped by instrument × strategy family (all time): trades, win rate, avg/total R."""
+    q = "SELECT symbol, strategy, r_multiple FROM trades WHERE status='closed' AND r_multiple IS NOT NULL"
+    args: list = []
+    if syms:
+        q += f" AND symbol IN ({','.join('?' * len(syms))})"; args += syms
+    acc: dict[tuple, list] = {}
+    for sym, strat, r in journal.db.execute(q, args):
+        fam = (strat or "").split(":")[0].split("@")[0]
+        tf = (strat or "").split(":")[1].split("@")[0] if ":" in (strat or "") else ""
+        acc.setdefault((sym, fam, tf), []).append(float(r))
+    out = [{"symbol": k[0], "strategy": k[1], "timeframe": k[2], "trades": len(v), "win_rate": round(sum(x > 0 for x in v) / len(v), 2),
+            "avg_r": round(sum(v) / len(v), 3), "total_r": round(sum(v), 2)} for k, v in acc.items()]
+    return sorted(out, key=lambda x: -x["total_r"])[:40]
 
 
 def gather(main, question: str) -> dict:
@@ -117,7 +139,8 @@ def gather(main, question: str) -> dict:
                 "SELECT symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes "
                 "FROM trades WHERE status='closed'" + (f" AND symbol IN ({','.join('?' * len(syms))})" if syms else "")
                 + " ORDER BY closed DESC LIMIT 8", syms or [])],
-            "last_7_days": [{"date": d, **v} for d, v in list(c.journal.daily().items())[-7:]]}
+            "last_7_days": [{"date": d, **v} for d, v in list(c.journal.daily().items())[-7:]],
+            "record_by_instrument_and_strategy": by_sym_strat(c.journal, syms)}
     facts["books"] = per_book
     facts["live_state"] = {"entries_enabled": st.trading_enabled, "halt_reason": st.halt_reason or None,
                            "news_blackout": st.news_block, "bias": {s: {k: (st.bias.get(s) or {}).get(k) for k in ("state", "score", "d", "h4", "h1")}
@@ -152,8 +175,14 @@ def summarize(facts: dict) -> str:
         out.append(line)
     if not facts["live_state"]["entries_enabled"]:
         out.append(f"Entries are paused: {facts['live_state']['halt_reason']}.")
-    out.append("(Set ANTHROPIC_API_KEY in .env for full answers in plain language.)")
     return "\n".join(out)
+
+
+def _err(r) -> str:
+    try:
+        return str(r.json().get("error", {}).get("message", ""))[:160] or r.reason_phrase
+    except Exception:  # noqa: BLE001
+        return getattr(r, "reason_phrase", "")
 
 
 class Asker:
@@ -175,7 +204,8 @@ class Asker:
             return {"answer": "Ask me about a trade, a time, a book or a filter.", "source": "none", "facts": None}
         facts = gather(self.main, question)
         if not self.key:
-            return {"answer": summarize(facts), "source": "facts", "facts": facts}
+            return {"answer": summarize(facts) + "\n(No ANTHROPIC_API_KEY in the bot's environment, so this is the raw record.)",
+                    "source": "facts", "facts": facts}
         now = time.time()
         self.calls = [t for t in self.calls if now - t < 3600]
         if len(self.calls) >= self.max_per_hour or self.busy:
@@ -191,12 +221,21 @@ class Asker:
             async with httpx.AsyncClient(timeout=45) as cl:
                 r = await cl.post("https://api.anthropic.com/v1/messages",
                                   headers={"x-api-key": self.key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                                  json={"model": self.model, "max_tokens": 700, "system": SYSTEM, "messages": msgs})
+                                  json={"model": self.model, "max_tokens": 4000, "system": SYSTEM, "messages": msgs})
             if r.status_code != 200:
-                return {"answer": f"I couldn't reach Claude ({r.status_code}). Here's what the records say:\n\n" + summarize(facts),
-                        "source": "facts", "facts": facts}
-            text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text").strip()
-            return {"answer": text or summarize(facts), "source": "claude", "facts": facts}
+                log.warning("ask: Claude HTTP %s: %s", r.status_code, r.text[:300])
+                return {"answer": f"I couldn't reach Claude (HTTP {r.status_code}: {_err(r)}). Here's what the records say:\n\n"
+                        + summarize(facts), "source": "facts", "facts": facts}
+            body = r.json()
+            text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text").strip()
+            stop = body.get("stop_reason")
+            if not text:
+                log.warning("ask: Claude returned no text (stop_reason=%s)", stop)
+                return {"answer": f"Claude returned no answer (stop reason: {stop}). Here's what the records say:\n\n"
+                        + summarize(facts), "source": "facts", "facts": facts}
+            if stop == "max_tokens":
+                text += " …"
+            return {"answer": text, "source": "claude", "facts": facts}
         except Exception as e:  # noqa: BLE001
             return {"answer": f"I couldn't reach Claude ({type(e).__name__}). Here's what the records say:\n\n" + summarize(facts),
                     "source": "facts", "facts": facts}
@@ -223,7 +262,7 @@ class Asker:
             async with httpx.AsyncClient(timeout=45) as cl:
                 r = await cl.post("https://api.anthropic.com/v1/messages",
                                   headers={"x-api-key": self.key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                                  json={"model": self.model, "max_tokens": 500, "system": sysmsg,
+                                  json={"model": self.model, "max_tokens": 2500, "system": sysmsg,
                                         "messages": [{"role": "user", "content": "FACTS:\n" + json.dumps(rc, default=str)[:30000]}]})
             if r.status_code == 200:
                 text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text").strip()
