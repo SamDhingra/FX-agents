@@ -27,9 +27,16 @@ def test_login_form_posts_token_and_sets_secure_cookie():
     r = c.post("/login", data={"token": "s3cret-token"}, follow_redirects=False)
     assert r.status_code == 303 and "token" not in r.headers["location"]
     sc = r.headers["set-cookie"].lower()
-    assert "httponly" in sc and "secure" in sc and "samesite=strict" in sc
+    assert "httponly" in sc and "secure" in sc and "samesite=lax" in sc and f"max-age={365 * 86400}" in sc
     c.cookies.set("fx_token", "s3cret-token")
-    assert c.get("/").status_code == 200
+    r = c.get("/")
+    assert r.status_code == 200
+    assert f"max-age={365 * 86400}" in r.headers["set-cookie"].lower()      # every visit renews it
+
+
+def test_password_manager_can_fill_the_login():
+    html = client().get("/").text
+    assert "autocomplete=username" in html and "autocomplete=current-password" in html
 
 
 def test_old_token_links_redirect_to_clean_address():

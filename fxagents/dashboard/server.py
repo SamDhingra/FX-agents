@@ -200,8 +200,10 @@ def build_app(ctx) -> FastAPI:
             "<title>FX-Agents</title><body style='margin:0;background:#0d0f14;color:#f3f5f9;font:16px system-ui'>"
             "<form method=post action='login' style='margin:18vh auto;max-width:320px;padding:0 16px'>"
             "<h2 style='margin:0 0 6px'>FX-Agents</h2><p style='color:#aab2c2;margin:0 0 16px;font-size:14px'>"
-            "Enter the dashboard token (DASHBOARD_TOKEN in .env). It's remembered on this device for 30 days.</p>"
-            f"{msg}<input name=token type=password autocomplete=current-password autofocus required "
+            "Enter the dashboard token (DASHBOARD_TOKEN in .env). This device will remember it.</p>"
+            f"{msg}<input name=username value=fx-agents autocomplete=username readonly tabindex=-1 aria-hidden=true "
+            "style='position:absolute;left:-9999px;width:1px;height:1px;opacity:0'>"
+            "<input name=token type=password autocomplete=current-password autofocus required "
             "style='width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #313848;"
             "background:#161a23;color:inherit;font:inherit' placeholder='Dashboard token'>"
             "<button style='margin-top:10px;padding:12px;width:100%;border:0;border-radius:10px;background:#4f8ff7;"
@@ -209,8 +211,12 @@ def build_app(ctx) -> FastAPI:
 
     def with_cookie(resp, request: Request, value: str):
         secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
-        resp.set_cookie("fx_token", value, httponly=True, samesite="strict", secure=secure,
-                        max_age=60 * 60 * 24 * 30, path="/")
+        # Lax, not Strict: Strict drops the cookie whenever the page is opened from another app or site (a
+        # notification link, Messages, the home-screen launcher on some iOS versions), which looked like "it
+        # forgot me". Lax still blocks cross-site POSTs, so Pause/Flatten stay protected. A year, renewed on
+        # every visit, so a device you use never has to sign in again.
+        resp.set_cookie("fx_token", value, httponly=True, samesite="lax", secure=secure,
+                        max_age=60 * 60 * 24 * 365, path="/")
         return resp
 
     @app.get("/", response_class=HTMLResponse)
@@ -221,9 +227,11 @@ def build_app(ctx) -> FastAPI:
             if authed(qtok):
                 return with_cookie(RedirectResponse("./", status_code=303), request, qtok)
             return login_page("That token isn't right.")
-        if not authed(request.cookies.get("fx_token") or request.headers.get("x-token")):
+        have = request.cookies.get("fx_token")
+        if not authed(have or request.headers.get("x-token")):
             return login_page()
-        return HTMLResponse((STATIC / "index.html").read_text())
+        page = HTMLResponse((STATIC / "index.html").read_text())
+        return with_cookie(page, request, have) if token and have else page    # sliding expiry
 
     @app.post("/login")
     async def login(request: Request):
