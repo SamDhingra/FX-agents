@@ -71,3 +71,15 @@ node tests/ui/build-preview.cjs /tmp/FX-agents-glass-preview.html
 ```
 
 No GitHub push or deployment has been made.
+
+## v3 signature panels (Oct 2026)
+
+Read-only additions; nothing here changes trading.
+
+- **Overview:** a "what it's waiting for" line (entry windows, flatten, gold's overnight range, next high-impact news, all counting down), **market weather** per instrument (sea = Choppiness Index, wind = higher-timeframe bias, storm = news, wave speed = volatility percentile) and a **risk fuel** gauge (today's loss budget left, drawdown vs the kill switch).
+- **Agents → Mission control:** a live map of the agents. Every bus message (`insights.install_tap`, a `*` subscription) travels along its edge as a coloured dot; tap an agent for what it does, its heartbeat and its latest messages.
+- **Trade drawer → The case:** the agents' reasoning as a dialogue (market data, strategy, bias, Jev, risk, position manager) with a verdict stamp ("Jev called it / missed"); **Replay** draws the 1-minute candles around the trade with entry, stops, partials, exit and (gold breakout) the range, and can play them back.
+- **Compare → Evidence meter** (average R with a day-block bootstrap 95% range, progress ring to 100 trades, per-strategy breakdown), **book race** (cumulative R by trade against a zero-edge luck cone), **fan of futures** (500 resampled 100-trade paths per book: median, 5% case, 95% worst drawdown) and a **day barcode**.
+- **Backtests → Strategy journey + graveyard:** every strategy tested, how far it got (idea → dev → holdout → paper → live) and why the dead ones died. The ledger is the `LEDGER`/`GRAVE` constants in `index.html`; update them when a test finishes.
+
+APIs: `/api/now`, `/api/evidence`, `/api/story/{trade_id}`, `/api/bars?symbol&start&end`, and `flow` in the state snapshot. Checks: `tests/test_dashboard_insights.py`, `node tests/ui/v3.cjs`.

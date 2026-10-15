@@ -20,9 +20,10 @@ class Bus:
     async def publish(self, topic: str, payload: Any = None) -> None:
         """Handlers run in subscription order and are awaited (deterministic ordering,
         which matters for bar → stop checks → management → new entries)."""
-        for h in list(self._subs.get(topic, [])) + list(self._subs.get("*", [])):
+        subs = [(h, False) for h in self._subs.get(topic, [])] + [(h, True) for h in self._subs.get("*", [])]
+        for h, wild in subs:
             try:
-                res = h(payload) if topic != "*" else h((topic, payload))
+                res = h((topic, payload)) if wild else h(payload)       # "*" taps get (topic, payload)
                 if asyncio.iscoroutine(res):
                     await res
             except Exception:  # an agent failing must never take the bus down

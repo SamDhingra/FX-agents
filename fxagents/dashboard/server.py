@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 from .. import units
+from . import insights
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
@@ -59,6 +60,7 @@ def snapshot(ctx) -> dict:
         "book": getattr(ctx, "book_key", "shadow") if getattr(ctx, "is_shadow", False) else "live",
         "selection_mode": getattr(ctx, "selection_mode", "hourly_pick"),
         "shadow": getattr(ctx, "shadow_info", None),
+        "flow": insights.flow(ctx),
     }
 
 
@@ -145,6 +147,8 @@ def compare(ctx, rng: str, sh=None) -> dict:
 
 def build_app(ctx) -> FastAPI:
     app = FastAPI(title="FX-Agents", docs_url=None, redoc_url=None)
+    for c in [ctx, *(getattr(ctx, "shadows", None) or {}).values()]:
+        insights.install_tap(c)                 # Mission Control: every bus message, read-only
 
     def bk(request):
         """?book=<mode> (or the older ?book=shadow) → that shadow book's context (same endpoints, same shapes)."""
@@ -226,6 +230,31 @@ def build_app(ctx) -> FastAPI:
             r["events"] = json.loads(r["events"] or "[]")
             units.trade(bk(request).cfg, r)
         return rows
+
+    @app.get("/api/now")
+    async def api_now(request: Request):
+        need(request)
+        return JSONResponse(insights.now_info(ctx))
+
+    @app.get("/api/evidence")
+    async def api_evidence(request: Request):
+        need(request)
+        return JSONResponse(insights.evidence(ctx))
+
+    @app.get("/api/story/{trade_id}")
+    async def api_story(trade_id: str, request: Request):
+        need(request)
+        out = insights.story(ctx, bk(request), trade_id)
+        if out is None:
+            raise HTTPException(404, "no such trade")
+        return JSONResponse(json.loads(json.dumps(out, default=str)))
+
+    @app.get("/api/bars")
+    async def api_bars(request: Request, symbol: str, start: str, end: str):
+        need(request)
+        if symbol not in ctx.cfg["instruments"]:
+            raise HTTPException(400, "unknown symbol")
+        return JSONResponse(insights.bars(ctx, symbol, start, end))
 
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):
