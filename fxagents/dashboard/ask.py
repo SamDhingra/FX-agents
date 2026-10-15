@@ -196,3 +196,33 @@ class Asker:
                     "source": "facts", "facts": facts}
         finally:
             self.busy = False
+
+    async def narrate(self, rc: dict) -> dict:
+        """Evening recap: Claude rewrites the day's numbers as a ~60-second spoken script (facts only). Falls back
+        to the plain script when there is no key, the hourly cap is reached, or the call fails."""
+        if not self.key:
+            return {"script": rc["script"], "source": "facts"}
+        now = time.time()
+        self.calls = [t for t in self.calls if now - t < 3600]
+        if len(self.calls) >= self.max_per_hour:
+            return {"script": rc["script"], "source": "facts"}
+        self.calls.append(now)
+        sysmsg = ("You are FX-Agents, Sam's trading bot, giving him a spoken end-of-day recap. Use ONLY the FACTS. "
+                  "About 120-150 words, plain spoken English, no bullet points, no markdown, no advice. Numbers rounded "
+                  "for speech (say 'plus one point four R'). Lead with the practice account, then anything notable in "
+                  "the paper books and the filters (ghost results are a yardstick, not real trades). End with what's "
+                  "still open, if anything.")
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=45) as cl:
+                r = await cl.post("https://api.anthropic.com/v1/messages",
+                                  headers={"x-api-key": self.key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                                  json={"model": self.model, "max_tokens": 500, "system": sysmsg,
+                                        "messages": [{"role": "user", "content": "FACTS:\n" + json.dumps(rc, default=str)[:30000]}]})
+            if r.status_code == 200:
+                text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text").strip()
+                if text:
+                    return {"script": text, "source": "claude"}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"script": rc["script"], "source": "facts"}

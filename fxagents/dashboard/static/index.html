@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0c1320">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="FX-Agents">
+<meta name="mobile-web-app-capable" content="yes">
 <title>FX-Agents · Trading workspace</title>
 <script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';try{for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
 <style>
@@ -641,6 +646,47 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
   .dlgback{font-size:15px;padding:9px 12px}
   #askClose,#closeAppearance{display:none}
 }
+
+/* ══ v5: time machine · atlas · recap · notes · slide to flatten · pull to refresh ══ */
+.tmtop{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.tmclock{font-size:34px;font-weight:700;letter-spacing:-.8px}
+.tmeq{font-size:14px}
+.tmctl{margin-left:auto;display:flex;gap:8px;align-items:center}
+#tmSlider{width:100%;accent-color:var(--accent);height:28px}
+.tmticks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:-2px}
+.tmchart{margin-bottom:10px}.tmsym{display:flex;gap:8px;align-items:baseline;font-size:13px;margin-bottom:2px}
+.tmchart svg{display:block;width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:10px}
+.tmev.take{border-left:3px solid var(--up);padding-left:8px}.tmev.pass{border-left:3px solid var(--line-2);padding-left:8px}
+.tmev.jev{border-left:3px solid #b48cff;padding-left:8px}.tmev.entry,.tmev.exit,.tmev.mgmt{border-left:3px solid var(--accent);padding-left:8px}.tmev.news{border-left:3px solid var(--warn);padding-left:8px}
+.atlnote{font-size:12.5px;color:var(--text-2);margin-bottom:8px}
+.atlwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--card-2);padding:6px}
+.atlwrap svg{display:block}.atc{cursor:pointer}
+.rcbtn{margin-left:auto;font-size:12.5px;padding:6px 10px}
+#recapDialog{width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 40px);padding:0;border:1px solid var(--line-2);border-radius:18px;background:var(--card);color:var(--text);overflow:auto}
+#recapDialog::backdrop{background:rgb(5 8 15 / .55);backdrop-filter:blur(3px)}
+#rcBody{padding:18px 20px 22px}
+.rchead{display:flex;align-items:flex-end;gap:12px}.rchead h3{margin:4px 0 0;font-size:20px}.rchead .eyebrow{font-size:10px;letter-spacing:.14em;color:var(--muted);font-weight:700}
+.rcbig{margin-left:auto;font-size:40px;font-weight:800;letter-spacing:-1px}
+.rcstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+.rcstats div{padding:10px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);text-align:center}.rcstats b{display:block;font-size:17px}.rcstats small{color:var(--muted);font-size:11px}
+.rcscript{font-size:15px;line-height:1.6;margin:0 0 12px}
+.rcbooks{display:grid;gap:4px;font-size:13px;margin-bottom:14px}
+.rcact{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes textarea{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text);font:inherit;resize:vertical}
+.notetags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.noteact{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.slide{display:none;position:relative;height:56px;border-radius:999px;background:linear-gradient(90deg,var(--down-soft) var(--fill,0%),var(--card-2) var(--fill,0%));border:1px solid var(--down);margin-top:14px;user-select:none;-webkit-user-select:none;touch-action:none}
+.slide .slabel{position:absolute;inset:0;display:grid;place-items:center;font-weight:650;color:var(--down-text);pointer-events:none}
+.slide .knob{position:absolute;left:4px;top:4px;width:48px;height:46px;border-radius:999px;background:var(--down);color:#fff;display:grid;place-items:center;font-size:26px;font-weight:700;cursor:grab;transition:transform .25s ease;touch-action:none}
+html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
+.ptr{position:fixed;left:50%;top:calc(6px + env(safe-area-inset-top));transform:translate(-50%,-40px);opacity:0;z-index:60;padding:7px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line-2);font-size:12.5px;font-weight:600;box-shadow:0 6px 18px rgb(0 0 0 / .2);pointer-events:none;transition:opacity .15s}
+@media (max-width:760px){
+  #recapDialog[open]{position:fixed;left:0;right:0;top:var(--vvt,0px);width:100vw;max-width:100vw;height:var(--vvh,100dvh);max-height:var(--vvh,100dvh);margin:0;border:0;border-radius:0}
+  #recapDialog .askhead{padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+  #recapClose{display:none}
+  .rcstats{grid-template-columns:repeat(2,1fr)}
+  .tmclock{font-size:28px}.tmctl{margin-left:0;width:100%}
+}
 </style>
 </head>
 <body>
@@ -678,6 +724,7 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
     <div class="nav-label">MONITORING</div>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
     <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
+    <button class="nav" data-p="machine"><svg><use href="#i-play"/></svg>Time machine</button>
     <div class="side-foot">
       <span class="chip" id="jevchip">Jev</span>
       <span class="chip" id="srcchip">News</span>
@@ -802,6 +849,7 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
 
     <!-- STRATEGIES -->
     <section class="page" id="p-strategies">
+      <div class="card" style="margin-bottom:16px"><h3>Edge atlas <span class="sp"></span><span class="mut heading-note">instrument × setup × hour · peaks vs. luck</span></h3><div id="atlas"><div class="empty">Loading…</div></div></div>
       <div class="grid" style="margin-bottom:16px">
         <div class="card c8"><h3>Setup map · how each setup has done by hour <span class="sp"></span><span class="mut" id="smMeta" style="font-weight:500"></span></h3>
           <div class="smctl">
@@ -828,6 +876,12 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
         <div class="card c8"><h3>Leaderboard <span class="sp"></span><span class="mut" style="font-weight:500">rolling backtest with the bias rule applied</span></h3><div class="tbl" id="board"></div></div>
         <div class="card c4"><h3>Strategist · learning log</h3><div class="feed" id="learner"></div></div>
       </div>
+    </section>
+
+    <!-- TIME MACHINE -->
+    <section class="page" id="p-machine">
+      <div class="card" style="margin-bottom:16px"><h3>Rewind a day <span class="sp"></span><label class="mut" style="font-weight:500;font-size:12.5px">Day <input type="date" id="tmDay" style="margin-left:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text)"></label></h3>
+        <div id="tmBody"><div class="empty">Loading…</div></div></div>
     </section>
 
     <!-- NEWS -->
@@ -872,6 +926,8 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
   <button data-p="news"><svg><use href="#i-news"/></svg>News</button>
   <button data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
+  <button data-p="machine"><svg><use href="#i-play"/></svg>Time machine</button>
+  <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
 </div>
@@ -882,6 +938,7 @@ html.dlg-open,html.dlg-open body{overflow:hidden}
 <dialog id="askDialog" aria-labelledby="askTitle"><div class="askhead"><button class="btn dlgback only-m" type="button" data-dlgback>‹ Back</button><h2 id="askTitle">Ask the bot</h2><span class="mut hide-m" style="font-size:12px">answers from its own records</span><span class="sp" style="flex:1"></span><button class="btn" id="askClear" type="button">Clear</button><button class="btn icon" id="askClose" type="button" aria-label="Close">×</button></div>
   <div class="asklog" id="askLog" aria-live="polite"></div><div class="askideas" id="askIdeas"></div>
   <form class="askform" id="askForm"><input id="askIn" maxlength="500" autocomplete="off" placeholder="e.g. Why didn't you trade gold at 9:30?" aria-label="Your question"><button class="btn" id="askGo" type="submit">Ask</button></form></dialog>
+<dialog id="recapDialog" aria-label="Evening recap"><div class="askhead"><button class="btn dlgback only-m" type="button" data-dlgback>‹ Back</button><h2 style="font-size:16px;margin:0">Evening recap</h2><span class="sp" style="flex:1"></span><button class="btn icon" id="recapClose" type="button" aria-label="Close">×</button></div><div id="rcBody"></div></dialog>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="hmtip" id="hmtip"></div>
 <dialog id="appearanceDialog" aria-labelledby="appearanceTitle">
@@ -915,9 +972,9 @@ let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = n
 const q = path => BOOK !== "live" ? path + (path.includes("?") ? "&" : "?") + "book=" + encodeURIComponent(BOOK) : path;
 
 /* ── navigation ── */
-const titles = {home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
-const pageDescriptions = {home:"Your account, positions and market context at a glance.",calendar:"Review daily results and explore the trades behind them.",trades:"Find a trade. Understand the entry, management and exit.",compare:"Compare account and virtual-book results over the same period.",playbook:"Review the setups and trading windows in your playbook.",backtests:"Test candidates, inspect replays and review promotion criteria.",strategies:"Explore strategy performance by instrument, timeframe and hour.",news:"Upcoming events and the entry restrictions around them.",agents:"Monitor agent health, Jev decisions and trading activity."};
-const MORE = ["playbook","strategies","backtests","news","agents"];
+const titles = {machine:"Time machine",home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const pageDescriptions = {machine:"Scrub through any day minute by minute: prices, positions, equity and every decision.",home:"Your account, positions and market context at a glance.",calendar:"Review daily results and explore the trades behind them.",trades:"Find a trade. Understand the entry, management and exit.",compare:"Compare account and virtual-book results over the same period.",playbook:"Review the setups and trading windows in your playbook.",backtests:"Test candidates, inspect replays and review promotion criteria.",strategies:"Explore strategy performance by instrument, timeframe and hour.",news:"Upcoming events and the entry restrictions around them.",agents:"Monitor agent health, Jev decisions and trading activity."};
+const MORE = ["playbook","strategies","backtests","news","agents","machine"];
 const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy", backtests:"Backtest"};
 function go(p){
   const sh = $("#moreSheet");
@@ -927,7 +984,7 @@ function go(p){
   if(!titles[p]) return;
   page = p;
   $("#pageDescription").textContent = pageDescriptions[p];
-  $("#pageGroup").textContent = (["strategies","playbook","backtests"].includes(p)?"RESEARCH":["news","agents"].includes(p)?"MONITORING":"WORKSPACE") + " / " + titles[p].toUpperCase();
+  $("#pageGroup").textContent = (["strategies","playbook","backtests"].includes(p)?"RESEARCH":["news","agents","machine"].includes(p)?"MONITORING":"WORKSPACE") + " / " + titles[p].toUpperCase();
   $$("[data-p]").forEach(el => { if(el.dataset.p===p) el.setAttribute("aria-current","page"); else el.removeAttribute("aria-current"); });
   try{history.replaceState(null,"","#"+p)}catch(e){}
 
@@ -1212,7 +1269,7 @@ function renderTrades(){
   const tfs = ["ALL", ...[...new Set(tradeRows.map(t=>t.tf).filter(Boolean))].sort((a,b)=>parseInt(a)*(a.endsWith("h")?60:1)-parseInt(b)*(b.endsWith("h")?60:1))];
   chips($("#tfilters"), [["sym", syms], ["res", ["ALL","Winners","Losers"]], ["tf", tfs]]);
   let rows = tradeRows.filter(t => (tf.sym==="ALL"||t.symbol===tf.sym) && (tf.res==="ALL"||(tf.res==="Winners"?t.realized>0:t.realized<=0)) && (tf.tf==="ALL"||t.tf===tf.tf));
-  rows = rows.filter(t => [t.symbol,t.strategy,t.exit_reason].join(" ").toLowerCase().includes(tradeQuery.toLowerCase())).sort((a,b)=>tradeSort==="best"?b.realized-a.realized:tradeSort==="worst"?a.realized-b.realized:tradeSort==="oldest"?String(a.closed).localeCompare(String(b.closed)):String(b.closed).localeCompare(String(a.closed)));
+  rows = rows.filter(t => [t.symbol,t.strategy,t.exit_reason,t.notes||""].join(" ").toLowerCase().includes(tradeQuery.toLowerCase())).sort((a,b)=>tradeSort==="best"?b.realized-a.realized:tradeSort==="worst"?a.realized-b.realized:tradeSort==="oldest"?String(a.closed).localeCompare(String(b.closed)):String(b.closed).localeCompare(String(a.closed)));
   const net=rows.reduce((n,t)=>n+(t.realized||0),0), wins=rows.filter(t=>t.realized>0).length;
   $("#tradeSummary").innerHTML = tradeError ? esc(tradeError) : `<span>Showing <b>${rows.length} of ${tradeRows.length} loaded trades</b></span><span>Net P&amp;L <b class="${cls(net)}">${smoney(net,2)}</b></span><span>Win rate <b>${rows.length?Math.round(wins/rows.length*100)+"%":"—"}</b></span>`;
   $("#journalExport").href=q("api/journal.csv");
@@ -2689,14 +2746,267 @@ function openDlg(d){
   fitViewport(); d.showModal(); d.scrollTop = 0; document.documentElement.classList.add("dlg-open");
   try{ history.pushState({dlg:d.id}, ""); }catch(e){}
 }
-for(const d of [$("#appearanceDialog"), $("#askDialog")]){
+for(const d of [$("#appearanceDialog"), $("#askDialog"), $("#recapDialog")]){
   d.addEventListener("close", () => {
     if(!document.querySelector("dialog[open]")) document.documentElement.classList.remove("dlg-open");
     if(history.state && history.state.dlg === d.id) history.back();
   });
   d.querySelectorAll("[data-dlgback]").forEach(b => b.onclick = () => d.close());
 }
-window.addEventListener("popstate", () => { for(const d of $$("dialog[open]")) if(d.id === "appearanceDialog" || d.id === "askDialog") d.close(); });
+window.addEventListener("popstate", () => { for(const d of $$("dialog[open]")) if(["appearanceDialog","askDialog","recapDialog"].includes(d.id)) d.close(); });
+
+/* ══ v5: time machine · edge atlas · evening recap · home-screen app · slide to flatten · trade notes ═══════════════ */
+const nyTime = d => new Date(d).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"America/New_York"});
+const nyDay = d => new Date(d).toLocaleDateString("en-CA", {timeZone:"America/New_York"});
+
+/* ── Time machine ── */
+let TM = null, tmT = 0, tmPlay = 0, tmSpeed = 300;
+async function loadMachine(day){
+  const el = $("#tmBody"); if(!el) return;
+  day = day || $("#tmDay").value || (S && S.now ? S.now.slice(0,10) : nyDay(Date.now()));
+  $("#tmDay").value = day;
+  el.innerHTML = `<div class="empty">Loading ${esc(day)}…</div>`;
+  try{ TM = await api(q("api/timeline?day=" + encodeURIComponent(day))); }catch(e){ TM = null; }
+  if(!TM){ el.innerHTML = `<div class="empty">Couldn't load that day.</div>`; return; }
+  const times = [...Object.values(TM.bars).flatMap(b => b.map(x => +new Date(x[0]))), ...TM.equity.map(e => +new Date(e[0])),
+    ...TM.signals.map(s => +new Date(s.ts))];
+  TM.t0 = times.length ? Math.min(...times) : +new Date(TM.start); TM.t1 = times.length ? Math.max(...times) + 5*60000 : +new Date(TM.end);
+  TM.events = [
+    ...TM.signals.map(s => ({t:+new Date(s.ts), k:s.action === "taken" ? "take" : "pass", sym:s.symbol,
+      txt:`${s.action === "taken" ? "Took" : "Passed on"} ${esc(sname(String(s.strategy||"").split(":")[0]))} ${String(s.side).startsWith("L")||s.side>0?"long":"short"}${s.action!=="taken" && s.why ? ` — <span class="mut">${esc(s.why)}</span>` : ""}`})),
+    ...TM.decisions.map(d => ({t:+new Date(d.ts), k:"jev", sym:d.symbol, txt:`Jev ${esc(String(d.kind).replace(/_/g," "))}${d.outputs && (d.outputs.quality ?? d.outputs.prob) != null ? " " + fmt(d.outputs.quality ?? d.outputs.prob, 2) : ""} <span class="mut">(${esc(d.source)})</span>`})),
+    ...TM.trades.flatMap(t => (t.events||[]).map(e => ({t:+new Date(e.ts), k:e.kind === "entry" ? "entry" : /exit|closed/.test(e.kind) ? "exit" : "mgmt", sym:t.symbol,
+      txt:`${esc(t.symbol)} ${esc(String(e.kind).replace(/_/g," "))}${e.price!=null?" at "+fpx(e.price):""}${e.stop!=null&&e.kind!=="entry"?" · stop "+fpx(e.stop):""}`}))),
+    ...TM.news.map(n => ({t:+new Date(n.ts), k:"news", txt:`📰 ${esc(n.title)} <span class="mut">${esc(n.tier)}</span>`}))].sort((a,b) => a.t - b.t);
+  tmT = Math.min(TM.t1, Math.max(TM.t0, S && S.now && S.now.slice(0,10) === day ? +new Date(S.now) : TM.t1));
+  renderMachine(true);
+}
+function tmPrice(sym, t){ const b = (TM.bars[sym]||[]).filter(x => +new Date(x[0]) <= t); return b.length ? b[b.length-1][4] : null; }
+function renderMachine(build){
+  const el = $("#tmBody"); if(!el || !TM) return;
+  if(build){
+    const syms = Object.keys(TM.bars);
+    el.innerHTML = `<div class="tmtop"><div class="tmclock num" id="tmClock">—</div><div class="tmeq"><span class="mut">Equity</span> <b class="num" id="tmEq">—</b> <span id="tmEqD" class="num"></span></div>
+        <div class="tmctl"><button class="btn" id="tmPlayBtn">▶ Play</button><div class="seg" id="tmSpd"><button data-s="60">×60</button><button data-s="300" class="on">×300</button><button data-s="1200">×1200</button></div></div></div>
+      <input type="range" id="tmSlider" min="${TM.t0}" max="${TM.t1}" step="60000" value="${tmT}" aria-label="Time of day">
+      <div class="tmticks">${[0,.25,.5,.75,1].map(f => `<span>${nyTime(TM.t0 + f*(TM.t1-TM.t0))}</span>`).join("")}</div>
+      <div class="grid" style="margin-top:12px">
+        <div class="card c8"><h3>Markets at this moment</h3>${syms.length ? syms.map(s => `<div class="tmchart"><div class="tmsym"><b>${s}</b> <span class="num" id="tmPx-${s}">—</span></div><svg id="tmSvg-${s}" height="96"></svg></div>`).join("") : `<div class="empty">No candles for this day are in memory (the bot keeps about two weeks).</div>`}</div>
+        <div class="card c4"><h3>Open at this moment</h3><div id="tmPos"></div><h3 style="margin-top:16px">What the agents were doing</h3><div class="feed" id="tmFeed" style="max-height:420px"></div></div></div>`;
+    $("#tmSlider").oninput = e => { tmT = +e.target.value; renderMachine(false); };
+    $("#tmPlayBtn").onclick = () => tmToggle();
+    $$("#tmSpd button").forEach(b => b.onclick = () => { tmSpeed = +b.dataset.s; $$("#tmSpd button").forEach(x => x.classList.toggle("on", x===b)); });
+  }
+  $("#tmSlider").value = tmT;
+  $("#tmClock").textContent = nyTime(tmT) + " NY";
+  const eqs = TM.equity.filter(e => +new Date(e[0]) <= tmT);
+  if(eqs.length){ const e0 = TM.equity[0][1], e = eqs[eqs.length-1][1]; $("#tmEq").textContent = money(e,0); $("#tmEqD").innerHTML = `<span class="${cls(e-e0)}">${smoney(e-e0,0)}</span>`; }
+  else { $("#tmEq").textContent = "—"; $("#tmEqD").textContent = ""; }
+  for(const s of Object.keys(TM.bars)) tmChart(s);
+  const open = TM.trades.filter(t => +new Date(t.opened) <= tmT && (!t.closed || +new Date(t.closed) > tmT));
+  $("#tmPos").innerHTML = open.length ? open.map(t => { const px = tmPrice(t.symbol, tmT), sd = t.side === "LONG" ? 1 : -1, risk = Math.abs(t.entry - t.initial_stop) || 1;
+      const r = px == null ? null : sd * (px - t.entry) / risk;
+      return `<div class="fi" data-tid="${esc(t.id)}" style="cursor:pointer"><span class="side ${t.side[0]}">${t.side}</span><div style="flex:1;min-width:0"><b>${esc(t.symbol)}</b> <span class="mut">${esc(sname(String(t.strategy).split(":")[0]))}</span><br><small class="mut">since ${nyTime(t.opened)} · entry ${fpx(t.entry)}</small></div><b class="num ${cls(r)}">${r==null?"—":sR(r,2)}</b></div>`; }).join("")
+    : `<div class="empty">Flat.</div>`;
+  $$("#tmPos [data-tid]").forEach(x => x.onclick = () => { const t = TM.trades.find(y => y.id === x.dataset.tid); if(t) openTrade({...t, tf:"", pips:null, lots:null, mfe_r:null, realized:t.realized}); });
+  const past = TM.events.filter(e => e.t <= tmT).slice(-10).reverse();
+  $("#tmFeed").innerHTML = past.length ? past.map(e => `<div class="fi tmev ${e.k}"><span class="when">${nyTime(e.t)}</span><span>${e.txt}</span></div>`).join("") : `<div class="empty">Nothing yet at this time.</div>`;
+}
+function tmChart(sym){
+  const svg = $("#tmSvg-" + sym); if(!svg) return;
+  const B = TM.bars[sym], W = svg.clientWidth || svg.parentNode.clientWidth || 500, H = 96, p = 4;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", "100%");
+  const lo = Math.min(...B.map(b => b[3])), hi = Math.max(...B.map(b => b[2])), sp = hi - lo || 1;
+  const x = t => p + (t - TM.t0) / ((TM.t1 - TM.t0) || 1) * (W - 2*p), y = v => p + (hi - v) / sp * (H - 2*p), cw = Math.max(1, (W - 2*p) / Math.max(1, (TM.t1-TM.t0)/300000) * .7);
+  let h = "";
+  for(const b of B){ const t = +new Date(b[0]), past = t <= tmT, col = b[4] >= b[1] ? "var(--up)" : "var(--down)";
+    h += `<g opacity="${past ? 1 : .18}"><line x1="${x(t)}" x2="${x(t)}" y1="${y(b[2])}" y2="${y(b[3])}" stroke="${col}"/><rect x="${x(t)-cw/2}" y="${y(Math.max(b[1],b[4]))}" width="${cw}" height="${Math.max(1,Math.abs(y(b[1])-y(b[4])))}" fill="${col}"/></g>`; }
+  for(const t of TM.trades.filter(t => t.symbol === sym)){
+    const o = +new Date(t.opened), c = t.closed ? +new Date(t.closed) : TM.t1;
+    if(o <= tmT) h += `<rect x="${x(o)}" y="0" width="${Math.max(2, x(Math.min(c, tmT)) - x(o))}" height="${H}" fill="var(--accent-soft)"/><circle cx="${x(o)}" cy="${y(t.entry)}" r="4" fill="var(--accent)"/>`;
+    if(t.closed && c <= tmT && t.exit_price != null) h += `<circle cx="${x(c)}" cy="${y(t.exit_price)}" r="4" fill="${(t.r_multiple||0)>0?"var(--up)":"var(--down)"}"/>`;
+  }
+  h += `<line x1="${x(tmT)}" x2="${x(tmT)}" y1="0" y2="${H}" stroke="var(--text)" stroke-width="1.5" opacity=".7"/>`;
+  svg.innerHTML = h;
+  const px = tmPrice(sym, tmT); $("#tmPx-" + sym).textContent = px == null ? "—" : fpx(px);
+}
+function tmToggle(){
+  if(tmPlay){ cancelAnimationFrame(tmPlay); tmPlay = 0; $("#tmPlayBtn").textContent = "▶ Play"; return; }
+  if(tmT >= TM.t1) tmT = TM.t0;
+  $("#tmPlayBtn").textContent = "❚❚ Pause";
+  let last = performance.now();
+  const step = now => { if(page !== "machine"){ tmPlay = 0; return; }
+    tmT = Math.min(TM.t1, tmT + (now - last) * tmSpeed); last = now; renderMachine(false);
+    if(tmT >= TM.t1){ tmPlay = 0; $("#tmPlayBtn").textContent = "▶ Play"; return; }
+    tmPlay = requestAnimationFrame(step); };
+  tmPlay = requestAnimationFrame(step);
+}
+
+/* ── Edge atlas ── */
+let ATL = null, atlSym = "ALL";
+async function loadAtlas(){ try{ ATL = await api("api/atlas"); }catch(e){ ATL = null; } renderAtlas(); }
+function renderAtlas(){
+  const el = $("#atlas"); if(!el) return;
+  if(!ATL || ATL.state !== "ready" || !ATL.cells.length){ el.innerHTML = `<div class="empty">${ATL && ATL.state === "building" ? "The setup map is still being built…" : "The atlas appears once the setup map has been built (Strategies → Rebuild)."}</div>`; return; }
+  const syms = ["ALL", ...ATL.symbols];
+  const C = ATL.cells.filter(c => atlSym === "ALL" || c.symbol === atlSym);
+  const rowsK = [...new Set(C.map(c => (atlSym === "ALL" ? c.symbol + " · " : "") + c.setup))].sort();
+  const hours = [...new Set(C.map(c => c.hour))].sort((a,b) => a-b);
+  const cw = 34, rh = 30, lw = Math.min(220, Math.max(120, ...rowsK.map(r => r.length * 6.4))), W = lw + hours.length*cw + 10, H = 24 + rowsK.length*rh;
+  const mx = Math.max(.3, ...C.map(c => Math.abs(c.shrunk)));
+  const col = v => v >= 0 ? `rgb(63 182 126 / ${.15 + .85*Math.min(1, v/mx)})` : `rgb(234 101 96 / ${.15 + .85*Math.min(1, -v/mx)})`;
+  let h = hours.map((hr, j) => `<text x="${lw + j*cw + cw/2}" y="14" text-anchor="middle" font-size="10.5" fill="var(--muted)">${hr}</text>`).join("");
+  rowsK.forEach((r, i) => { h += `<text x="${lw-8}" y="${24 + i*rh + rh/2 + 4}" text-anchor="end" font-size="11.5" fill="var(--text-2)">${esc(r.replace(/[^·]+$/, m => sname(m.trim())))}</text>`; });
+  C.forEach((c, k) => { const i = rowsK.indexOf((atlSym === "ALL" ? c.symbol + " · " : "") + c.setup), j = hours.indexOf(c.hour);
+    const cx = lw + j*cw + cw/2, cy = 24 + i*rh + rh/2, rad = 4 + 9*Math.min(1, Math.sqrt(c.n/80));
+    h += `<g class="atc" data-k="${k}"><circle cx="${cx}" cy="${cy}" r="${rad}" fill="${col(c.shrunk)}" opacity="${1 - .7*c.fog}"/>${c.n >= 10 && Math.abs(c.t) >= 2 ? `<circle cx="${cx}" cy="${cy}" r="${rad+3}" fill="none" stroke="${c.t>0?"var(--up)":"var(--down)"}" stroke-width="1.5"/>` : ""}
+      ${c.fog > .6 ? `<circle cx="${cx}" cy="${cy}" r="${rad+1}" fill="var(--card)" opacity=".35"/>` : ""}</g>`; });
+  el.innerHTML = `<div class="seg" id="atlSeg" style="margin-bottom:10px">${syms.map(s => `<button data-a="${s}" class="${s===atlSym?"on":""}">${s==="ALL"?"All":s}</button>`).join("")}</div>
+    <div class="atlnote">${ATL.peaks} ringed peak${ATL.peaks===1?"":"s"} (|t| ≥ 2, 10+ trades) among ${ATL.tested} cells — <b>luck alone would draw about ${ATL.luck_peaks}</b>. ${ATL.peaks <= ATL.luck_peaks*1.5 ? "So far the peaks look like what chance produces." : "More peaks than chance — worth a careful look on fresh data."}</div>
+    <div class="atlwrap"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${h}</svg></div>
+    <div class="mcleg"><span><i style="background:var(--up)"></i>positive expectancy</span><span><i style="background:var(--down)"></i>negative</span><span>size = trades</span><span>faded = fog (little data)</span><span>ring = |t| ≥ 2</span></div>
+    <div class="mcinfo" id="atlInfo"><span class="mut">Tap a peak. Hours are New York time; expectancy is shrunk toward the setup's own record so thin cells can't shout.</span></div>`;
+  $$("#atlSeg button").forEach(b => b.onclick = () => { atlSym = b.dataset.a; renderAtlas(); });
+  $$("#atlas .atc").forEach(g => g.onclick = () => { const c = C[+g.dataset.k];
+    $("#atlInfo").innerHTML = `<h4>${esc(c.symbol)} · ${esc(sname(c.setup))} · ${c.hour}:00 NY</h4><div>${c.n} trades · win ${Math.round(c.win*100)}% · raw ${sR(c.avg_r,3)} · shrunk <b class="${cls(c.shrunk)}">${sR(c.shrunk,3)}</b> · t ${fmt(c.t,2)}</div>
+      <div class="mut" style="margin-top:4px">${c.n < 30 ? "Too few trades to read much into." : Math.abs(c.t) >= 2 ? "Stands out — but with " + ATL.tested + " cells, about " + ATL.luck_peaks + " would by chance. Treat it as an idea to test on fresh data, not an edge." : "Indistinguishable from noise."}</div>`; });
+}
+
+/* ── Evening recap ── */
+let RC = null;
+async function openRecap(day, ai){
+  const d = $("#recapDialog"); openDlg(d);
+  $("#rcBody").innerHTML = `<div class="empty">${ai ? "Claude is writing your recap…" : "Gathering the day…"}</div>`;
+  try{ RC = await api("api/recap?" + (day ? "day=" + encodeURIComponent(day) + "&" : "") + (ai ? "ai=1" : "ai=0")); }catch(e){ RC = null; }
+  renderRecap();
+}
+function renderRecap(){
+  const el = $("#rcBody"); if(!el) return;
+  if(!RC){ el.innerHTML = `<div class="empty">Couldn't build the recap.</div>`; return; }
+  const L = RC.books[0];
+  el.innerHTML = `<div class="rchead"><div><span class="eyebrow">EVENING RECAP</span><h3>${new Date(RC.day+"T12:00").toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</h3></div>
+      <div class="rcbig num ${cls(L.sum_r)}">${sR(L.sum_r)}</div></div>
+    <div class="rcstats"><div><b class="num">${L.trades}</b><small>trades</small></div><div><b class="num">${L.trades?Math.round(L.wins/L.trades*100)+"%":"—"}</b><small>won</small></div><div><b class="num ${cls(L.pnl)}">${smoney(L.pnl)}</b><small>P&amp;L</small></div><div><b class="num">${L.taken}/${L.seen}</b><small>setups taken</small></div></div>
+    <p class="rcscript">${esc(RC.script)}</p>
+    <div class="rcbooks">${RC.books.slice(1).map(b => `<div><i class="dot" style="background:${bookColor(b.book)}"></i>${esc(bookName(b.book))} <span class="num ${cls(b.sum_r)}">${b.trades?sR(b.sum_r):"no trades"}</span></div>`).join("")}</div>
+    <div class="rcact"><button class="btn" id="rcListen">▶ Listen</button><button class="btn" id="rcShare">Share image</button>${RC.source!=="claude"?`<button class="btn" id="rcAi">✨ Claude's version</button>`:`<span class="mut" style="font-size:12px">written by Claude from the day's records</span>`}</div>`;
+  $("#rcListen").onclick = () => { const s = window.speechSynthesis; if(!s){ toast("Speech isn't available in this browser."); return; }
+    if(s.speaking){ s.cancel(); $("#rcListen").textContent = "▶ Listen"; return; }
+    const u = new SpeechSynthesisUtterance(RC.script); u.rate = 1.02; u.onend = () => { if($("#rcListen")) $("#rcListen").textContent = "▶ Listen"; };
+    s.speak(u); $("#rcListen").textContent = "■ Stop"; };
+  $("#rcShare").onclick = shareRecap;
+  if($("#rcAi")) $("#rcAi").onclick = () => openRecapAgain(true);
+}
+async function openRecapAgain(ai){ $("#rcBody").innerHTML = `<div class="empty">Claude is writing your recap…</div>`;
+  try{ RC = await api("api/recap?day=" + encodeURIComponent(RC.day) + "&ai=" + (ai?1:0)); }catch(e){} renderRecap();
+  if(RC && ai && RC.source !== "claude") toast("Claude isn't set up (ANTHROPIC_API_KEY) — showing the plain recap."); }
+async function shareRecap(){
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+  const gr = g.createLinearGradient(0,0,W,H); gr.addColorStop(0,"#1b1640"); gr.addColorStop(1,"#0b2a4a"); g.fillStyle = gr; g.fillRect(0,0,W,H);
+  const L = RC.books[0], up = L.sum_r >= 0;
+  g.fillStyle = "#b9a8ff"; g.font = "600 34px system-ui, sans-serif"; g.fillText("FX-AGENTS · EVENING RECAP", 80, 120);
+  g.fillStyle = "#fff"; g.font = "700 64px system-ui, sans-serif"; g.fillText(new Date(RC.day+"T12:00").toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}), 80, 210);
+  g.fillStyle = up ? "#5fdc9e" : "#ff8a84"; g.font = "800 200px system-ui, sans-serif"; g.fillText((up?"+":"−") + Math.abs(L.sum_r).toFixed(2) + "R", 80, 440);
+  g.fillStyle = "#cfd6ea"; g.font = "500 40px system-ui, sans-serif";
+  g.fillText(`${L.trades} trade${L.trades===1?"":"s"} · ${L.trades?Math.round(L.wins/L.trades*100):0}% won · ${L.taken} of ${L.seen} setups taken`, 80, 520);
+  // wrap the script
+  g.fillStyle = "#e9edf8"; g.font = "400 38px system-ui, sans-serif"; let y = 620; const words = RC.script.split(" "); let line = "";
+  for(const w of words){ const t = line ? line + " " + w : w; if(g.measureText(t).width > W - 160){ g.fillText(line, 80, y); y += 54; line = w; if(y > H - 220) break; } else line = t; }
+  if(line && y <= H - 220) g.fillText(line, 80, y);
+  g.fillStyle = "#8f9bbd"; g.font = "500 30px system-ui, sans-serif"; g.fillText("Practice account · past results don't predict future ones", 80, H - 90);
+  const blob = await new Promise(r => c.toBlob(r, "image/png")), file = new File([blob], `fx-recap-${RC.day}.png`, {type:"image/png"});
+  try{ if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:"FX-Agents recap"}); return; } }catch(e){ if(e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ── Trade notes ── */
+const NOTE_TAGS = ["#textbook", "#fomo", "#late-entry", "#early-exit", "#news", "#mistake", "#lucky", "#review"];
+function notesBox(t){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  return `<div class="notes" id="notes"><h3 style="font-size:14px;margin:16px 0 8px">Your notes</h3>
+    <textarea id="noteTxt" rows="3" maxlength="2000" placeholder="What did you notice? Tags like #fomo are searchable on the Trades page.">${esc(t.notes||"")}</textarea>
+    <div class="notetags">${NOTE_TAGS.map(x => `<button class="chipbtn" type="button" data-tag="${x}">${x}</button>`).join("")}</div>
+    <div class="noteact">${SR ? `<button class="btn" type="button" id="noteMic">🎙 Dictate</button>` : ""}<span class="sp" style="flex:1"></span><span class="mut" id="noteMsg" style="font-size:12px"></span><button class="btn" type="button" id="noteSave">Save note</button></div></div>`;
+}
+function wireNotes(t){
+  const ta = $("#noteTxt"); if(!ta) return;
+  $$("#notes [data-tag]").forEach(b => b.onclick = () => { const tag = b.dataset.tag; ta.value = ta.value.includes(tag) ? ta.value.replace(new RegExp("\\s*" + tag.replace(/[-#]/g, "\\$&")), "") : (ta.value.trim() + " " + tag).trim(); });
+  $("#noteSave").onclick = async () => {
+    $("#noteSave").disabled = true; $("#noteMsg").textContent = "Saving…";
+    try{ const r = await fetch(q("api/trades/" + encodeURIComponent(t.id) + "/note"), {method:"POST", credentials:"same-origin", headers:{"content-type":"application/json"}, body:JSON.stringify({note:ta.value})});
+      if(!r.ok) throw new Error(r.status === 403 ? "Set DASHBOARD_TOKEN to save notes." : r.status === 401 ? "Sign in again to save notes." : "Couldn't save (" + r.status + ").");
+      t.notes = ta.value; const row = (typeof tradeRows !== "undefined" ? tradeRows : []).find(x => x.id === t.id); if(row) row.notes = ta.value;
+      $("#noteMsg").textContent = "Saved ✓"; }
+    catch(e){ $("#noteMsg").textContent = e.message; }
+    finally{ $("#noteSave").disabled = false; } };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(SR && $("#noteMic")){ let rec = null;
+    $("#noteMic").onclick = () => { if(rec){ rec.stop(); return; }
+      rec = new SR(); rec.lang = navigator.language || "en-US"; rec.interimResults = false;
+      rec.onresult = e => { ta.value = (ta.value + " " + [...e.results].map(r => r[0].transcript).join(" ")).trim(); };
+      rec.onend = () => { rec = null; if($("#noteMic")) $("#noteMic").textContent = "🎙 Dictate"; };
+      rec.onerror = () => { $("#noteMsg").textContent = "Dictation stopped."; };
+      rec.start(); $("#noteMic").textContent = "■ Stop"; }; }
+}
+
+/* ── Slide to flatten (touch screens) ── */
+if(matchMedia("(pointer:coarse)").matches || navigator.maxTouchPoints > 0) document.documentElement.classList.add("touch");
+function slideToConfirm(){
+  const dlg = $("#controlDialog"), act = dlg.querySelector(".dialog-actions"); if(!act || $("#slideFlat")) return;
+  act.insertAdjacentHTML("afterend", `<div class="slide" id="slideFlat" role="slider" tabindex="0" aria-label="Slide to flatten all positions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <span class="slabel">Slide to flatten all →</span><span class="knob">›</span></div>`);
+  const s = $("#slideFlat"), k = s.querySelector(".knob");
+  let x0 = null, max = 0, pos = 0;
+  const set = p => { pos = Math.max(0, Math.min(max, p)); k.style.transform = `translateX(${pos}px)`; s.style.setProperty("--fill", (pos/max*100||0) + "%"); s.setAttribute("aria-valuenow", Math.round(pos/max*100||0)); };
+  const done = () => { if(navigator.vibrate) navigator.vibrate(25); dlg.close("confirm"); };
+  k.addEventListener("pointerdown", e => { if($("#confirmFlatten").disabled) return; x0 = e.clientX - pos; max = s.clientWidth - k.offsetWidth - 8; k.setPointerCapture(e.pointerId); k.style.transition = "none"; });
+  k.addEventListener("pointermove", e => { if(x0 != null) set(e.clientX - x0); });
+  const end = () => { if(x0 == null) return; x0 = null; k.style.transition = ""; if(pos >= max * .92) done(); else set(0); };
+  k.addEventListener("pointerup", end); k.addEventListener("pointercancel", end);
+  s.addEventListener("keydown", e => { if($("#confirmFlatten").disabled) return; max = s.clientWidth - k.offsetWidth - 8;
+    if(e.key === "ArrowRight"){ e.preventDefault(); set(pos + max/4); if(pos >= max * .92) done(); } if(e.key === "ArrowLeft"){ e.preventDefault(); set(pos - max/4); } });
+  dlg.addEventListener("close", () => set(0));
+}
+slideToConfirm();
+
+/* ── Home-screen app: manifest, offline shell, install help, pull to refresh ── */
+if("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; });
+function installApp(){
+  $("#moreSheet").classList.remove("on"); $("#scrim").classList.remove("on");
+  if(standalone()){ toast("You're already using the home-screen app."); return; }
+  if(installEvt){ installEvt.prompt(); installEvt = null; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  toast(ios ? "In Safari: tap Share ⬆︎, then “Add to Home Screen”." : "Use your browser menu → “Install app” or “Add to Home screen”.");
+}
+(() => { // pull down at the top to refresh — only in the home-screen app, where the browser's own pull-to-refresh is gone
+  let y0 = null, pulled = 0; const ind = document.createElement("div"); ind.className = "ptr"; ind.textContent = "↓ Pull to refresh"; document.body.appendChild(ind);
+  addEventListener("touchstart", e => { if(standalone() && scrollY <= 0 && !document.querySelector("dialog[open]") && !$("#drawer").classList.contains("on")) y0 = e.touches[0].clientY; }, {passive:true});
+  addEventListener("touchmove", e => { if(y0 == null) return; pulled = Math.max(0, e.touches[0].clientY - y0);
+    ind.style.transform = `translate(-50%, ${Math.min(80, pulled/2) - 40}px)`; ind.style.opacity = Math.min(1, pulled/120); ind.textContent = pulled > 110 ? "↻ Release to refresh" : "↓ Pull to refresh"; }, {passive:true});
+  addEventListener("touchend", async () => { if(y0 == null) return; const go_ = pulled > 110; y0 = null; pulled = 0;
+    if(go_){ ind.textContent = "Refreshing…"; if(navigator.vibrate) navigator.vibrate(10);
+      try{ const r = await fetch(q("api/state"), {credentials:"same-origin"}); if(r.ok) receive(await r.json()); }catch(e){}
+      if(page === "calendar") loadCalendar(); if(page === "trades") loadTrades(); if(page === "compare"){ loadCompare(); loadEvidence(); loadGhosts(); }
+      if(page === "home") loadNow(true); if(page === "machine") loadMachine(); if(page === "strategies") loadAtlas(); }
+    ind.style.opacity = 0; ind.style.transform = "translate(-50%, -40px)"; }, {passive:true});
+})();
+
+/* hooks */
+const _go2 = go;
+go = function(p){ _go2(p); if(p === "machine") loadMachine(); if(p === "strategies") loadAtlas(); };
+const _openTrade1 = openTrade;
+openTrade = function(t){ _openTrade1(t); const tl = $("#drawer .dback"); if(tl){ tl.insertAdjacentHTML("beforebegin", notesBox(t)); wireNotes(t); } };
+const _renderNowLine0 = renderNowLine;
+renderNowLine = function(s){ _renderNowLine0(s); const el = $("#nowLine"); if(el && !el.querySelector(".rcbtn")){ el.insertAdjacentHTML("beforeend", `<button class="btn rcbtn" type="button">🌙 Recap</button>`); el.querySelector(".rcbtn").onclick = () => openRecap(); } };
+const _showDay0 = showDay;
+showDay = async function(d){ await _showDay0(d); const h = $("#dayPanel h3"); if(h && !h.querySelector(".rcbtn")){ h.insertAdjacentHTML("beforeend", `<button class="btn rcbtn" type="button" style="margin-left:8px">Recap</button>`); h.querySelector(".rcbtn").onclick = () => openRecap(d); } };
+$("#moreInstall").onclick = installApp;
+$("#recapDialog").querySelector("[data-dlgback]").onclick = () => { try{ speechSynthesis.cancel(); }catch(e){} $("#recapDialog").close(); };
+$("#recapClose").onclick = () => { try{ speechSynthesis.cancel(); }catch(e){} $("#recapDialog").close(); };
+$("#tmDay").onchange = () => loadMachine($("#tmDay").value);
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);

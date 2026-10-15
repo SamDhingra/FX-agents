@@ -23,7 +23,7 @@ for(const width of [1440,390]){
  await page.locator('[data-preset=aurora]').click();
  await page.screenshot({path:`docs/ui-review/appearance-${width}.png`,animations:'disabled'});
  for(const accent of ['iris','ocean','amber']){await page.locator(`[data-accent-choice=${accent}]`).click();assert.equal(await page.locator('html').getAttribute('data-accent'),accent)}
- await page.locator('#motionEnabled').uncheck();await page.locator('#appearanceDone').click();
+ await page.locator('#motionEnabled').uncheck();await page.locator('#appearanceDone').click();await page.waitForTimeout(200);
  await page.reload();await page.waitForSelector('#hero .kpi');
  assert.equal(await page.locator('html').getAttribute('data-accent'),'amber');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('html').getAttribute('data-motion'),'off');
  await page.evaluate(()=>go('trades'));assert.equal(await page.locator('#p-trades').evaluate(el=>getComputedStyle(el).animationName),'none');

@@ -27,12 +27,27 @@ const ghostData={scorecard:{rule:{target_r:1.5,max_hold_min:240},pending:3,taken
  recent:Array.from({length:6},(_,i)=>({ts:new Date(T0-150*60000+i*20*60000).toISOString(),entry_ts:new Date(T0-148*60000+i*20*60000).toISOString(),symbol:'XAUUSD',side:i%2?1:-1,strategy:'trend_breakout:15m@pb',action:'filtered',filter:['Bias rule','Jev gate','News blackout'][i%3],why:'counter to BULLISH bias',entry:2662+i,exit:2662+i+(i%2?3:-2),exit_ts:new Date(T0-120*60000+i*20*60000).toISOString(),r:i%2?1.5:-1,outcome:i%2?'target':'stop'}))};
 const askAnswer={answer:"I didn't trade gold at 9:30 because the only setup was **long against a bearish 4-hour bias**, so the bias rule passed on it.\n- 09:31 trend breakout long — filtered: counter to BEARISH bias\n- 09:45 FVG sweep — skipped: Jev quality 0.31\nIts ghost would have lost −1R.",source:'claude',facts:{asked_about:{from:'2026-10-13T09:00',to:'2026-10-13T10:00'},books:{live:{setups_in_window:[1,2],trades_in_window:[]}}}};
 
+
+const dayStart=Date.parse('2026-10-13T00:00:00-04:00');
+const tbars=Array.from({length:140},(_,i)=>{const t=new Date(dayStart+(2*60+i*5)*60000);const o=2660+Math.sin(i/7)*5+i*.04,c=o+Math.sin(i/2)*1.4;return [t.toISOString(),o,Math.max(o,c)+.7,Math.min(o,c)-.7,c]});
+const timeline={day:'2026-10-13',start:'2026-10-13T00:00:00-04:00',end:'2026-10-14T00:00:00-04:00',
+ equity:Array.from({length:120},(_,i)=>[new Date(dayStart+(2*60+i*6)*60000).toISOString(),70800+i*4+Math.sin(i/5)*60]),
+ trades:[{id:'sample-0',symbol:'XAUUSD',side:'LONG',strategy:'trend_breakout:15m@pb',opened:new Date(dayStart+(5*60)*60000).toISOString(),closed:new Date(dayStart+(6*60+40)*60000).toISOString(),entry:2664,initial_stop:2659,exit_price:2671.5,r_multiple:1.5,realized:186,events:[{ts:new Date(dayStart+300*60000).toISOString(),kind:'entry',price:2664},{ts:new Date(dayStart+400*60000).toISOString(),kind:'exit',price:2671.5}],notes:null}],
+ signals:Array.from({length:10},(_,i)=>({ts:new Date(dayStart+(3*60+i*25)*60000).toISOString(),symbol:'XAUUSD',strategy:'trend_breakout:15m@pb',side:'LONG',action:i===4?'taken':'filtered',why:'counter to BEARISH bias'})),
+ decisions:[{ts:new Date(dayStart+299*60000).toISOString(),kind:'signal_rating',source:'jev',symbol:'XAUUSD',outputs:{quality:.66}}],
+ bars:{XAUUSD:tbars,NDQ:tbars.map(b=>[b[0],b[1]*7.6,b[2]*7.6,b[3]*7.6,b[4]*7.6])},news:[{ts:new Date(dayStart+510*60000).toISOString(),title:'Illustrative CPI',tier:'tier1'}]};
+const atlasData={state:'ready',tested:96,peaks:6,luck_peaks:4.4,symbols:['XAUUSD','NDQ','US30'],cells:['XAUUSD','NDQ','US30'].flatMap((sym,a)=>['trend_breakout','ict_fvg_sweep','london_breakout','dtfx_zone'].flatMap((st,b)=>[2,3,4,8,9,10,13,14].map((h,c)=>{const v=Math.sin(a*3+b*2+c)*.25;return {symbol:sym,setup:st,hour:h,n:8+((a+b+c)*13)%90,avg_r:+v.toFixed(3),shrunk:+(v*.7).toFixed(3),win:.48,t:+(v*9).toFixed(2),fog:Math.max(0,1-(8+((a+b+c)*13)%90)/80)}})))};
+const recapData={day:'2026-10-13',source:'facts',books:[{book:'live',trades:4,sum_r:3.45,pnl:626.4,wins:3,taken:5,seen:23,best:{symbol:'XAUUSD',r_multiple:1.7},worst:{symbol:'NDQ',r_multiple:-1},ghosts:{},open:2},{book:'playbook',trades:3,sum_r:-.8,pnl:-80,wins:1,taken:3,seen:30},{book:'ema21_rsi55',trades:0,sum_r:0,pnl:0,wins:0,taken:0,seen:2}],
+ script:'Today your practice account closed 4 trades, 3 winning, for +3.45R and a gain of $626. The best was XAUUSD at +1.70R; the worst NDQ at -1.00R. It saw 23 setups and took 5. The bias rule saved about 4.2R on 9 blocked setups, by the ghost yardstick.',lines:[]};
 const days={};for(const t of trades){let d=days[t.closed.slice(0,10)]??={trades:0,wins:0,pnl:0,r:0};d.trades++;d.wins+=+(t.realized>0);d.pnl+=t.realized;d.r+=t.r_multiple;}
 function api(path){
  const u=new URL(path,'http://fixture.local/'), book=u.searchParams.get('book')||'live';
  if(u.pathname.endsWith('/api/state'))return {...state,book,equity:book==='live'?state.equity:70326.4};
  if(u.pathname.endsWith('/api/trades'))return trades;
  if(u.pathname.endsWith('/api/now'))return now;
+ if(u.pathname.endsWith('/api/timeline'))return timeline;
+ if(u.pathname.endsWith('/api/atlas'))return atlasData;
+ if(u.pathname.endsWith('/api/recap'))return recapData;
  if(u.pathname.endsWith('/api/ghosts'))return ghostData;
  if(u.pathname.endsWith('/api/ask'))return askAnswer;
  if(u.pathname.endsWith('/api/evidence'))return evidence;

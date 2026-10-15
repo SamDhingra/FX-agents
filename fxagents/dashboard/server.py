@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from .. import units
-from . import ghosts, insights
+from . import extras, ghosts, insights
 from .ask import Asker
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -289,6 +289,49 @@ def build_app(ctx) -> FastAPI:
         out = await asker.answer(str(body.get("question", "")), body.get("history") or [])
         return JSONResponse(json.loads(json.dumps(out, default=str)))
 
+    @app.get("/api/timeline")
+    async def api_timeline(request: Request, day: str | None = None):
+        need(request)
+        return JSONResponse(json.loads(json.dumps(extras.timeline(ctx, bk(request), day), default=str)))
+
+    @app.get("/api/atlas")
+    async def api_atlas(request: Request):
+        need(request)
+        return JSONResponse(extras.atlas(ctx))
+
+    @app.get("/api/recap")
+    async def api_recap(request: Request, day: str | None = None, ai: int = 0):
+        need(request)
+        rc = json.loads(json.dumps(extras.recap(ctx, day), default=str))
+        if ai:
+            rc.update(await asker.narrate(rc))
+        else:
+            rc["source"] = "facts"
+        return JSONResponse(rc)
+
+    # ── home-screen app (public: no account data in these files) ──
+    @app.get("/manifest.webmanifest")
+    async def manifest():
+        return JSONResponse({"name": "FX-Agents", "short_name": "FX-Agents", "start_url": "./", "scope": "./",
+                             "display": "standalone", "background_color": "#0c101b", "theme_color": "#0c101b",
+                             "description": "Your trading agents, live.",
+                             "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+                                       {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+                                       {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]},
+                            media_type="application/manifest+json")
+
+    @app.get("/sw.js")
+    async def service_worker():
+        return PlainTextResponse((STATIC / "sw.js").read_text(), media_type="application/javascript",
+                                 headers={"Cache-Control": "no-cache"})
+
+    @app.get("/{name}.png")
+    async def icon(name: str):
+        from fastapi.responses import FileResponse
+        if name not in ("icon-192", "icon-512", "icon-maskable-512", "apple-touch-icon"):
+            raise HTTPException(404)
+        return FileResponse(STATIC / f"{name}.png", media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
     @app.get("/api/ghosts")
     async def api_ghosts(request: Request, symbol: str | None = None, start: str | None = None, end: str | None = None,
                          since: str | None = None):
@@ -341,7 +384,7 @@ def build_app(ctx) -> FastAPI:
     async def note(trade_id: str, request: Request):
         need(request, always=True)
         body = await request.json()
-        ctx.journal.set_note(trade_id, str(body.get("note", ""))[:2000])
+        bk(request).journal.set_note(trade_id, str(body.get("note", ""))[:2000])
         return {"ok": True}
 
     @app.post("/api/control/{action}")
