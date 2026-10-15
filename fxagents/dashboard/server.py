@@ -325,6 +325,14 @@ def build_app(ctx) -> FastAPI:
         return PlainTextResponse((STATIC / "sw.js").read_text(), media_type="application/javascript",
                                  headers={"Cache-Control": "no-cache"})
 
+    @app.get("/fonts/{name}.woff2")
+    async def font(name: str):
+        from fastapi.responses import FileResponse
+        if name not in ("geist", "bricolage"):
+            raise HTTPException(404)
+        return FileResponse(STATIC / "fonts" / f"{name}.woff2", media_type="font/woff2",
+                            headers={"Cache-Control": "public, max-age=2592000, immutable"})
+
     @app.get("/{name}.png")
     async def icon(name: str):
         from fastapi.responses import FileResponse

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="FX-Agents">
 <meta name="mobile-web-app-capable" content="yes">
 <title>FX-Agents · Trading workspace</title>
-<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';try{for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
+<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';d.skin='classic';try{for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off'],skin:['classic','ink','mint','carbon']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
 <style>
 :root{
   color-scheme: dark;
@@ -698,6 +698,93 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
   #appearanceDialog .appearance-header{padding-top:calc(10px + var(--sat))!important}
   .ptr{top:calc(6px + var(--sat))}
 }
+
+/* ══ v6: type, theme packages, calm home ══════════════════════════════════════════════════════════════════════ */
+@font-face{font-family:"Geist";src:url("fonts/geist.woff2") format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Bricolage Grotesque";src:url("fonts/bricolage.woff2") format("woff2");font-weight:200 800;font-display:swap}
+:root{--sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--display:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif}
+html body{font-family:var(--sans);font-feature-settings:"tnum" 1,"ss01" 1;letter-spacing:-.006em;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+#title{font-family:var(--display);font-weight:650;letter-spacing:-.035em;font-variation-settings:"opsz" 96}
+.card h3,.hhead h3{font-family:var(--display);font-weight:600;letter-spacing:-.015em}
+.kpi .v,.rcbig,.tmclock,.rchead h3,.big,.verdict b{font-family:var(--display);letter-spacing:-.03em}
+
+/* ── home ── */
+.home{display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,.62fr);grid-template-areas:"hero today" "pos now";margin-bottom:18px}
+.hx{grid-area:hero}.today{grid-area:today}.possec{grid-area:pos}.nowsec{grid-area:now}
+.hx{position:relative;overflow:hidden;border-radius:calc(var(--radius) + 8px);padding:22px 24px 0;background:
+    radial-gradient(120% 90% at 0% 0%,var(--accent-soft),transparent 60%),var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.hxtop{display:flex;align-items:center;gap:10px}
+.hxl{font-size:13px;color:var(--text-2);font-weight:500}
+.hxv{font-family:var(--display);font-weight:650;font-size:clamp(46px,7vw,68px);line-height:1.02;letter-spacing:-.045em;margin:10px 0 6px;font-variation-settings:"opsz" 96}
+.hxd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px;color:var(--text-2);min-height:22px}
+.hxd .chg{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-weight:600;font-variant-numeric:tabular-nums}
+.hxd .chg.up{background:var(--up-soft);color:var(--up-text)}.hxd .chg.down{background:var(--down-soft);color:var(--down-text)}.hxd .chg.flat{background:var(--card-2);color:var(--text-2)}
+.hxchart{margin:14px -24px 0;position:relative}
+.hxchart svg{display:block;width:100%}
+.hx .seg button{padding:5px 10px;font-size:12px}
+.today{display:grid;grid-template-columns:1fr 1fr;border-radius:calc(var(--radius) + 8px);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
+.today>div{padding:16px 18px;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:96px}
+.today>div:nth-child(odd){border-right:1px solid var(--line)}.today>div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+.today small{color:var(--muted);font-size:12px}
+.today b{font-family:var(--display);font-size:26px;font-weight:620;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.today em{font-style:normal;color:var(--text-2);font-size:12px}
+.hsec{border-radius:calc(var(--radius) + 8px);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);padding:18px 20px}
+.hhead{display:flex;align-items:center;gap:8px;margin-bottom:12px}.hhead h3{margin:0;font-size:16px}
+.pill{font-size:12px;font-weight:650;min-width:22px;height:22px;padding:0 7px;border-radius:999px;display:inline-grid;place-items:center;background:var(--accent-soft);color:var(--accent-2)}
+.nowlead{margin:-4px 0 12px;font-size:13.5px;color:var(--text-2)}
+.nowlist{display:grid;gap:2px}
+.nx2{display:grid;grid-template-columns:12px 1fr auto;gap:12px;align-items:center;padding:9px 2px;border-bottom:1px dashed var(--line)}
+.nx2:last-child{border-bottom:0}
+.nx2 i{width:9px;height:9px;border-radius:50%;background:var(--line-2);justify-self:center}
+.nx2.live i{background:var(--up);box-shadow:0 0 0 4px var(--up-soft)}.nx2.news i{background:var(--warn)}.nx2.gold i{background:#d9b44a}
+.nx2 span{font-size:13.5px;min-width:0}.nx2 span small{display:block;color:var(--muted);font-size:12px}
+.nx2 b{font-size:13px;font-weight:600;color:var(--text-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rcbtn{font-size:12.5px;padding:7px 12px;border-radius:999px}
+.home-rest{margin-top:0}
+#positions:empty{display:none}
+.pos .empty{padding:18px 4px;text-align:left}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.pcard.fresh{animation:rise .5s var(--ease-out,ease) both}
+.hxv.tick{transition:color .6s}.hxv.flash-up{color:var(--up-text)}.hxv.flash-down{color:var(--down-text)}
+@media (max-width:1100px){.home{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "today" "pos" "now"}}
+@media (max-width:760px){
+  .home{gap:14px}
+  .hx{padding:18px 18px 0;border-radius:22px}.hxchart{margin:10px -18px 0}
+  .today{border-radius:20px}.today>div{padding:13px 15px;min-height:82px}.today b{font-size:22px}
+  .hsec{padding:16px;border-radius:20px}
+  #recapBtn{padding:6px 11px}
+}
+
+/* ── theme packages (solid skins): Ink & Brass · Mint Paper · Carbon ── */
+:root[data-skin="ink"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#0d1626;--bg-2:#101b2e;--card:#14223a;--card-2:#192a46;--line:#22344f;--line-2:#34496d;--text:#eef1f7;--text-2:#bac4d8;--muted:#8a98b4;
+  --accent:#d9a95b;--accent-2:#e9c383;--accent-soft:rgb(217 169 91 / .14);--up:#36c69a;--up-text:#5cdcb2;--up-soft:rgb(54 198 154 / .14);
+  --down:#f2766b;--down-text:#ff978d;--down-soft:rgb(242 118 107 / .14);--warn:#e7b651;--warn-soft:rgb(231 182 81 / .14);--ghost:#9fb3ff;--radius:14px;--shadow:0 1px 0 rgb(255 255 255 / .03) inset,0 10px 30px rgb(0 0 0 / .25)}
+:root[data-skin="ink"] body{background:radial-gradient(90% 60% at 100% 0%,rgb(217 169 91 / .07),transparent 60%),var(--bg)}
+:root[data-skin="mint"][data-theme][data-accent]{color-scheme:light;
+  --bg:#f2f6f4;--bg-2:#ecf2ef;--card:#ffffff;--card-2:#f5f9f7;--line:#dbe5e0;--line-2:#c1d0c8;--text:#0f2019;--text-2:#3f584c;--muted:#687e74;
+  --accent:#0e7a5a;--accent-2:#0a6a4d;--accent-soft:rgb(14 122 90 / .09);--up:#13865f;--up-text:#0d6c4c;--up-soft:rgb(19 134 95 / .10);
+  --down:#c8453a;--down-text:#a6372e;--down-soft:rgb(200 69 58 / .09);--warn:#a8750f;--warn-soft:rgb(168 117 15 / .10);--ghost:#5b4bd1;--radius:16px;--shadow:0 1px 2px rgb(15 32 25 / .05),0 8px 24px rgb(15 32 25 / .04)}
+:root[data-skin="carbon"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#121314;--bg-2:#161718;--card:#1b1c1f;--card-2:#212226;--line:#2b2d32;--line-2:#3a3d44;--text:#f2f2f3;--text-2:#c3c5ca;--muted:#8f929a;
+  --accent:#7aa2ff;--accent-2:#a3bdff;--accent-soft:rgb(122 162 255 / .13);--up:#4cc38a;--up-text:#6fd8a4;--up-soft:rgb(76 195 138 / .13);
+  --down:#f06a6a;--down-text:#ff8d8d;--down-soft:rgb(240 106 106 / .13);--warn:#e2b04a;--warn-soft:rgb(226 176 74 / .13);--ghost:#c49bff;--radius:12px;--shadow:none}
+:root[data-skin="carbon"] .hx{background:linear-gradient(160deg,#1f2126,#17181b)}
+:root[data-skin="mint"] .hx{background:radial-gradient(110% 90% at 0% 0%,rgb(14 122 90 / .08),transparent 60%),#fff}
+.theme-presets{grid-template-columns:repeat(3,minmax(0,1fr))}
+.sample-ink{background:linear-gradient(135deg,#0d1626,#192a46)}.sample-ink i{background:#22344f!important}.sample-ink b{background:#d9a95b!important;border-color:#e9c383!important}.sample-ink em{background:#36c69a!important}
+.sample-mint{background:linear-gradient(135deg,#f2f6f4,#ffffff)}.sample-mint i{background:#0f2019!important}.sample-mint b{background:#0e7a5a!important;border-color:#0a6a4d!important}.sample-mint em{background:#c1d0c8!important}
+.sample-carbon{background:linear-gradient(135deg,#121314,#212226)}.sample-carbon i{background:#2b2d32!important}.sample-carbon b{background:#7aa2ff!important;border-color:#a3bdff!important}.sample-carbon em{background:#4cc38a!important}
+:root[data-skin]:not([data-skin="classic"]) .accent-options{opacity:.45;pointer-events:none}
+
+/* phones: equity, then open positions, then today; a quieter heading on the overview */
+@media (max-width:1100px){.home{grid-template-areas:"hero" "pos" "today" "now"}}
+@media (max-width:760px){
+  #appearance2{display:none!important}
+  html[data-page="home"] #pageDescription,html[data-page="home"] #contextNote,html[data-page="home"] #pageGroup{display:none}
+  html[data-page="home"] #title{font-size:34px;margin-bottom:2px}
+}
 </style>
 </head>
 <body>
@@ -769,18 +856,25 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
     <!-- OVERVIEW -->
     <section class="page on" id="p-home">
       <div id="newsBanner"></div>
-      <div class="nowline" id="nowLine"></div>
-      <div class="hero" id="hero"></div>
-      <div class="grid overview-grid" style="margin-top:20px">
-        <div class="card c8 equity-card"><h3>Account performance <span class="sp"></span><div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></h3>
-          <div class="chart-meta"><span class="chart-value num" id="equityValue">—</span><span class="mut">Equity · account currency</span></div>
-          <div class="chart"><svg id="eq" height="232" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div><div class="empty" id="equityEmpty" hidden>Equity history will appear after two snapshots.</div></div>
-        <div class="card c4 operations-card"><h3>Trading conditions <span class="sp"></span><svg class="section-icon"><use href="#i-bot"/></svg></h3><div id="conditions"><div class="empty">Waiting for account data…</div></div><button class="text-btn" data-p="agents">View agents &amp; activity <span>↗</span></button></div>
-        <div class="card c8 weather-card"><h3>Market weather <span class="mut heading-note">sea = chop · wind = trend bias · storm = news</span></h3><div class="wx" id="weather"><div class="empty">Reading the market…</div></div></div>
-        <div class="card c4 fuel-card"><h3>Risk fuel <span class="sp"></span><span class="tag">Today</span></h3><div class="fuel" id="fuel"><div class="empty">Waiting for account data…</div></div></div>
-        <div class="card c12 market-card"><h3>Market watch <span class="mut heading-note">Daily · 4H · 1H bias</span><span class="sp"></span><span class="mut" id="swipeHint"></span></h3><div class="bias-row" id="bias"></div></div>
-        <div class="card c8 positions-card"><h3>Open positions <span class="tag" id="posCount">0</span><span class="sp"></span><button class="text-btn" data-p="trades">Trade history ↗</button></h3><div class="pos" id="positions"></div></div>
-        <div class="card c4 selections-card"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
+      <div class="home">
+        <div class="hx" id="hero">
+          <div class="kpi hxk">
+            <div class="hxtop"><span class="hxl" id="hxLabel">Equity</span><span class="sp" style="flex:1"></span>
+              <div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></div>
+            <div class="hxv num" id="equityValue">—</div>
+            <div class="hxd" id="hxDelta"></div>
+          </div>
+          <div class="chart hxchart"><svg id="eq" height="132" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
+          <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
+        </div>
+        <div class="today" id="todayStrip"></div>
+        <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History</button></div><div class="pos" id="positions"></div></div>
+        <div class="hsec nowsec"><div class="hhead"><h3>Coming up</h3><span class="sp" style="flex:1"></span><button class="btn rcbtn" id="recapBtn" type="button">Evening recap</button></div><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div>
+      </div>
+      <div class="grid home-rest">
+        <div class="card c12 market-card"><h3>Market watch <span class="mut heading-note">daily, 4-hour and 1-hour trend</span><span class="sp"></span><span class="mut" id="swipeHint"></span></h3><div class="bias-row" id="bias"></div></div>
+        <div class="card c6 selections-card"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
+        <div class="card c6 operations-card"><h3>Trading conditions</h3><div class="fuel" id="fuel"></div><div id="conditions" style="margin-top:12px"><div class="empty">Waiting for account data…</div></div><button class="text-btn" data-p="agents">Agents and activity</button></div>
       </div>
     </section>
 
@@ -942,7 +1036,7 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.7</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.9</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2169,7 +2263,7 @@ $("#scrim").addEventListener("click", closeBooks);
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeBooks(); });
 function setBook(b){
   if(b === BOOK) return;
-  BOOK = b; LAST_RECEIVED=0; S=null; tradeRows=[]; $("#hero").innerHTML='<div class="card empty" style="grid-column:1/-1">Loading selected book…</div>'; $("#positions").innerHTML=""; $("#eq").innerHTML=""; $("#equityValue").textContent="—"; $("#conditions").innerHTML=""; $("#bias").innerHTML=""; $("#picks").innerHTML=""; $("#newsBanner").innerHTML="";
+  BOOK = b; LAST_RECEIVED=0; S=null; tradeRows=[]; $("#hxDelta").textContent="Loading selected book…"; $("#todayStrip").innerHTML=""; EQ_SHOWN=null; $("#positions").innerHTML=""; $("#eq").innerHTML=""; $("#equityValue").textContent="—"; $("#conditions").innerHTML=""; $("#bias").innerHTML=""; $("#picks").innerHTML=""; $("#newsBanner").innerHTML="";
   try{ localStorage.setItem("fx-book", b); }catch(e){}
   document.body.classList.toggle("shadow", b !== "live");
   paintBook();
@@ -3015,6 +3109,9 @@ function installApp(){
 })();
 
 /* hooks */
+const _goPage = go;
+go = function(p){ _goPage(p); if(titles[p]) document.documentElement.dataset.page = page; };
+document.documentElement.dataset.page = page;
 const _go2 = go;
 go = function(p){ _go2(p); if(p === "machine") loadMachine(); if(p === "strategies") loadAtlas(); };
 const _openTrade1 = openTrade;
@@ -3044,6 +3141,115 @@ $("#tmDay").onchange = () => loadMachine($("#tmDay").value);
   fit(); addEventListener("orientationchange", () => setTimeout(fit, 300)); addEventListener("resize", fit);
 })();
 $("#appearance2").onclick = () => { syncAppearance(); openDlg($("#appearanceDialog")); };
+
+/* ══ v6: calm home · equity count-up · theme packages ═════════════════════════════════════════════════════════════ */
+let EQ_SHOWN = null, EQ_ANIM = 0;
+function countTo(v){
+  const el = $("#equityValue"); if(!el || v == null) return;
+  const from = EQ_SHOWN;
+  if(from == null || reduceMotion() || Math.abs(v - from) < .005){ EQ_SHOWN = v; el.textContent = money(v); return; }
+  cancelAnimationFrame(EQ_ANIM);
+  const t0 = performance.now(), dur = from === 0 ? 1100 : 650, up = v > from;
+  el.classList.add("tick", up ? "flash-up" : "flash-down");
+  const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = money(from + (v - from) * e);
+    if(k < 1) EQ_ANIM = requestAnimationFrame(step); else { EQ_SHOWN = v; setTimeout(() => el.classList.remove("flash-up", "flash-down"), 400); } };
+  EQ_ANIM = requestAnimationFrame(step);
+}
+hero = function(s){
+  const d = s.day_pnl, pct = s.equity ? d / (s.equity - d) * 100 : 0, k = d > 0 ? "up" : d < 0 ? "down" : "flat";
+  $("#hxLabel").textContent = BOOK === "live" ? "Equity" : "Paper equity · " + bookName(BOOK);
+  $("#hxDelta").innerHTML = `<span class="chg ${k}">${d > 0 ? "▲" : d < 0 ? "▼" : "•"} ${smoney(d, 2)} <span style="opacity:.75">${(pct >= 0 ? "+" : "") + fmt(pct, 2)}%</span></span><span>today</span>`;
+  const t = s.today || {};
+  $("#todayStrip").innerHTML = `
+    <div><small>Realized today</small><b class="${cls(s.realized_today)}">${smoney(s.realized_today)}</b><em>${t.trades || 0} closed${t.trades ? " · " + Math.round(t.win_rate * 100) + "% won" : ""}</em></div>
+    <div><small>Today in R</small><b class="${cls(t.sum_r)}">${sR(t.sum_r)}</b><em>${t.trades ? "avg " + sR(t.avg_r) : "no closed trades"}</em></div>
+    <div><small>Open P&amp;L</small><b class="${cls(s.unrealized)}">${smoney(s.unrealized)}</b><em>${s.positions.length} open</em></div>
+    <div><small>Risk to stops</small><b>${money(s.open_risk, 0)}</b><em>${s.open_risk === 0 && s.positions.length ? "stops in profit" : "if every stop is hit"}</em></div>`;
+};
+function heroChart(svg, tip, pts){
+  if(pts.length < 2){ svg.innerHTML = ""; return; }
+  const W = svg.clientWidth || svg.parentNode.clientWidth || 600, H = +svg.getAttribute("height"), T = 18, B = 4;
+  const ys = pts.map(p => p.y); let lo = Math.min(...ys), hi = Math.max(...ys); if(hi - lo < 1){ hi += 25; lo -= 25; }
+  const x = i => i / (pts.length - 1) * W, y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join("");
+  const up = pts[pts.length - 1].y >= pts[0].y, col = up ? "var(--up)" : "var(--down)";
+  const iMax = ys.indexOf(Math.max(...ys)), iMin = ys.indexOf(Math.min(...ys));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = `<defs><linearGradient id="hxg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".30"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d}L${W},${H}L0,${H}Z" fill="url(#hxg)"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="${Math.min(W - 4, Math.max(4, x(iMax)))}" y="${y(ys[iMax]) - 6}" font-size="10.5" fill="var(--muted)" text-anchor="${x(iMax) > W * .85 ? "end" : x(iMax) < W * .15 ? "start" : "middle"}">${money(ys[iMax], 0)}</text>
+    <circle cx="${x(pts.length - 1)}" cy="${y(ys[ys.length - 1])}" r="4" fill="${col}" stroke="var(--card)" stroke-width="2"/>
+    <line class="xh" y1="0" y2="${H}" stroke="var(--text-2)" stroke-dasharray="3 3" visibility="hidden"/><circle class="xd" r="4.5" fill="${col}" stroke="var(--card)" stroke-width="2.5" visibility="hidden"/>
+    <rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="hit"/>`;
+  const hit = svg.querySelector(".hit"), xh = svg.querySelector(".xh"), xd = svg.querySelector(".xd");
+  const mv = ev => { const r = svg.getBoundingClientRect(), px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round(px / W * (pts.length - 1))));
+    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
+    xd.setAttribute("cx", x(i)); xd.setAttribute("cy", y(pts[i].y)); xd.setAttribute("visibility", "visible");
+    const ch = pts[i].y - pts[0].y;
+    tip.innerHTML = `<b class="num">${money(pts[i].y, 0)}</b><br><span class="mut">${md(pts[i].x)} ${hm(pts[i].x)} · </span><span class="${cls(ch)}">${smoney(ch)}</span>`;
+    tip.style.display = "block"; tip.style.left = Math.min(r.width - 160, Math.max(0, x(i) * r.width / W + 12)) + "px"; tip.style.top = "6px"; };
+  const lv = () => { tip.style.display = "none"; xh.setAttribute("visibility", "hidden"); xd.setAttribute("visibility", "hidden"); };
+  hit.onmousemove = mv; hit.ontouchmove = mv; hit.onmouseleave = lv; hit.ontouchend = lv;
+}
+equity = function(s){
+  countTo(s.equity);
+  let pts = s.equity_curve || [];
+  if(pts.length >= 2 && eqRange !== "ALL"){ const last = new Date(pts[pts.length - 1].ts), cut = last - (eqRange === "1D" ? 1 : 7) * 864e5; pts = pts.filter(p => new Date(p.ts) >= cut); }
+  $("#equityEmpty").hidden = pts.length >= 2;
+  heroChart($("#eq"), $("#eqTip"), pts.map(p => ({x:p.ts, y:p.equity})));
+};
+/* positions: a new one slides in once (answers "something changed"), the rest stay still */
+let SEEN_POS = null;
+const _positions0 = positions;
+positions = function(s){
+  _positions0(s);
+  const ids = s.positions.map(p => p.id), cards = $$("#positions .pcard");
+  if(SEEN_POS) cards.forEach((c, i) => { if(ids[i] && !SEEN_POS.has(ids[i])) c.classList.add("fresh"); });
+  SEEN_POS = new Set(ids);
+  if(!s.positions.length) $("#positions").innerHTML = `<div class="empty">No open positions. ${s.trading_enabled ? "Watching " + esc(Object.keys(s.prices).join(", ")) + " for setups." : "New entries are paused."}</div>`;
+};
+/* coming up: a calm list instead of chips */
+renderNowLine = function(s){
+  const el = $("#nowLine"); if(!el) return;
+  $("#nowLead").textContent = nowSentence(s, NOW || {items:[]}) + ".";
+  const items = (NOW && NOW.items) || [];
+  el.innerHTML = items.slice(0, 5).map(i => {
+    const k = i.key === "news" ? "news" : i.key === "gold_range" ? "gold" : i.live ? "live" : "";
+    const sub = i.range ? `<small>range ${fpx(i.range.low)} – ${fpx(i.range.high)}</small>` : i.key === "news" && i.tier ? `<small>${esc(String(i.tier).replace("tier1", "tier 1"))} news · entries pause around it</small>` : "";
+    return `<div class="nx2 ${k}"><i></i><span>${esc(i.label)}${sub}</span><b data-count="${i.at}">${countdown(i.at)}</b></div>`;
+  }).join("") || `<div class="empty">Nothing scheduled.</div>`;
+};
+renderWeather = () => {};
+$("#recapBtn").onclick = () => openRecap();
+
+/* theme packages: classic presets keep their accent choice; the skins carry their own palette */
+const SKIN_PRESETS = {ink:{skin:"ink", theme:"dark", surface:"solid"}, mint:{skin:"mint", theme:"light", surface:"solid"}, carbon:{skin:"carbon", theme:"dark", surface:"solid"}};
+(() => {
+  const box = $(".theme-presets"); if(!box) return;
+  box.insertAdjacentHTML("beforeend", `
+    <button type="button" class="theme-preset" data-preset="ink" aria-pressed="false"><span class="theme-sample sample-ink" aria-hidden="true"><i></i><b></b><em></em></span><strong>Ink &amp; Brass</strong><small>Dark navy, brass</small></button>
+    <button type="button" class="theme-preset" data-preset="mint" aria-pressed="false"><span class="theme-sample sample-mint" aria-hidden="true"><i></i><b></b><em></em></span><strong>Mint Paper</strong><small>Light, banker green</small></button>
+    <button type="button" class="theme-preset" data-preset="carbon" aria-pressed="false"><span class="theme-sample sample-carbon" aria-hidden="true"><i></i><b></b><em></em></span><strong>Carbon</strong><small>Graphite, cobalt</small></button>`);
+  $$("[data-preset]").forEach(b => b.onclick = () => {
+    const p = b.dataset.preset;
+    if(SKIN_PRESETS[p]) setAppearance(SKIN_PRESETS[p]);
+    else setAppearance(p === "studio" ? {skin:"classic", surface:"solid"} : {skin:"classic", surface:"glass", theme:p === "aurora" ? "dark" : "light"});
+  });
+  const legend = $(".accent-options"); if(legend) legend.insertAdjacentHTML("afterend", `<p class="mut" style="font-size:12px;margin:6px 0 0">Accent colours apply to Frost, Aurora and Studio; the other themes bring their own.</p>`);
+})();
+const _syncAppearance0 = syncAppearance;
+syncAppearance = function(){
+  _syncAppearance0();
+  const sk = document.documentElement.dataset.skin;
+  if(sk && sk !== "classic") $$("[data-preset]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === sk)));
+  const m = document.querySelector('meta[name="theme-color"]'); if(m) m.content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || m.content;
+};
+syncAppearance();
+
+$("#theme").onclick = () => { const d = document.documentElement.dataset;
+  setAppearance(d.skin && d.skin !== "classic" ? {skin:"classic", surface:"glass", theme:d.theme === "dark" ? "light" : "dark"} : {theme:d.theme === "dark" ? "light" : "dark"}); };
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);

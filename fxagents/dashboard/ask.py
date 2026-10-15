@@ -111,7 +111,13 @@ def gather(main, question: str) -> dict:
                                for p in c.state.positions.values() if p.status == "open"],
             "record": {k: ev[k] for k in ("n", "avg_r", "sum_r", "win", "ci", "verdict")},
             "strategies": ev["strategies"][:8],
-            "filter_scorecard": ({"taken": sc["taken"], "filters": sc["filters"][:8]} if sc else None)}
+            "filter_scorecard": ({"taken": sc["taken"], "filters": sc["filters"][:8]} if sc else None),
+            # always there, whatever the window: "the last NDQ trade", "how did this week go"
+            "latest_trades": [dict(r) for r in c.journal.db.execute(
+                "SELECT symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes "
+                "FROM trades WHERE status='closed'" + (f" AND symbol IN ({','.join('?' * len(syms))})" if syms else "")
+                + " ORDER BY closed DESC LIMIT 8", syms or [])],
+            "last_7_days": [{"date": d, **v} for d, v in list(c.journal.daily().items())[-7:]]}
     facts["books"] = per_book
     facts["live_state"] = {"entries_enabled": st.trading_enabled, "halt_reason": st.halt_reason or None,
                            "news_blackout": st.news_block, "bias": {s: {k: (st.bias.get(s) or {}).get(k) for k in ("state", "score", "d", "h4", "h1")}

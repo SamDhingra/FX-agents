@@ -98,3 +98,9 @@ APIs: `/api/now`, `/api/evidence`, `/api/story/{trade_id}`, `/api/bars?symbol&st
 - **Home-screen app**: `manifest.webmanifest`, icons, `sw.js` (network-first; caches only the page shell and icons, never `/api` or `/ws`), "Add to Home Screen" in More, pull-to-refresh inside the installed app.
 - **Slide to flatten**: on touch screens the flatten confirmation is a slider (a half slide does nothing); mouse/keyboard keep the button.
 - **Trade notes**: notes with quick tags and dictation in every trade, saved to that book's journal and searchable on the Trades page.
+
+## v6: calm overview, new type, theme packages (Oct 2026)
+
+- **Overview**: equity first (big Bricolage Grotesque figure that counts to the new value when it changes, the day's change, a full-bleed equity line with 1D/1W/All), then open positions (a new one slides in once), then today in four numbers, then "Coming up" as a quiet list with the evening recap. Market watch, strategy selection and trading conditions (with the loss-budget gauge) follow. Market weather was removed. On phones the overview heading drops its description lines.
+- **Type**: Geist for the interface, Bricolage Grotesque for figures and titles, both self-hosted (`static/fonts`, OFL licences alongside; served from `/fonts/*.woff2`, no third-party requests).
+- **Theme packages** (Appearance): Ink & Brass (navy, brass), Mint Paper (cool white, banker green), Carbon (graphite, cobalt) beside Frost, Aurora and Studio. They are solid skins (`data-skin`) with their own palettes; accent colours apply to the classic three.

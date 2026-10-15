@@ -21,8 +21,8 @@ for(const width of [1440,390,768]){
  await page.waitForTimeout(300);await page.screenshot({animations:'disabled',path:path.join(out,`overview-${width}.png`),fullPage:true});
  assert(await page.locator('#pause').isEnabled());
  await page.locator('#flatten').click();await page.locator('#controlDialog button[value=cancel]').click();assert.equal(posts.length,0);
- await page.locator('#flatten').click();await page.locator('#confirmFlatten').click();await page.waitForTimeout(80);assert.equal(posts.pop(),'/api/control/flatten');
- await page.locator('#pause').click();await page.waitForTimeout(80);assert.equal(posts.pop(),'/api/control/pause');
+ await page.locator('#flatten').click();await page.locator('#confirmFlatten').click();await page.waitForTimeout(400);assert.equal(posts.pop(),'/api/control/flatten');
+ await page.locator('#pause').click();await page.waitForTimeout(400);assert.equal(posts.pop(),'/api/control/pause');
  for(const dest of ['trades','calendar','compare','playbook','strategies','backtests','news','agents']){
   await page.evaluate(dest=>go(dest),dest);await page.waitForTimeout(110);
   assert.equal(await page.locator('.page.on').getAttribute('id'),'p-'+dest);
@@ -39,7 +39,7 @@ for(const width of [1440,390,768]){
  await page.locator('#bookBtn').click();await page.locator('[data-b="live"]').click();await page.waitForTimeout(100);
  await page.evaluate(()=>{LAST_RECEIVED=Date.now()-20000;freshness()});assert(await page.locator('#pause').isDisabled());assert(await page.locator('#connectionBanner').isVisible());assert.equal(await page.locator('#status').textContent(),'Status unverified');
  await page.evaluate(s=>receive({...s,positions:[],equity_curve:[],trading_enabled:false,halt_reason:'Paused for review'}),state);assert((await page.locator('#positions').textContent()).includes('No open positions'));assert(await page.locator('#equityEmpty').isVisible());
- await page.locator('#pause').click();await page.waitForTimeout(80);assert.equal(posts.pop(),'/api/control/resume');
+ await page.locator('#pause').click();await page.waitForTimeout(400);assert.equal(posts.pop(),'/api/control/resume');
  if(width===390){await page.locator('.tabbar [data-p=more]').click();await page.locator('#moreSheet [data-p=news]').click();assert.equal(await page.locator('.page.on').getAttribute('id'),'p-news');}
  await context.close();
 }

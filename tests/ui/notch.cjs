@@ -23,6 +23,6 @@ await page.locator('#appearance').click();await page.waitForTimeout(200);assert(
 const back=await page.locator('#appearanceDialog [data-dlgback]').boundingBox();assert(back.y>=54,'Back below the island');
 await page.screenshot({path:path.join(out,'notch-appearance.png')});
 await page.locator('#appearanceDialog [data-dlgback]').click();await page.waitForTimeout(150);
-await page.locator('#appearance2').click();await page.waitForTimeout(150);assert(await page.locator('#appearanceDialog').evaluate(d=>d.open),'heading Appearance button');
+await page.locator('#moreAppearance').evaluate(b=>b.click());await page.waitForTimeout(150);assert(await page.locator('#appearanceDialog').evaluate(d=>d.open),'More → Appearance');
 await browser.close();if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('notch ok');
 })();

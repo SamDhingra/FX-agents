@@ -26,7 +26,7 @@ for(const [width,touch] of [[1440,false],[390,true]]){
  await page.locator('#atlas').screenshot({path:path.join(out,`v5-atlas-${tag}.png`)});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow atlas');
  // recap
- await page.evaluate(()=>go('home'));await page.waitForTimeout(300);await page.locator('#nowLine .rcbtn').click();await page.waitForTimeout(300);
+ await page.evaluate(()=>go('home'));await page.waitForTimeout(300);await page.locator('#recapBtn').click();await page.waitForTimeout(300);
  assert((await page.locator('#rcBody').textContent()).includes('+3.45R'));await page.screenshot({path:path.join(out,`v5-recap-${tag}.png`)});
  if(touch){await page.locator('#recapDialog [data-dlgback]').click()}else{await page.locator('#recapClose').click()}await page.waitForTimeout(150);
  assert(!(await page.locator('#recapDialog').evaluate(d=>d.open)));
