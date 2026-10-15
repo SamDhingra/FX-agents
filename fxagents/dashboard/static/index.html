@@ -785,6 +785,22 @@ button,input,select,textarea{font-family:inherit}
   html[data-page="home"] #pageDescription,html[data-page="home"] #contextNote,html[data-page="home"] #pageGroup{display:none}
   html[data-page="home"] #title{font-size:34px;margin-bottom:2px}
 }
+
+/* Up next: folds to one line (the next thing and its countdown); remembered on this device */
+.hfold{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:inherit;cursor:pointer}
+.hfold h3{margin:0;font-size:16px;white-space:nowrap}
+.hfold .peek{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--text-2)}
+.hfold .peek b{color:var(--text);font-weight:600}
+.hfold .chev{width:18px;height:18px;flex:none;margin-left:auto;color:var(--muted);transition:transform .2s var(--ease-out,ease)}
+.nowsec.closed .hfold .chev{transform:rotate(-90deg)}
+.nowsec.closed .hfold .peek{display:block}
+.nowsec.closed #nowBody{display:none}
+.nowsec.closed .hhead{margin-bottom:0}
+#nowBody{animation:fold-in .2s var(--ease-out,ease)}
+@keyframes fold-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.hfold{flex-wrap:wrap;row-gap:2px}.hfold h3{order:1}.hfold .chev{order:2;margin-left:0}.hfold .peek{order:3;flex-basis:100%}
+@media (max-width:760px){#recapBtn .long{display:none}}
 </style>
 </head>
 <body>
@@ -869,7 +885,7 @@ button,input,select,textarea{font-family:inherit}
         </div>
         <div class="todaystrip" id="todayStrip"></div>
         <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History</button></div><div class="pos" id="positions"></div></div>
-        <div class="hsec nowsec"><div class="hhead"><h3>Coming up</h3><span class="sp" style="flex:1"></span><button class="btn rcbtn" id="recapBtn" type="button">Evening recap</button></div><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div>
+        <div class="hsec nowsec" id="nowSec"><div class="hhead"><button class="hfold" id="nowFold" type="button" aria-expanded="true" aria-controls="nowBody"><h3>Up next</h3><span class="peek" id="nowPeek"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="btn rcbtn" id="recapBtn" type="button"><span class="long">Evening </span>Recap</button></div><div id="nowBody"><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div></div>
       </div>
       <div class="grid home-rest">
         <div class="card c12 market-card"><h3>Market watch <span class="mut heading-note">daily, 4-hour and 1-hour trend</span><span class="sp"></span><span class="mut" id="swipeHint"></span></h3><div class="bias-row" id="bias"></div></div>
@@ -1036,7 +1052,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.10</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.11</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3250,6 +3266,22 @@ syncAppearance();
 
 $("#theme").onclick = () => { const d = document.documentElement.dataset;
   setAppearance(d.skin && d.skin !== "classic" ? {skin:"classic", surface:"glass", theme:d.theme === "dark" ? "light" : "dark"} : {theme:d.theme === "dark" ? "light" : "dark"}); };
+
+/* Up next: collapsible */
+(() => {
+  const sec = $("#nowSec"), btn = $("#nowFold"); if(!sec || !btn) return;
+  let closed = false; try{ closed = localStorage.getItem("fx-upnext") === "closed"; }catch(e){}
+  const apply = () => { sec.classList.toggle("closed", closed); btn.setAttribute("aria-expanded", String(!closed)); };
+  btn.onclick = () => { closed = !closed; try{ localStorage.setItem("fx-upnext", closed ? "closed" : "open"); }catch(e){} apply(); };
+  apply();
+})();
+const _renderNowLine1 = renderNowLine;
+renderNowLine = function(s){
+  _renderNowLine1(s);
+  const pk = $("#nowPeek"); if(!pk) return;
+  const i = ((NOW && NOW.items) || [])[0];
+  pk.innerHTML = i ? `${esc(i.label.replace(/^Entry window /, "Window ").replace("Gold overnight range", "Gold range").replace("Day-trading flatten", "Flatten"))} · <b data-count="${i.at}">${countdown(i.at)}</b>` : esc(nowSentence(s, NOW || {items:[]}));
+};
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);

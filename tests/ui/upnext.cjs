@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');const fs=require('fs');const assert=require('assert');const {state,api}=require('./fixture.cjs');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});const c=await b.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true});
+const p=await c.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});if(u.pathname.startsWith('/fonts/'))return r.fulfill({contentType:'font/woff2',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});return r.fulfill({json:api(r.request().url())})});
+await p.routeWebSocket('**/ws*',ws=>setTimeout(()=>ws.send(JSON.stringify(state)),30));
+await p.goto('http://fx-ui.test/');await p.waitForTimeout(900);
+assert(await p.locator('#nowLine').isVisible());
+await p.locator('#nowFold').tap();await p.waitForTimeout(250);
+assert(!(await p.locator('#nowLine').isVisible()));assert((await p.locator('#nowPeek').textContent()).includes('Window 08:30'));
+await p.locator('#nowSec').screenshot({path:require('path').resolve(process.env.OUT||'docs/ui-review','fold-closed.png')});
+await p.reload();await p.waitForTimeout(900);assert(!(await p.locator('#nowLine').isVisible()),'remembered');
+await p.locator('#nowFold').tap();await p.waitForTimeout(250);assert(await p.locator('#nowLine').isVisible());
+await p.locator('#nowSec').screenshot({path:require('path').resolve(process.env.OUT||'docs/ui-review','fold-open.png')});
+console.log('ok',errs);await b.close();})();
