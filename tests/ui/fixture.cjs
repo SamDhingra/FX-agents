@@ -21,12 +21,20 @@ const now={now:stamp,items:[{key:'window_end',label:'Entry window 08:30–11:30 
 const story=t=>({trade:{...t,initial_stop:t.entry-8,final_stop:t.entry+1,events:[{ts:'2026-10-13T09:35:00-04:00',kind:'entry',price:t.entry,qty:1.75,stop:t.entry-8,risk_ccy:172.9,bias:'aligned',bias_score:.3,risk_mult:.5},{ts:'2026-10-13T09:41:00-04:00',kind:'partial',price:t.entry+8,qty:.87,r:1},{ts:'2026-10-13T09:41:00-04:00',kind:'stop_moved',stop:t.entry+1,stage:1},{ts:t.closed,kind:'exit',price:t.exit_price,reason:'breakeven_plus_stop'}]},
  signal:{ts:'2026-10-13T09:34:00-04:00',action:'taken',why:'qty 1.75, risk 0.5%'},jev:{ts:'2026-10-13T09:34:30-04:00',kind:'signal_rating',source:'jev',outputs:{quality:.62,confidence:.55,htf_aligned:.7},question:null}});
 state.flow={events:[],counts:{}};
+const ghostData={scorecard:{rule:{target_r:1.5,max_hold_min:240},pending:3,taken:{n:41,avg_r:.04,sum_r:1.6,win:.46,ci:[-.18,.25]},
+ filters:[{filter:'Bias rule',n:64,avg_r:-.21,sum_r:-13.4,win:.33,ci:[-.39,-.03],saved_r:13.4,verdict:'helping'},{filter:'News blackout',n:12,avg_r:-.08,sum_r:-1,win:.42,ci:[-.6,.45],saved_r:1,verdict:'early'},
+  {filter:'Jev gate',n:38,avg_r:.12,sum_r:4.6,win:.5,ci:[-.1,.34],saved_r:-4.6,verdict:'unclear'},{filter:'Position limits',n:31,avg_r:.31,sum_r:9.6,win:.55,ci:[.07,.55],saved_r:-9.6,verdict:'hurting'}]},
+ recent:Array.from({length:6},(_,i)=>({ts:new Date(T0-150*60000+i*20*60000).toISOString(),entry_ts:new Date(T0-148*60000+i*20*60000).toISOString(),symbol:'XAUUSD',side:i%2?1:-1,strategy:'trend_breakout:15m@pb',action:'filtered',filter:['Bias rule','Jev gate','News blackout'][i%3],why:'counter to BULLISH bias',entry:2662+i,exit:2662+i+(i%2?3:-2),exit_ts:new Date(T0-120*60000+i*20*60000).toISOString(),r:i%2?1.5:-1,outcome:i%2?'target':'stop'}))};
+const askAnswer={answer:"I didn't trade gold at 9:30 because the only setup was **long against a bearish 4-hour bias**, so the bias rule passed on it.\n- 09:31 trend breakout long — filtered: counter to BEARISH bias\n- 09:45 FVG sweep — skipped: Jev quality 0.31\nIts ghost would have lost −1R.",source:'claude',facts:{asked_about:{from:'2026-10-13T09:00',to:'2026-10-13T10:00'},books:{live:{setups_in_window:[1,2],trades_in_window:[]}}}};
+
 const days={};for(const t of trades){let d=days[t.closed.slice(0,10)]??={trades:0,wins:0,pnl:0,r:0};d.trades++;d.wins+=+(t.realized>0);d.pnl+=t.realized;d.r+=t.r_multiple;}
 function api(path){
  const u=new URL(path,'http://fixture.local/'), book=u.searchParams.get('book')||'live';
  if(u.pathname.endsWith('/api/state'))return {...state,book,equity:book==='live'?state.equity:70326.4};
  if(u.pathname.endsWith('/api/trades'))return trades;
  if(u.pathname.endsWith('/api/now'))return now;
+ if(u.pathname.endsWith('/api/ghosts'))return ghostData;
+ if(u.pathname.endsWith('/api/ask'))return askAnswer;
  if(u.pathname.endsWith('/api/evidence'))return evidence;
  if(u.pathname.includes('/api/story/'))return story(trades.find(t=>t.id===decodeURIComponent(u.pathname.split('/').pop()))||trades[0]);
  if(u.pathname.endsWith('/api/bars'))return {bars};

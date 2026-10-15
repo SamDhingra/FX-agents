@@ -83,3 +83,9 @@ Read-only additions; nothing here changes trading.
 - **Backtests → Strategy journey + graveyard:** every strategy tested, how far it got (idea → dev → holdout → paper → live) and why the dead ones died. The ledger is the `LEDGER`/`GRAVE` constants in `index.html`; update them when a test finishes.
 
 APIs: `/api/now`, `/api/evidence`, `/api/story/{trade_id}`, `/api/bars?symbol&start&end`, and `flow` in the state snapshot. Checks: `tests/test_dashboard_insights.py`, `node tests/ui/v3.cjs`.
+
+## v4: ghost trades, filter scorecard, Ask the bot (Oct 2026)
+
+- **Ghost trades** (`fxagents/dashboard/ghosts.py`): every setup in a book's `signals` table — taken or passed — is played out on the 1-minute bars with one yardstick exit (its own stop, a 1.5R target, or 4 hours / the 15:50 flatten), entering on the first bar after the signal candle closes and paying half the spread. Results go to a `ghosts` table in the same journal every 5 minutes, so they outlive the in-memory bars. Repeats of a setup within 15 minutes count once.
+- **Filter scorecard** (Compare page, per book): for each rule that passed setups (bias, news, Jev, risk, position limits, chop filter …) — how many it blocked, their ghost average with a 95% range, "saved/cost" R, and a verdict against the setups that were taken under the same yardstick. Ghosts also appear as faint diamonds on a trade's replay.
+- **Ask the bot** (button on every page; `fxagents/dashboard/ask.py`, `POST /api/ask`): gathers the facts for the question (setups and trades around the time asked about, open positions, bias, news, each book's record and scorecard) and, with `ANTHROPIC_API_KEY` in `.env`, Claude answers from those facts only. Without the key the facts are summarised directly. Capped at `dashboard.ask_per_hour` calls.

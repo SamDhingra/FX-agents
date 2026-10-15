@@ -589,6 +589,41 @@ html[data-surface="glass"]{background:var(--bg)}
   .wxt,.wxt .wl{min-height:132px}
   .bcrow{grid-template-columns:1fr}
 }
+
+/* ══ v4: scorecard · ask the bot ══ */
+.scbase{margin:12px 0 10px;font-size:13px;padding:10px 12px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--line)}
+.scrow{display:grid;grid-template-columns:minmax(150px,240px) 1fr 150px;gap:12px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--card-2);border:1px solid var(--line);margin-bottom:8px}
+.scrow small{display:block;color:var(--muted);font-size:11.5px}
+.scv{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+#scSeg{flex-wrap:wrap}
+.askfab{position:fixed;right:24px;bottom:24px;z-index:40;display:flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--accent);color:#fff;font-weight:650;box-shadow:0 8px 24px rgb(0 0 0 / .25)}
+.askfab svg{width:20px;height:20px}
+.askfab:hover{filter:brightness(1.08)}
+#askDialog{width:min(640px,calc(100vw - 24px));max-height:min(760px,calc(100vh - 40px));padding:0;border:1px solid var(--line-2);border-radius:18px;background:var(--card);color:var(--text)}
+#askDialog::backdrop{background:rgb(5 8 15 / .55);backdrop-filter:blur(3px)}
+#askDialog[open]{display:flex;flex-direction:column}
+.askhead{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.askhead h2{font-size:16px;margin:0}
+.asklog{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:220px}
+.qa{max-width:88%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.5}
+.qa p{margin:0 0 6px}.qa p:last-child{margin:0}.qa ul{margin:4px 0 6px;padding-left:18px}.qa small{display:block;margin-top:6px;font-size:11px}
+.qa.q{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.qa.a{align-self:flex-start;background:var(--card-2);border:1px solid var(--line);border-bottom-left-radius:4px}
+.qa.typing{display:flex;gap:4px;padding:12px 14px}.qa.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+.qa.typing i:nth-child(2){animation-delay:.2s}.qa.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.askideas{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px}
+.chipbtn{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text-2)}
+.chipbtn:hover{border-color:var(--accent);color:var(--text)}
+.askform{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.askform input{flex:1;min-width:0;padding:11px 14px;border-radius:12px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text);font:inherit}
+@media (max-width:760px){
+  .askfab{right:14px;bottom:calc(84px + env(safe-area-inset-bottom));padding:12px}
+  .askfab span{display:none}
+  .scrow{grid-template-columns:1fr auto}.scrow .meter{grid-column:1/-1;grid-row:2}
+  #askDialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0}
+}
 </style>
 </head>
 <body>
@@ -710,6 +745,7 @@ html[data-surface="glass"]{background:var(--bg)}
         <span class="sp" style="flex:1"></span>
         <a class="btn hide-m" href="api/journal.csv" download>Live CSV</a><a class="btn hide-m" id="shCsv" href="api/journal.csv?book=shadow" download>Shadow CSV</a>
       </div>
+      <div class="card" style="margin-bottom:16px"><h3>Filter scorecard <span class="sp"></span><span class="mut heading-note">ghost trades: what the setups each rule blocked would have done</span></h3><div id="scBody"><div class="empty">Loading…</div></div></div>
       <div id="evBody"></div>
       <div id="cmpBody"><div class="card"><div class="empty">Loading…</div></div></div>
     </section>
@@ -825,6 +861,10 @@ html[data-surface="glass"]{background:var(--bg)}
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Trading details" inert></div>
+<button class="askfab" id="askFab" type="button" aria-label="Ask the bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5"/><circle cx="12" cy="16.5" r=".6" fill="currentColor"/></svg><span>Ask the bot</span></button>
+<dialog id="askDialog" aria-labelledby="askTitle"><div class="askhead"><h2 id="askTitle">Ask the bot</h2><span class="mut hide-m" style="font-size:12px">answers from its own records</span><span class="sp" style="flex:1"></span><button class="btn" id="askClear" type="button">Clear</button><button class="btn icon" id="askClose" type="button" aria-label="Close">×</button></div>
+  <div class="asklog" id="askLog" aria-live="polite"></div><div class="askideas" id="askIdeas"></div>
+  <form class="askform" id="askForm"><input id="askIn" maxlength="500" autocomplete="off" placeholder="e.g. Why didn't you trade gold at 9:30?" aria-label="Your question"><button class="btn" id="askGo" type="submit">Ask</button></form></dialog>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="hmtip" id="hmtip"></div>
 <dialog id="appearanceDialog" aria-labelledby="appearanceTitle">
@@ -2511,6 +2551,116 @@ openTrade = function(t){
 };
 window.addEventListener("resize", () => { if(page==="compare" && EV){ drawRace(); drawFan(); } if(RP && $("#rpSvg")) drawReplay(); if(page==="agents" && S && MC.layout !== mcLayout()) renderMission(S); });
 setInterval(() => { if(page === "home") loadNow(true); }, 30000);
+
+/* ══ v4: ghost trades · filter scorecard · Ask the bot ═════════════════════════════════════════════════════════════ */
+let GH = null, ghBook = null;
+async function loadGhosts(){
+  const b = ghBook || "live";
+  try{ GH = await api("api/ghosts" + (b !== "live" ? "?book=" + encodeURIComponent(b) : "")); }catch(e){ GH = null; }
+  renderScorecard();
+}
+const VG = {helping:"helping", hurting:"hurting", unclear:"unclear", early:"too early"};
+function renderScorecard(){
+  const el = $("#scBody"); if(!el) return;
+  const books = ["live", ...((S && S.shadow && S.shadow.books) || [])];
+  if(!ghBook) ghBook = BOOK || "live";
+  const seg = `<div class="seg" id="scSeg">${books.map(b => `<button data-sc="${b}" class="${b===ghBook?"on":""}">${esc(bookName(b))}</button>`).join("")}</div>`;
+  if(!GH){ el.innerHTML = `${seg}<div class="empty">Couldn't load the scorecard.</div>`; wireSc(); return; }
+  const SC = GH.scorecard, T = SC.taken, F = SC.filters || [];
+  const sp = Math.max(.6, ...F.flatMap(f => f.ci ? f.ci.map(Math.abs) : [Math.abs(f.avg_r)]), ...(T && T.ci ? T.ci.map(Math.abs) : [0]));
+  const X = v => ((Math.max(-sp, Math.min(sp, v)) + sp) / (2*sp) * 100).toFixed(2) + "%";
+  const mini = f => `<div class="meter" style="height:26px">${f.ci ? `<div class="ci" style="top:8px;height:10px;left:${X(f.ci[0])};width:calc(${X(f.ci[1])} - ${X(f.ci[0])});background:${f.verdict==="helping"?"var(--up)":f.verdict==="hurting"?"var(--down)":"var(--line-2)"}"></div>` : ""}
+    <div class="avg" style="top:5px;height:16px;left:calc(${X(f.avg_r)} - 2px)"></div>${T ? `<div class="zero" style="left:${X(T.avg_r)};background:var(--accent);width:2px;opacity:.9" title="taken setups ${sR(T.avg_r,2)}"></div>` : ""}</div>`;
+  const rows = F.map(f => `<div class="scrow"><div><b>${esc(f.filter)}</b><small>${f.n} blocked · ghost avg ${sR(f.avg_r,2)} · ${Math.round(f.win*100)}% would have won</small></div>
+      ${mini(f)}<div class="scv"><b class="num ${cls(f.saved_r)}">${f.saved_r>=0?"saved":"cost"} ${sR(Math.abs(f.saved_r),1)}</b><span class="vbadge ${f.verdict==="helping"?"passing":f.verdict==="hurting"?"failing":"unproven"}">${VG[f.verdict]||f.verdict}</span></div></div>`).join("");
+  const rec = (GH.recent || []).filter(g => g.action !== "taken").slice(0, 8).map(g => `<div class="fi"><span class="when">${md(g.ts)} ${hm(g.ts)}</span><div style="flex:1;min-width:0">
+      <b>${esc(g.symbol)}</b> <span class="side ${g.side>0?"L":"S"}" style="font-size:10px">${g.side>0?"LONG":"SHORT"}</span> <span class="mut">${esc(sname(String(g.strategy||"").split(":")[0]))}</span><br>
+      <small class="mut">${esc(g.filter)} · ${esc(g.why||"")}</small></div><b class="num ${cls(g.r)}">${g.r==null?"—":sR(g.r,2)}</b></div>`).join("");
+  el.innerHTML = `${seg}
+    <div class="scbase">${T ? `Setups it <b>took</b>: <b class="num ${cls(T.avg_r)}">${sR(T.avg_r,2)}</b> avg over ${T.n} <span class="mut">(same yardstick)</span>` : `<span class="mut">No taken setups played out yet.</span>`}
+      ${SC.pending ? `<span class="mut"> · ${SC.pending} still playing out</span>` : ""}</div>
+    ${rows || `<div class="empty">No passed setups played out yet. Ghosts appear a few hours after the bot passes on a setup.</div>`}
+    <div class="mut" style="font-size:12px;margin:10px 0 0">Each passed setup is played out on the real candles with one yardstick: its own stop, a ${GH.scorecard.rule.target_r}R target or ${GH.scorecard.rule.max_hold_min/60} hours. The blue tick is the average of the setups that were taken under the same yardstick: a filter helps when its ghosts land left of it. “Saved” = R the blocked setups would have lost (or won, if negative).</div>
+    ${rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest ghost trades</h3><div class="feed" style="max-height:320px">${rec}</div>` : ""}`;
+  wireSc();
+}
+function wireSc(){ $$("#scSeg button").forEach(b => b.onclick = () => { ghBook = b.dataset.sc; loadGhosts(); }); }
+async function replayGhosts(t){
+  if(!RP || RP.t.id !== t.id) return;
+  const a = RP.bars[0].ts, b = RP.bars[RP.bars.length-1].ts;
+  try{ const g = await api(q("api/ghosts?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(a.toISOString()) + "&end=" + encodeURIComponent(b.toISOString())));
+    RP.ghosts = (g.recent || []).filter(x => x.action !== "taken" && x.entry != null); }catch(e){ RP.ghosts = []; }
+  drawReplay();
+  if(RP.ghosts.length && $("#replay .note")) $("#replay .note").insertAdjacentHTML("beforeend", ` Faint diamonds = ${RP.ghosts.length} setup${RP.ghosts.length>1?"s":""} the bot passed on here (ghosts), green if they'd have won.`);
+}
+const _drawReplay0 = drawReplay;
+drawReplay = function(){
+  _drawReplay0();
+  const svg = $("#rpSvg"); if(!svg || !RP || !RP.ghosts || !RP.ghosts.length) return;
+  const vb = svg.getAttribute("viewBox").split(" ").map(Number), W = vb[2], H = vb[3], pl = 8, pr = 58, pt = 10, pb = 22, bars = RP.bars;
+  const t0 = +bars[0].ts, t1 = +bars[bars.length-1].ts, ev = RP.t.events || [];
+  const lv = [RP.t.entry, RP.t.initial_stop, RP.t.final_stop, RP.t.exit_price, ...ev.map(e => e.price).filter(x => x!=null)].filter(x => x!=null);
+  const rm = /range ([\d.]+)[–-]([\d.]+)/.exec(RP.t.reason || "");
+  const lo = Math.min(...bars.map(b => b.l), ...lv, ...(rm?[+rm[1]]:[])), hi = Math.max(...bars.map(b => b.h), ...lv, ...(rm?[+rm[2]]:[])), sp = (hi-lo)||1;
+  const x = ts => pl + Math.max(0, Math.min(1, (+ts - t0)/((t1-t0)||1))) * (W-pl-pr), y = v => pt + (hi - Math.max(lo, Math.min(hi, v)))/sp*(H-pt-pb);
+  let h = "";
+  for(const g of RP.ghosts){ const gx = x(new Date(g.entry_ts || g.ts)), gy = y(g.entry), col = (g.r||0) > 0 ? "var(--up)" : "var(--down)";
+    if(g.exit_ts && g.exit!=null) h += `<line x1="${gx}" y1="${gy}" x2="${x(new Date(g.exit_ts))}" y2="${y(g.exit)}" stroke="${col}" stroke-dasharray="2 3" opacity=".55"/>`;
+    h += `<path d="M${gx} ${gy-6} L${gx+6} ${gy} L${gx} ${gy+6} L${gx-6} ${gy}Z" fill="${col}" opacity=".38" stroke="${col}"><title>Passed: ${esc(g.filter)} — ghost ${g.r==null?"—":sR(g.r,2)}</title></path>`; }
+  svg.insertAdjacentHTML("beforeend", h);
+};
+
+/* ── Ask the bot ── */
+let ASK = [];
+try{ ASK = JSON.parse(localStorage.getItem("fx-ask") || "[]").slice(-12); }catch(e){ ASK = []; }
+const ASK_IDEAS = ["Why no gold trade this morning?", "What did the news filter save this week?", "Is any book beating luck yet?",
+  "What's open right now and why?", "Which filter is costing me the most?", "Why did you take the last NDQ trade?"];
+function mdLite(s){
+  return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split(/\n/).map(l => /^\s*([-•*])\s+/.test(l) ? `<li>${l.replace(/^\s*[-•*]\s+/, "")}</li>` : l ? `<p>${l}</p>` : "").join("")
+    .replace(/(<li>.*?<\/li>)+/g, m => `<ul>${m}</ul>`);
+}
+function renderAsk(){
+  const log = $("#askLog"); if(!log) return;
+  log.innerHTML = ASK.length ? ASK.map(m => m.role === "user" ? `<div class="qa q">${esc(m.content)}</div>`
+      : `<div class="qa a">${mdLite(m.content)}${m.source ? `<small class="mut">${m.source==="claude"?"answered by Claude from the bot's records":m.source==="facts"?"straight from the records":""}${m.facts?` · <a href="#" data-facts="${m.i}">what I looked at</a>`:""}</small>` : ""}</div>`).join("")
+    : `<div class="mut" style="padding:6px 2px">Ask about a trade, a time, a book or a filter. Times are New York time.</div>`;
+  log.scrollTop = log.scrollHeight;
+  $$("#askLog [data-facts]").forEach(a => a.onclick = e => { e.preventDefault(); const m = ASK[+a.dataset.facts];
+    const f = m && m.facts; if(!f) return; const bk = Object.entries(f.books || {});
+    toast(`Looked at ${f.asked_about.from.slice(11)}–${f.asked_about.to.slice(11)} NY: ` + bk.map(([k,b]) => `${k} ${b.setups_in_window.length} setups / ${b.trades_in_window.length} trades`).join(" · ")); });
+}
+async function askSend(text){
+  text = (text || "").trim(); if(!text) return;
+  const hist = ASK.filter(m => m.role).map(m => ({role:m.role, content:m.content}));
+  ASK.push({role:"user", content:text}); renderAsk();
+  $("#askIn").value = ""; $("#askGo").disabled = true;
+  $("#askLog").insertAdjacentHTML("beforeend", `<div class="qa a typing"><i></i><i></i><i></i></div>`); $("#askLog").scrollTop = 1e9;
+  let r;
+  try{ const res = await fetch("api/ask", {method:"POST", credentials:"same-origin", headers:{"content-type":"application/json"}, body:JSON.stringify({question:text, history:hist})});
+    r = res.ok ? await res.json() : {answer:"I couldn't answer that (" + res.status + ").", source:"error"}; }
+  catch(e){ r = {answer:"I couldn't reach the bot. Check the connection and try again.", source:"error"}; }
+  ASK.push({role:"assistant", content:r.answer, source:r.source, facts:r.facts, i:ASK.length});
+  ASK = ASK.slice(-12).map((m, i) => ({...m, i}));
+  try{ localStorage.setItem("fx-ask", JSON.stringify(ASK.map(({facts, ...m}) => m))); }catch(e){}
+  $("#askGo").disabled = false; renderAsk();
+}
+function openAsk(){
+  const d = $("#askDialog"); if(!d) return;
+  $("#askIdeas").innerHTML = ASK_IDEAS.map(x => `<button class="chipbtn" type="button">${esc(x)}</button>`).join("");
+  $$("#askIdeas button").forEach(b => b.onclick = () => askSend(b.textContent));
+  renderAsk(); d.showModal(); setTimeout(() => $("#askIn").focus(), 50);
+}
+$("#askFab").onclick = openAsk;
+$("#askClose").onclick = () => $("#askDialog").close();
+$("#askClear").onclick = () => { ASK = []; try{ localStorage.removeItem("fx-ask"); }catch(e){} renderAsk(); };
+$("#askForm").onsubmit = e => { e.preventDefault(); askSend($("#askIn").value); };
+$("#askDialog").addEventListener("click", e => { if(e.target === $("#askDialog")) $("#askDialog").close(); });
+
+/* hooks */
+const _go1 = go;
+go = function(p){ _go1(p); if(p === "compare") loadGhosts(); };
+const _replay0 = replay;
+replay = async function(t){ await _replay0(t); await replayGhosts(t); };
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);

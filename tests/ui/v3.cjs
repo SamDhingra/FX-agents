@@ -22,12 +22,18 @@ for(const [width,scheme] of [[1440,'dark'],[390,'light'],[390,'dark']]){
  await page.evaluate(()=>go('compare'));await page.waitForTimeout(600);await page.locator('#evBody .evrow').nth(1).click();await page.waitForTimeout(200);
  await page.screenshot({path:path.join(out,`v3-compare-${tag}.png`),fullPage:true});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow compare '+tag);
+ assert((await page.locator('#scBody').textContent()).includes('Bias rule'));
  await page.evaluate(()=>go('backtests'));await page.waitForTimeout(300);await page.locator('#journey .jrow').first().click();
  await page.screenshot({path:path.join(out,`v3-journey-${tag}.png`),fullPage:true});
  await page.evaluate(()=>go('trades'));await page.waitForTimeout(400);await page.locator('#trades [data-i]').first().click();await page.waitForTimeout(900);
  assert((await page.locator('#court').textContent()).includes('Risk'));assert(await page.locator('#rpSvg rect').count()>50);
  await page.locator('#drawer').screenshot({path:path.join(out,`v3-trade-${tag}.png`)});
+ assert(await page.locator('#rpSvg path[d^="M"]').count()>=3,'ghost diamonds');
  await page.locator('#rpPlay').click();await page.waitForTimeout(2500);
+ await page.keyboard.press('Escape');await page.waitForTimeout(200);
+ await page.locator('#askFab').click();await page.waitForTimeout(200);await page.locator('#askIdeas button').first().click();await page.waitForTimeout(600);
+ assert((await page.locator('#askLog').textContent()).includes('bias rule'));
+ await page.screenshot({path:path.join(out,`v4-ask-${tag}.png`)});await page.locator('#askClose').click();
  await ctx.close();
 }
 await browser.close();

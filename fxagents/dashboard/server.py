@@ -8,6 +8,7 @@ through Cloudflare, put Cloudflare Access in front as well.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import hmac
 import io
@@ -17,7 +18,8 @@ from pathlib import Path
 import pandas as pd
 
 from .. import units
-from . import insights
+from . import ghosts, insights
+from .ask import Asker
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
@@ -146,9 +148,31 @@ def compare(ctx, rng: str, sh=None) -> dict:
 
 
 def build_app(ctx) -> FastAPI:
-    app = FastAPI(title="FX-Agents", docs_url=None, redoc_url=None)
-    for c in [ctx, *(getattr(ctx, "shadows", None) or {}).values()]:
+    books = lambda: [ctx, *(getattr(ctx, "shadows", None) or {}).values()]
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        """Play out passed and taken setups every 5 minutes, before the bars roll out of memory (read-only)."""
+        async def run():
+            while True:
+                for c in books():
+                    try:
+                        while ghosts.resolve(c) >= 400:
+                            await asyncio.sleep(0)
+                    except Exception:  # noqa: BLE001
+                        pass
+                await asyncio.sleep(300)
+        task = asyncio.create_task(run()) if getattr(ctx, "journal", None) is not None else None
+        try:
+            yield
+        finally:
+            if task:
+                task.cancel()
+
+    app = FastAPI(title="FX-Agents", docs_url=None, redoc_url=None, lifespan=lifespan)
+    for c in books():
         insights.install_tap(c)                 # Mission Control: every bus message, read-only
+
 
     def bk(request):
         """?book=<mode> (or the older ?book=shadow) → that shadow book's context (same endpoints, same shapes)."""
@@ -255,6 +279,23 @@ def build_app(ctx) -> FastAPI:
         if symbol not in ctx.cfg["instruments"]:
             raise HTTPException(400, "unknown symbol")
         return JSONResponse(insights.bars(ctx, symbol, start, end))
+
+    asker = Asker(ctx)
+
+    @app.post("/api/ask")
+    async def api_ask(request: Request):
+        need(request)
+        body = await request.json()
+        out = await asker.answer(str(body.get("question", "")), body.get("history") or [])
+        return JSONResponse(json.loads(json.dumps(out, default=str)))
+
+    @app.get("/api/ghosts")
+    async def api_ghosts(request: Request, symbol: str | None = None, start: str | None = None, end: str | None = None,
+                         since: str | None = None):
+        need(request)
+        c = bk(request)
+        ghosts.resolve(c, limit=200)
+        return JSONResponse({"scorecard": ghosts.scorecard(c, since), "recent": ghosts.recent(c, symbol, start, end)})
 
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):

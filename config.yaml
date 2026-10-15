@@ -203,6 +203,8 @@ dashboard:
   host: 0.0.0.0                # reachable over Tailscale from your phone
   port: 8088
   token: ""                    # set DASHBOARD_TOKEN; required for Pause / Flatten buttons
+  ask_model: claude-sonnet-5-5 # Ask the bot: Claude model (needs ANTHROPIC_API_KEY in .env; without it, raw facts)
+  ask_per_hour: 30             # cap on Claude calls per hour
 
 tradingview:
   webhook_secret: ""           # set TV_WEBHOOK_SECRET; alerts post to /webhook/tradingview
