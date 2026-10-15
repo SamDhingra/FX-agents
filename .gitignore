@@ -4,3 +4,4 @@ data/
 __pycache__/
 *.pyc
 config.local.yaml
+docs/ui-review/
