@@ -15,6 +15,7 @@ const onScreen=async sel=>{const b=await page.locator(sel).boundingBox();return 
 // Appearance from the top bar
 await page.locator('#appearance').click();await page.waitForTimeout(250);
 assert(await onScreen('#appearanceDialog [data-dlgback]'),'appearance Back visible');
+assert(await page.locator('#appearanceDialog').evaluate(d=>d.classList.contains('sheetdlg')&&!d.matches(':modal')),'phone uses a plain panel, not a modal');
 const ad=page.locator('#appearanceDialog');const sh=await ad.evaluate(d=>[d.scrollHeight,d.clientHeight]);
 await ad.evaluate(d=>d.scrollTop=d.scrollHeight);await page.waitForTimeout(80);
 assert(await onScreen('#appearanceDialog [data-dlgback]'),'Back stays visible after scrolling to the bottom');
@@ -22,7 +23,8 @@ await page.screenshot({path:path.join(out,'dlg-appearance-390.png')});
 await ad.evaluate(d=>d.scrollTop=0);
 await page.locator('#appearanceDialog [data-dlgback]').click();await page.waitForTimeout(150);
 assert(!(await ad.evaluate(d=>d.open)),'Back closes appearance');
-assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('dlg-open')),false);
+assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('dlg-open')||document.body.classList.contains('noscroll')),false,'page scroll unlocked after closing');
+await page.evaluate(()=>window.scrollTo(0,0));assert.equal(await page.evaluate(()=>scrollY),0,'page scrolls back to the top');
 // phone back gesture closes it too, without leaving the app
 await page.locator('#appearance').click();await page.waitForTimeout(150);await page.goBack();await page.waitForTimeout(200);
 assert(!(await ad.evaluate(d=>d.open)),'history back closes appearance');assert.equal(new URL(page.url()).host,'fx-ui.test');

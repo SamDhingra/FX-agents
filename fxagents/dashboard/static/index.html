@@ -631,7 +631,7 @@ html[data-surface="glass"]{background:var(--bg)}
 
 /* ── phone dialogs: full-screen sheets that fit the visible screen (notch, keyboard), scroll inside, Back closes ── */
 .only-m{display:none}
-html.dlg-open,html.dlg-open body{overflow:hidden}
+dialog.sheetdlg{z-index:70}
 @media (max-width:760px){
   .only-m{display:inline-flex}
   input,select,textarea{font-size:16px!important}          /* below 16px iOS zooms in on focus and stays zoomed */
@@ -930,6 +930,7 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.6</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2741,18 +2742,25 @@ function fitViewport(){ const v = window.visualViewport, r = document.documentEl
   if(v){ r.setProperty("--vvh", v.height + "px"); r.setProperty("--vvt", v.offsetTop + "px"); } }
 if(window.visualViewport){ visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
 fitViewport();
+const phone = () => matchMedia("(max-width:760px)").matches;
 function openDlg(d){
   if(d.open) return;
-  fitViewport(); d.showModal(); d.scrollTop = 0; document.documentElement.classList.add("dlg-open");
+  fitViewport();
+  // phones: a plain full-screen panel (like the trade panel), not a modal top-layer dialog — iOS Safari scrolls and
+  // swipes those reliably; desktop keeps the modal dialog with its backdrop
+  if(phone()){ d.show(); d.classList.add("sheetdlg"); } else d.showModal();
+  d.scrollTop = 0; document.body.classList.add("noscroll"); document.documentElement.classList.add("dlg-open");
   try{ history.pushState({dlg:d.id}, ""); }catch(e){}
 }
 for(const d of [$("#appearanceDialog"), $("#askDialog"), $("#recapDialog")]){
   d.addEventListener("close", () => {
-    if(!document.querySelector("dialog[open]")) document.documentElement.classList.remove("dlg-open");
+    d.classList.remove("sheetdlg");
+    if(!document.querySelector("dialog[open]")){ document.documentElement.classList.remove("dlg-open"); if(!$("#drawer").classList.contains("on")) document.body.classList.remove("noscroll"); }
     if(history.state && history.state.dlg === d.id) history.back();
   });
   d.querySelectorAll("[data-dlgback]").forEach(b => b.onclick = () => d.close());
 }
+document.addEventListener("keydown", e => { if(e.key === "Escape"){ const d = [...$$("dialog.sheetdlg[open]")].pop(); if(d){ e.preventDefault(); d.close(); } } });
 window.addEventListener("popstate", () => { for(const d of $$("dialog[open]")) if(["appearanceDialog","askDialog","recapDialog"].includes(d.id)) d.close(); });
 
 /* ══ v5: time machine · edge atlas · evening recap · home-screen app · slide to flatten · trade notes ═══════════════ */
