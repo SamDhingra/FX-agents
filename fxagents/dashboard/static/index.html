@@ -710,8 +710,8 @@ button,input,select,textarea{font-family:inherit}
 .kpi .v,.rcbig,.tmclock,.rchead h3,.big,.verdict b{font-family:var(--display);letter-spacing:-.03em}
 
 /* ── home ── */
-.home{display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,.62fr);grid-template-areas:"hero today" "pos now";margin-bottom:18px}
-.hx{grid-area:hero}.today{grid-area:today}.possec{grid-area:pos}.nowsec{grid-area:now}
+.home{display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,.62fr);grid-template-areas:"hero tstrip" "pos now";margin-bottom:18px}
+.hx{grid-area:hero}.todaystrip{grid-area:tstrip}.possec{grid-area:pos}.nowsec{grid-area:now}
 .hx{position:relative;overflow:hidden;border-radius:calc(var(--radius) + 8px);padding:22px 24px 0;background:
     radial-gradient(120% 90% at 0% 0%,var(--accent-soft),transparent 60%),var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
 .hxtop{display:flex;align-items:center;gap:10px}
@@ -723,12 +723,12 @@ button,input,select,textarea{font-family:inherit}
 .hxchart{margin:14px -24px 0;position:relative}
 .hxchart svg{display:block;width:100%}
 .hx .seg button{padding:5px 10px;font-size:12px}
-.today{display:grid;grid-template-columns:1fr 1fr;border-radius:calc(var(--radius) + 8px);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
-.today>div{padding:16px 18px;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:96px}
-.today>div:nth-child(odd){border-right:1px solid var(--line)}.today>div:nth-child(-n+2){border-bottom:1px solid var(--line)}
-.today small{color:var(--muted);font-size:12px}
-.today b{font-family:var(--display);font-size:26px;font-weight:620;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
-.today em{font-style:normal;color:var(--text-2);font-size:12px}
+.todaystrip{display:grid;grid-template-columns:1fr 1fr;border-radius:calc(var(--radius) + 8px);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
+.todaystrip>div{padding:16px 18px;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:96px}
+.todaystrip>div:nth-child(odd){border-right:1px solid var(--line)}.todaystrip>div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+.todaystrip small{color:var(--muted);font-size:12px}
+.todaystrip b{font-family:var(--display);font-size:26px;font-weight:620;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.todaystrip em{font-style:normal;color:var(--text-2);font-size:12px}
 .hsec{border-radius:calc(var(--radius) + 8px);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);padding:18px 20px}
 .hhead{display:flex;align-items:center;gap:8px;margin-bottom:12px}.hhead h3{margin:0;font-size:16px}
 .pill{font-size:12px;font-weight:650;min-width:22px;height:22px;padding:0 7px;border-radius:999px;display:inline-grid;place-items:center;background:var(--accent-soft);color:var(--accent-2)}
@@ -747,11 +747,11 @@ button,input,select,textarea{font-family:inherit}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .pcard.fresh{animation:rise .5s var(--ease-out,ease) both}
 .hxv.tick{transition:color .6s}.hxv.flash-up{color:var(--up-text)}.hxv.flash-down{color:var(--down-text)}
-@media (max-width:1100px){.home{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "today" "pos" "now"}}
+@media (max-width:1100px){.home{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "tstrip" "pos" "now"}}
 @media (max-width:760px){
   .home{gap:14px}
   .hx{padding:18px 18px 0;border-radius:22px}.hxchart{margin:10px -18px 0}
-  .today{border-radius:20px}.today>div{padding:13px 15px;min-height:82px}.today b{font-size:22px}
+  .todaystrip{border-radius:20px}.todaystrip>div{padding:13px 15px;min-height:82px}.todaystrip b{font-size:22px}
   .hsec{padding:16px;border-radius:20px}
   #recapBtn{padding:6px 11px}
 }
@@ -779,7 +779,7 @@ button,input,select,textarea{font-family:inherit}
 :root[data-skin]:not([data-skin="classic"]) .accent-options{opacity:.45;pointer-events:none}
 
 /* phones: equity, then open positions, then today; a quieter heading on the overview */
-@media (max-width:1100px){.home{grid-template-areas:"hero" "pos" "today" "now"}}
+@media (max-width:1100px){.home{grid-template-areas:"hero" "pos" "tstrip" "now"}}
 @media (max-width:760px){
   #appearance2{display:none!important}
   html[data-page="home"] #pageDescription,html[data-page="home"] #contextNote,html[data-page="home"] #pageGroup{display:none}
@@ -867,7 +867,7 @@ button,input,select,textarea{font-family:inherit}
           <div class="chart hxchart"><svg id="eq" height="132" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
           <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
         </div>
-        <div class="today" id="todayStrip"></div>
+        <div class="todaystrip" id="todayStrip"></div>
         <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History</button></div><div class="pos" id="positions"></div></div>
         <div class="hsec nowsec"><div class="hhead"><h3>Coming up</h3><span class="sp" style="flex:1"></span><button class="btn rcbtn" id="recapBtn" type="button">Evening recap</button></div><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div>
       </div>
@@ -1036,7 +1036,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.9</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.10</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
