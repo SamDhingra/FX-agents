@@ -687,6 +687,17 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
   .rcstats{grid-template-columns:repeat(2,1fr)}
   .tmclock{font-size:28px}.tmctl{margin-left:0;width:100%}
 }
+
+/* ── phones: the top bar scrolls with the page (no sticky bar under the status bar / Dynamic Island) and sits below
+   the status bar even when iOS reports no safe-area inset (home-screen app) — --sat is measured in JS ── */
+:root{--sat:env(safe-area-inset-top,0px)}
+@media (max-width:760px){
+  .top,[data-surface] .top{position:relative!important;top:auto!important;margin-top:calc(10px + var(--sat))!important}
+  .drawer .dh{padding-top:calc(14px + var(--sat))!important}
+  #askDialog .askhead,#recapDialog .askhead{padding-top:calc(10px + var(--sat))!important}
+  #appearanceDialog .appearance-header{padding-top:calc(10px + var(--sat))!important}
+  .ptr{top:calc(6px + var(--sat))}
+}
 </style>
 </head>
 <body>
@@ -747,6 +758,7 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
         <button class="bookbtn" id="bookBtn" hidden aria-haspopup="listbox" aria-expanded="false"><i class="bd"></i><span class="bn" id="bookName">Account</span><span class="bk" id="bookKind">account</span><svg><use href="#i-right"/></svg></button>
         <button class="btn" id="pause" disabled title="Pause new entries"><svg><use href="#i-pause"/></svg><span>Pause entries</span></button>
         <button class="btn red" id="flatten" disabled>Flatten all</button>
+        <button class="btn icon only-m" id="appearance2" type="button" aria-label="Appearance" title="Appearance"><svg><use href="#i-sun"/></svg></button>
       </div>
     </div>
     <div class="context-strip"><span class="chip" id="mode">Awaiting account</span><span class="chip" id="status">Awaiting state</span><span id="contextNote">Connecting to your trading workspace…</span></div>
@@ -930,7 +942,7 @@ html.touch .slide{display:block} html.touch #confirmFlatten{display:none}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.6</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.7</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3015,6 +3027,23 @@ $("#moreInstall").onclick = installApp;
 $("#recapDialog").querySelector("[data-dlgback]").onclick = () => { try{ speechSynthesis.cancel(); }catch(e){} $("#recapDialog").close(); };
 $("#recapClose").onclick = () => { try{ speechSynthesis.cancel(); }catch(e){} $("#recapDialog").close(); };
 $("#tmDay").onchange = () => loadMachine($("#tmDay").value);
+
+/* status bar height on phones: iOS home-screen apps with a translucent status bar can report a 0 safe-area inset,
+   which put the top bar under the Dynamic Island — measure it, and fall back to the status-bar height there */
+(() => {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+  document.body.appendChild(probe);
+  const fit = () => {
+    const env = probe.getBoundingClientRect().height;
+    const ios = /iphone|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const app = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    const fallback = ios && app && env < 20 ? (Math.max(screen.width, screen.height) >= 852 ? 54 : 47) : 0;
+    document.documentElement.style.setProperty("--sat", Math.max(env, fallback) + "px");
+  };
+  fit(); addEventListener("orientationchange", () => setTimeout(fit, 300)); addEventListener("resize", fit);
+})();
+$("#appearance2").onclick = () => { syncAppearance(); openDlg($("#appearanceDialog")); };
 
 let returnFocus=null;
 const focusables=el=>[...el.querySelectorAll('button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]')].filter(x=>x.getClientRects().length);
