@@ -38,8 +38,22 @@ def reflect(mid, c=6000.0):
 
 def detect_all(m1, fn, **kw):
     a = prep(m1)
-    b = S.build(m1, a)
+    b = S.build(m1, a, 5 if fn is S.detect_wick else 15)
     return [(o.j0, o.side, round(o.level, 6)) for sd in (1, -1) for o in fn(b, sd, **kw)]
+
+
+def test_orders_follow_the_spec_geometry():
+    mid = walk()
+    m1 = frame(mid)
+    a = prep(m1)
+    b = S.build(m1, a, 15)
+    for o in S.detect_bos(b, 1):
+        assert o.kind == "limit" and o.j1 > o.j0 and o.k_atr == 1.15 and o.pct == 0.0025
+    for o in S.detect_sbs(b, -1):
+        assert o.kind == "stop" and o.cancel_hi is not None and o.cancel_lo is None   # short: cancel above the sweep high
+    b5 = S.build(m1, a, 5)
+    for o in S.detect_wick(b5, 1):
+        assert o.kind == "limit" and o.cancel_hi is not None and o.k_atr == 2.0
 
 
 def test_detectors_are_mirror_symmetric():
@@ -51,6 +65,9 @@ def test_detectors_are_mirror_symmetric():
         assert a_, fn.__name__ + " found nothing on 70 days"
         mirrored = sorted((j, -s, round(6000.0 - lv, 6)) for j, s, lv in b_)
         assert sorted(a_) == mirrored, fn.__name__
+        for ctl in ({"deep": True} if fn is S.detect_bos else {"control": True},):
+            c1, c2 = detect_all(up, fn, **ctl), detect_all(dn, fn, **ctl)
+            assert sorted(c1) == sorted((j, -s, round(6000.0 - lv, 6)) for j, s, lv in c2), fn.__name__ + " control"
 
 
 def test_segments_split_at_the_table_start():

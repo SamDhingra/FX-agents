@@ -158,7 +158,7 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.gemini_test --data "$set_" --only "$only" \
                $([[ "$set_" == holdout* ]] && echo --frozen) --out "data/year_test/gemini_${set_}" </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
-  gemsmc)    # Gemini's rebuilt SMC/ICT/DTFX gold setups, out-of-sample design (fxagents/gemini_smc.py): ./fx.sh gemsmc [bos,wick,sbs]
+  gemsmc)    # Gemini's rebuilt SMC/ICT/DTFX gold setups (revision 2), out-of-sample design (fxagents/gemini_smc.py): ./fx.sh gemsmc [bos,wick,sbs]
              # judged on dev_m1 before 2025-10-08 + all of holdout_m1; Oct 2025–Sep 2026 is in-sample and only shown
              need_env; mkdir -p logs; only="${2:-bos,wick,sbs}"
              for s_ in dev_m1 holdout_m1; do [[ -d "data/export/$s_" ]] || { echo "no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done

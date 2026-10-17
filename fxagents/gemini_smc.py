@@ -1,47 +1,55 @@
-"""Gemini's rebuilt SMC / ICT / DTFX gold setups (Sam, 2026-10-17), coded as specified and frozen before any result.
+"""Gemini's rebuilt SMC / ICT / DTFX gold setups — REVISION 2 (Gemini's "post-diagnostic revision", Sam 2026-10-17).
+The first rebuild (stacked filters) was replaced before it was ever run, so the holdout is used once, for these.
 
     python -m fxagents.gemini_smc --data dev_m1,holdout_m1 --out data/year_test/gemini_smc
 
-  bos   #1 G-BOS-iFVG-15M     break of a 5-bar swing with displacement + FVG/iFVG, shallow 38.2–50% retest
-  wick  #2 G-DTFX-Wick-15M    wick-to-wick impulse after a structure shift, limit at the 38.2% wick retracement
-  sbs   #3 G-SBS-Sweep-15M    sweep of an internal 15m swing inside the 4h trend, displacement + FVG, limit at the FVG
+  bos   #1 G-BOS-Retest-15M    15m close through the last unbroken 3-bar fractal swing, 3-bar leg ≥ 1 ATR;
+                               limit at the 25% retracement of the leg for 4 bars
+  wick  #2 G-DTFX-Wick-5M      5m wick-to-wick impulse after a close through the last 5-bar fractal swing;
+                               limit at the 50% wick midpoint for 6 bars
+  sbs   #3 G-SBS-Sweep-15M     15m sweep of the last unbroken 3-bar fractal swing (3–24 bars old) that closes back
+                               inside; stop entry beyond the sweep bar for 3 bars
 
 OUT-OF-SAMPLE DESIGN (Sam chose it, 2026-10-17). Gemini built these rules from our one-year setup table, whose
-trades run 2025-10-08 → 2026-10-08 — inside dev_m1. So that year is IN-SAMPLE and is only reported, never judged.
+trades run 2025-10-08 → 2026-10-08 — inside dev_m1. That year is IN-SAMPLE: reported, never judged.
 Judged ("clean") data: dev_m1 before 2025-10-08 (Oct 2024 – Oct 2025) and the whole holdout_m1 (2021 – Sep 2024).
 Pass = on the clean data combined: ≥100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs;
-AND avg R > 0 in each clean piece on its own; AND better than both controls on the clean data. The holdout is used
-here once for these three rules.
+AND avg R > 0 in each clean piece on its own; AND better than both controls on the clean data.
 
-Shared conventions (same engine as fxagents/gemini_test.py): 15m clock bars on mid prices; fills on real bid/ask
-(stop orders at the level or a gap-through open; limit orders at the level or a better open); stops/targets on the
-exit side; R = actual fill to initial stop; flat 15:50 NY; one open position at a time (the bot's one-per-symbol rule).
-ATR(14) = Wilder on 15m mid bars through the decision bar. MedVol(20) = median volume of the same 15m clock slot over
-the previous 20 days that have it. EMA(50) 1h on clock hours, 4h on bars ending 01/05/09/13/17/21 NY.
-Shorts are the exact mirror: the detector runs on the negated price series (high ↔ −low), so both sides use
-identical code. News blocks use the verified calendar (fxagents/usd_calendar.py: FOMC, CPI, NFP, PPI).
+Shared conventions (engine of fxagents/gemini_test.py): clock bars on mid prices; fills on real bid/ask (stop orders at
+the level or a gap-through open; limit orders at the level or a better open — a limit already marketable when it goes
+live fills at that minute's open); stops/targets on the exit side; R = actual fill to initial stop; flat 15:50 NY;
+one open position at a time. Every rule: cancel at the fill minute if the spread > 0.80, and no fills from 15 min
+before to 15 min after an FOMC/CPI/NFP/PPI release (fxagents/usd_calendar.py). Max 2 fills a day, 1 per half
+(#1/#3: 02:00–07:30 / 07:30–13:00 NY; #2: 03:00–07:30 / 07:30–12:00 NY, by fill time). ATR(14) = Wilder on that
+timeframe's mid bars; MedVol(20) = median volume of the same clock slot over the previous 20 days that have it; EMA(50)
+on 1h clock-hour closes, read from the last closed hour. Shorts are the exact mirror: the detectors run on the negated
+price series (high ↔ −low), so both sides use identical code.
 
-Open points fixed here before testing:
-  bos   "unbroken" swing high = no 15m close above it since it formed; most recent such, ≥4 bars old. iFVG = a bearish
-        FVG (High_m < Low_m-2) formed in the 20 bars before B0, with B0 closing above its top (Low_m-2). The buy stop
-        after the confirmation bar lives for 2 bars on BOTH sides (the spec said "next bar" for longs, 2 bars for
-        shorts). Session cap by entry time (London < 08:00 NY ≤ NY). B0 must close by 13:00 NY.
-  wick  structure shift = first 15m close above the last confirmed 5-bar swing high, close above the 4h EMA, shift bar
-        closing 03:00–12:30. W_low = lowest low from the prior confirmed swing low to the shift bar. W_high = highest
-        high from the shift bar through the first bar that closes below the previous close (looked for within 12 bars).
-        The limit is placed after that bar closes and lives from 2 to 8 bars after the W_high bar; if price already
-        reached the 38.2% level before then, the leg is skipped (the "falling knife" / missed entry). Impulse volume =
-        any bullish bar from the W_low bar to the W_high bar with volume ≥ 1.35× MedVol. Break-even trigger = price
-        back at W_high (R multiple computed per trade). Deep-close abort = a 15m mid close below the 61.8% level.
-  sbs   internal swing = 3-bar fractal (Low_k < Low_k-1 and Low_k ≤ Low_k+1) confirmed before the sweep bar, within
-        the last 24 bars, above the 20-bar 4h low + 1.5 ATR; most recent such. Sweep bar inside a killzone (03:00–05:45,
-        08:15–10:15 NY). Displacement = the first of the next 2 bars that qualifies. Target = 2R, or the 24-bar 15m high
-        (through the displacement bar) when that is more than 2R away, capped at 2.5R.
-Controls: coin-flip on every rule (same fill minute, random side, same stop distance and R-based exits). Gemini's:
-  bos   the same impulse legs entered with a limit at the deep 70.5% retracement (middle of 62–79%), live 6 bars,
-        stop beyond the leg low (same formula), same exits.
-  wick  candle-CLOSE anchors instead of wicks, no volume filter, everything else identical.
-  sbs   EXTERNAL sweeps: the 20-bar 4h low/high instead of the internal swing, no trend filter.
+Rules (Gemini's numbers), with the points the spec left open fixed here before testing:
+  bos   3-bar fractal high: High_k > High_k-1 and High_k ≥ High_k+1; "unbroken" = no 15m close above it since; the most
+        recent such with t−k ≥ 3. Base: Close_0 > that swing, and the 3-bar leg (max high − min low of B-2..B0) ≥ 1.00
+        ATR read at B-1. Conditions: Close_0 > EMA(50)1h; (Close−Open) ≥ 0.35·range and volume ≥ 0.85·MedVol. Limit
+        at H_imp − 0.25·leg, bars B1–B4. Stop distance max(0.60·leg, 1.15·ATR(B-1), 0.25% of fill). Exits: target 2R;
+        at +1.2R stop to +0.15R and trail 15m closes by 1.5 ATR; 12-bar (180 min) time stop if < +0.25R.
+        Control (Gemini's): the same signal bars with the limit at the deep 75% retracement, same stop and exits.
+  wick  5m bars. 5-bar fractal swings (confirmed 2 bars later); the breakout bar is the first 5m close above the most
+        recent unbroken swing high at least 4 bars old. B0 = the first later bar closing below the previous close
+        (looked for within 12 bars). W_low = lowest wick from the last confirmed swing low before the breakout to the
+        breakout bar; W_high = highest wick up to B0. Base: WickRange ≥ 1.80 ATR(5m) at B0, B0 closing 03:00–12:00.
+        Conditions: Close_0 > EMA(50)1h; some bar from the W_low bar to the W_high bar has volume ≥ its slot's MedVol.
+        Limit at the 50% midpoint, bars B1–B6, cancelled if price trades past W_high first. Stop distance
+        max(0.55·WickRange, 2.00·ATR(5m), 0.20% of fill). Exits: target 1.8R; at +1R stop to +0.15R; 90-min time stop
+        if < +0.20R. Control (Gemini's): close-to-close anchors AND the volume condition inverted (no bar ≥ MedVol).
+  sbs   3-bar fractal low (Low_k < Low_k-1, Low_k ≤ Low_k+1), unbroken (no 15m close below it since), most recent with
+        3 ≤ t−k ≤ 24. Base: Low_0 < it, Close_0 > it, bar range ≥ 0.70 ATR(B0), B0 closing 02:00–13:00. Conditions:
+        Close_0 > EMA(50)1h and Low_0 > the 20-bar low of COMPLETED 1h bars; Close_0 ≥ bar midpoint and volume ≥ 0.85
+        MedVol. Buy stop High_0 + 0.30 for bars B1–B3, cancelled if price trades below Low_0 first. Stop distance
+        max(range_0 + 0.50, 1.15·ATR(B0), 0.25% of fill). Target = entry + min(2.5D, max(2D, HH24 − entry)), HH24 =
+        highest high of the 24 bars before B0. At +1R stop to +0.15R; trail 15m closes by 1.5 ATR after +1.5R;
+        150-min time stop if < +0.25R. Control (Gemini's): the trend half of condition 1 inverted (Close_0 < EMA for
+        longs); everything else, including the 1h-low check, unchanged.
+Every rule also has a coin-flip control (same fill minute, random side, same stop distance and R-based exits).
 """
 from __future__ import annotations
 
@@ -55,14 +63,15 @@ import pandas as pd
 
 from .breakout_test import trade_row
 from .gemini_test import MIN, Exits, at, last_closed, manage, prep
-from .simple_rules import NY, PIP, ema, load, pip_stats, stats, wilder
+from .simple_rules import NY, PIP, load, pip_stats, stats, wilder
 from .usd_calendar import events
 
 IN_SAMPLE_FROM = pd.Timestamp("2025-10-08", tz=NY)       # first trade of the one-year table Gemini read
 RULES = ("bos", "wick", "sbs")
-TITLE = {"bos": "#1 G-BOS-iFVG-15M", "wick": "#2 G-DTFX-Wick-15M", "sbs": "#3 G-SBS-Sweep-15M"}
+TITLE = {"bos": "#1 G-BOS-Retest-15M", "wick": "#2 G-DTFX-Wick-5M", "sbs": "#3 G-SBS-Sweep-15M"}
+CONTROL = {"bos": "deep 75% control", "wick": "close-anchor + low-volume control", "sbs": "counter-trend control"}
+HALVES = {"bos": 450, "wick": 450, "sbs": 450}            # NY minute splitting the two half-day sessions (07:30)
 FUNNEL: dict[str, dict[str, int]] = {}
-CONTROL = {"bos": "deep 70.5% control", "wick": "close-anchor control", "sbs": "external-sweep control"}
 
 
 def count(rule: str, stage: str) -> None:
@@ -70,12 +79,13 @@ def count(rule: str, stage: str) -> None:
     f[stage] = f.get(stage, 0) + 1
 
 
-# ── 15m bars ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-def build(m1: pd.DataFrame, a: dict) -> dict:
-    bid = a["ns"] // (15 * MIN)
+# ── bars ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def build(m1: pd.DataFrame, a: dict, tf: int = 15) -> dict:
+    """Clock bars of `tf` minutes on mid prices, with ATR(14), slot MedVol(20), EMA(50) 1h and the 20-bar 1h range."""
+    bid = a["ns"] // (tf * MIN)
     starts = np.r_[0, np.nonzero(np.diff(bid))[0] + 1]
     ends = np.r_[starts[1:], len(bid)]
-    b = {"j0": starts, "j1": ends, "start": bid[starts] * 15 * MIN}
+    b = {"tf": tf, "j0": starts, "j1": ends, "start": bid[starts] * tf * MIN}
     b["o"] = a["m_o"][starts]
     b["c"] = a["m_c"][ends - 1]
     b["h"] = np.maximum.reduceat(a["m_h"], starts)
@@ -85,27 +95,21 @@ def build(m1: pd.DataFrame, a: dict) -> dict:
     b["mod"] = (loc.hour * 60 + loc.minute).to_numpy()
     b["day"] = loc.tz_localize(None).normalize().to_numpy()
     b["dow"] = loc.dayofweek.to_numpy()
-    b["end"] = b["start"] + 15 * MIN
-    tr = np.maximum.reduce([b["h"] - b["l"], np.abs(b["h"] - np.r_[np.nan, b["c"][:-1]]),
-                            np.abs(b["l"] - np.r_[np.nan, b["c"][:-1]])])
-    tr[0] = b["h"][0] - b["l"][0]
+    b["end"] = b["start"] + tf * MIN
+    pc = np.r_[np.nan, b["c"][:-1]]
+    tr = np.nanmax(np.vstack([b["h"] - b["l"], np.abs(b["h"] - pc), np.abs(b["l"] - pc)]), axis=0)
     b["atr"] = wilder(pd.Series(tr), 14).to_numpy()
     v = pd.Series(b["vol"])
     b["medvol"] = v.groupby(b["mod"]).transform(lambda x: x.shift(1).rolling(20, min_periods=20).median()).to_numpy()
-    h4h = m1["m_h"].tz_convert(NY).resample("4h", offset="1h", label="right", closed="left").max().dropna()
-    h4l = m1["m_l"].tz_convert(NY).resample("4h", offset="1h", label="right", closed="left").min().dropna()
-    b["h4_end"] = h4h.index.tz_convert("UTC").as_unit("ns").asi8
-    b["hh4"] = h4h.rolling(20).max().to_numpy()
-    b["ll4"] = h4l.rolling(20).min().to_numpy()
-    n = len(starts)
     b["ema1h"] = np.array([last_closed(a["h1_end"], a["ema1h"], t) for t in b["end"]])
-    i1 = np.searchsorted(a["h1_end"], b["end"], side="right") - 1
-    b["ema1h_4ago"] = np.where(i1 >= 4, a["ema1h"][np.maximum(i1 - 4, 0)], np.nan)
-    b["ema4h"] = np.array([last_closed(a["h4_end"], a["ema4h"], t) for t in b["end"]])
-    i4 = np.searchsorted(b["h4_end"], b["end"], side="right") - 1
-    b["hh4_now"] = np.where(i4 >= 0, b["hh4"][np.maximum(i4, 0)], np.nan)
-    b["ll4_now"] = np.where(i4 >= 0, b["ll4"][np.maximum(i4, 0)], np.nan)
-    b["n"] = n
+    h1h = m1["m_h"].resample("1h", label="right", closed="left").max().dropna()
+    h1l = m1["m_l"].resample("1h", label="right", closed="left").min().dropna()
+    ends1 = h1h.index.as_unit("ns").asi8
+    i1 = np.searchsorted(ends1, b["end"], side="right") - 1                 # last COMPLETED hour at the bar's close
+    hh, ll = h1h.rolling(20).max().to_numpy(), h1l.rolling(20).min().to_numpy()
+    b["hh1h"] = np.where(i1 >= 0, hh[np.maximum(i1, 0)], np.nan)
+    b["ll1h"] = np.where(i1 >= 0, ll[np.maximum(i1, 0)], np.nan)
+    b["n"] = len(starts)
     return b
 
 
@@ -115,13 +119,22 @@ def mirrored(b: dict, side: int) -> dict:
         return b
     m = dict(b)
     m["o"], m["c"], m["h"], m["l"] = -b["o"], -b["c"], -b["l"], -b["h"]
-    m["ema1h"], m["ema1h_4ago"], m["ema4h"] = -b["ema1h"], -b["ema1h_4ago"], -b["ema4h"]
-    m["hh4_now"], m["ll4_now"] = -b["ll4_now"], -b["hh4_now"]
+    m["ema1h"] = -b["ema1h"]
+    m["hh1h"], m["ll1h"] = -b["ll1h"], -b["hh1h"]
     return m
 
 
-def swings5(h: np.ndarray, k: int) -> bool:
+def frac3_high(h, k) -> bool:
+    return h[k] > h[k - 1] and h[k] >= h[k + 1]
+
+
+def frac5_high(h, k) -> bool:
     return h[k] > h[k - 1] and h[k] > h[k - 2] and h[k] >= h[k + 1] and h[k] >= h[k + 2]
+
+
+def in_window(b, t, lo, hi) -> bool:
+    """Bar t is a weekday bar that starts at/after `lo` and closes by `hi` (NY minutes)."""
+    return b["dow"][t] < 5 and b["mod"][t] >= lo and b["mod"][t] + b["tf"] <= hi
 
 
 # ── orders ────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -129,22 +142,29 @@ def swings5(h: np.ndarray, k: int) -> bool:
 class Order:
     rule: str
     side: int
-    kind: str                 # "stop" | "limit"
-    level: float              # real price
-    j0: int                   # live from this minute index …
-    j1: int                   # … to (excl.)
-    stop_anchor: float | None  # real price the stop must clear (None: no structural anchor)
-    stop_fixed: float          # minimum stop distance in points from structure (e.g. 0.30 × WickRange)
+    kind: str                  # "stop" | "limit"
+    level: float               # real price
+    j0: int                    # live from this minute index …
+    j1: int                    # … to (excl.)
+    stop_fixed: float          # structural minimum stop distance (points)
     atr: float
     k_atr: float
     pct: float
-    exits: callable           # (entry, risk) → Exits
-    session: str
-    tag: str = ""
+    exits: callable            # (entry, risk) → Exits
+    cancel_hi: float | None = None    # cancel if a mid high reaches this before the fill
+    cancel_lo: float | None = None    # cancel if a mid low reaches this before the fill
+    main: bool = True          # counts toward the funnel (False for Gemini's control variants)
+
+
+def real_cancel(side: int, level_mirrored: float, beyond: bool) -> dict:
+    """A cancel level from mirrored space: `beyond` = price going further in the trade's direction (above for a long)."""
+    real = side * level_mirrored
+    if (side > 0) == beyond:
+        return {"cancel_hi": real}
+    return {"cancel_lo": real}
 
 
 def block_mask(a: dict, before: int, after: int) -> np.ndarray:
-    """True on minutes from `before` min ahead of a release to `after` min after it (NY times from the calendar)."""
     mask = np.zeros(len(a["ns"]), bool)
     for d, evs in events().items():
         for m, _ in evs:
@@ -159,19 +179,25 @@ def fill(a, o: Order, j0: int, blocked: np.ndarray):
         if blocked[k]:
             return None                                   # pending order cancelled around the release
         if o.kind == "stop":
-            if o.side > 0 and a["ask_h"][k] >= o.level:
-                return k, max(o.level, a["ask_o"][k])
-            if o.side < 0 and a["bid_l"][k] <= o.level:
-                return k, min(o.level, a["bid_o"][k])
+            hit = a["ask_h"][k] >= o.level if o.side > 0 else a["bid_l"][k] <= o.level
         else:
-            if o.side > 0 and a["ask_l"][k] <= o.level:
-                return k, min(o.level, a["ask_o"][k])
-            if o.side < 0 and a["bid_h"][k] >= o.level:
-                return k, max(o.level, a["bid_o"][k])
+            hit = a["ask_l"][k] <= o.level if o.side > 0 else a["bid_h"][k] >= o.level
+        dead = (o.cancel_hi is not None and a["m_h"][k] >= o.cancel_hi) or \
+               (o.cancel_lo is not None and a["m_l"][k] <= o.cancel_lo)
+        if dead and not hit:
+            return None
+        if dead and hit:                                  # both in one minute: the cancel counts (conservative)
+            return None
+        if hit:
+            if a["ask_o"][k] - a["bid_o"][k] > 0.80:
+                return None
+            if o.kind == "stop":
+                return k, (max(o.level, a["ask_o"][k]) if o.side > 0 else min(o.level, a["bid_o"][k]))
+            return k, (min(o.level, a["ask_o"][k]) if o.side > 0 else max(o.level, a["bid_o"][k]))
     return None
 
 
-def execute(a: dict, orders: list[Order], rng, blocked: np.ndarray, per_day: int = 2, per_session: int = 1):
+def execute(a: dict, orders: list[Order], rng, blocked: np.ndarray, half: int = 450):
     trades, ctl = [], []
     busy = -1
     n_day: dict = {}
@@ -186,247 +212,205 @@ def execute(a: dict, orders: list[Order], rng, blocked: np.ndarray, per_day: int
         j, px = f
         loc = a["idx"][j].tz_convert(NY)
         day = loc.date()
-        ses = o.session if o.session else ("london" if loc.hour < 8 else "ny")
-        if n_day.get(day, 0) >= per_day or n_ses.get((day, ses), 0) >= per_session:
+        ses = "first" if loc.hour * 60 + loc.minute < half else "second"
+        if n_day.get(day, 0) >= 2 or n_ses.get((day, ses), 0) >= 1:
             continue
-        dist = max(o.side * (px - o.stop_anchor) if o.stop_anchor is not None else 0.0, o.stop_fixed,
-                   o.k_atr * o.atr, o.pct * px)
+        dist = max(o.stop_fixed, o.k_atr * o.atr, o.pct * px)
         stop = px - o.side * dist
-        risk = dist
-        d = a["days"].get(int((pd.Timestamp(loc).tz_localize(None).normalize().value) // (1440 * MIN)))
+        d = a["days"].get(int(pd.Timestamp(loc).tz_localize(None).normalize().value // (1440 * MIN)))
         if d is None:
             continue
         j_flat = at(a, d[0], d[1], 950)
         if j >= j_flat:
             continue
-        ex = o.exits(px, risk)
+        ex = o.exits(px, dist)
         jx, ex_px, why = manage(a, j, o.side, px, stop, ex, j_flat)
         spread = a["ask_o"][j] - a["bid_o"][j]
-        trades.append(trade_row(a, j, jx, o.side, px, ex_px, risk, spread, why, tag=o.tag))
+        trades.append(trade_row(a, j, jx, o.side, px, ex_px, dist, spread, why))
+        if o.main:
+            count(o.rule, "filled (after caps)")
         n_day[day] = n_day.get(day, 0) + 1
         n_ses[(day, ses)] = n_ses.get((day, ses), 0) + 1
         busy = jx
-        # coin-flip control: same minute, random side, same stop distance, R-based exits (no price-level abort)
-        cs = int(rng.choice([1, -1]))
+        cs = int(rng.choice([1, -1]))                     # coin-flip control: same minute, random side
         if j + 1 < j_flat:
             ce = a["ask_c"][j] if cs > 0 else a["bid_c"][j]
             cex = Exits(**{**ex.__dict__, "abort": None, "checks": []})
-            cjx, cpx, cwhy = manage(a, j + 1, cs, ce, ce - cs * risk, cex, j_flat)
-            ctl.append(trade_row(a, j, cjx, cs, ce, cpx, risk, spread, cwhy))
+            cjx, cpx, cwhy = manage(a, j + 1, cs, ce, ce - cs * dist, cex, j_flat)
+            ctl.append(trade_row(a, j, cjx, cs, ce, cpx, dist, spread, cwhy))
     return trades, ctl
 
 
 def minute_span(b: dict, t0: int, t1: int) -> tuple[int, int]:
-    """Minute indices covering 15m bars t0 … t1-1."""
+    """Minute indices covering bars t0 … t1-1."""
     t1 = min(t1, b["n"])
     if t0 >= t1:
         return 0, 0
     return int(b["j0"][t0]), int(b["j1"][t1 - 1])
 
 
-# ── #1 BOS + FVG/iFVG shallow retest ──────────────────────────────────────────────────────────────────────────────────
-BOS_EXITS = dict(target_r=2.2, trail_mode="close", trail_trig=1.2, trail_k=1.5, be=(1.2, 0.15), time_after_min=180,
-                 time_min_r=0.40)
+# ── #1 BOS shallow limit retest (15m) ─────────────────────────────────────────────────────────────────────────────────
+BOS_EXITS = dict(target_r=2.0, trail_mode="close", trail_trig=1.2, trail_k=1.5, be=(1.2, 0.15), time_after_min=180,
+                 time_min_r=0.25)
 
 
 def detect_bos(b: dict, side: int, deep: bool = False) -> list[Order]:
     m = mirrored(b, side)
     o, h, l, c = m["o"], m["h"], m["l"], m["c"]
-    rule = "bos"
-    out = []
+    out, main = [], not deep
     for t in range(30, b["n"] - 1):
-        if b["dow"][t] >= 5 or not (180 <= b["mod"][t] and b["mod"][t] + 15 <= 780):
+        if not in_window(b, t, 120, 780):
             continue
-        atr, e1, e1o = b["atr"][t], m["ema1h"][t], m["ema1h_4ago"][t]
-        if not (np.isfinite(atr) and np.isfinite(e1) and np.isfinite(e1o) and np.isfinite(b["medvol"][t])):
+        atr = b["atr"][t - 1]
+        if not np.isfinite(atr):
             continue
         sh = None
-        for k in range(t - 4, max(t - 100, 2), -1):        # most recent unbroken confirmed 5-bar swing high, ≥4 bars old
-            if swings5(h, k) and c[k + 1:t].max(initial=-np.inf) <= h[k]:
+        for k in range(t - 3, max(t - 200, 1), -1):        # most recent unbroken 3-bar fractal high, ≥3 bars old
+            if frac3_high(h, k) and c[k + 1:t].max(initial=-np.inf) <= h[k]:
                 sh = h[k]
                 break
-        if sh is None:
+        if sh is None or not c[t] > sh:
             continue
-        if not (c[t] > sh + 0.15 * atr):
-            continue
-        if not (c[t] > e1 and e1 > e1o):
-            continue
-        if not deep:
-            count(rule, "break of an unbroken swing + 1h trend")
-        lo_imp, hi_imp = min(l[t], l[t - 1], l[t - 2]), h[t]
+        hi_imp, lo_imp = h[t - 2:t + 1].max(), l[t - 2:t + 1].min()
         leg = hi_imp - lo_imp
-        if not (leg >= 1.40 * atr and b["vol"][t] >= 1.30 * b["medvol"][t]):
+        if not leg >= 1.00 * atr:
             continue
-        if not deep:
-            count(rule, "leg ≥ 1.4 ATR and volume ≥ 1.3×")
-        fvg = l[t] > h[t - 2]
-        ifvg = any(h[mm] < l[mm - 2] and c[t] > l[mm - 2] for mm in range(max(t - 20, 2), t))
-        if not (fvg or ifvg):
+        if main:
+            count("bos", "base: close through swing, leg ≥ 1 ATR")
+        if not (np.isfinite(m["ema1h"][t]) and c[t] > m["ema1h"][t]):
             continue
-        if not deep:
-            count(rule, "FVG or iFVG")
-        if deep:                                         # Gemini's control: the same leg at the deep 70.5% level
-            lvl = hi_imp - 0.705 * leg
-            j0, j1 = minute_span(b, t + 1, t + 7)
-            out.append(Order(rule, side, "limit", side * lvl, j0, j1, side * (lo_imp - 0.25 * atr), 0.0, atr, 1.15,
-                             0.0028, lambda e, r: Exits(**BOS_EXITS), ""))
+        if main:
+            count("bos", "1h EMA agrees")
+        mv = b["medvol"][t]
+        if not (c[t] - o[t] >= 0.35 * (h[t] - l[t]) and np.isfinite(mv) and b["vol"][t] >= 0.85 * mv):
             continue
-        z_top, z_bot = max(sh, hi_imp - 0.382 * leg), hi_imp - 0.500 * leg
-        cancel = hi_imp - 0.618 * leg
-        for r in range(t + 1, min(t + 7, b["n"] - 1)):
-            if c[r] < cancel:
-                break
-            if l[r] <= z_top and c[r] > o[r] and c[r] >= z_bot:
-                count(rule, "shallow retest confirmed")
-                j0, j1 = minute_span(b, r + 1, r + 3)
-                atr_r = b["atr"][r]
-                out.append(Order(rule, side, "stop", side * (h[r] + 0.30), j0, j1, side * (l[r] - 0.25 * atr_r), 0.0,
-                                 atr_r, 1.15, 0.0028, lambda e, rk: Exits(**BOS_EXITS), ""))
-                break
+        if main:
+            count("bos", "body ≥ 0.35 and volume ≥ 0.85×")
+        lvl = hi_imp - (0.75 if deep else 0.25) * leg
+        j0, j1 = minute_span(b, t + 1, t + 5)
+        out.append(Order("bos", side, "limit", side * lvl, j0, j1, 0.60 * leg, atr, 1.15, 0.0025,
+                         lambda e, r: Exits(**BOS_EXITS), main=main))
     return out
 
 
-# ── #2 DTFX wick-fib shallow pullback ─────────────────────────────────────────────────────────────────────────────────
-def detect_wick(b: dict, side: int, closes: bool = False) -> list[Order]:
+# ── #2 DTFX wick-fib (5m) ─────────────────────────────────────────────────────────────────────────────────────────────
+def detect_wick(b: dict, side: int, control: bool = False) -> list[Order]:
     m = mirrored(b, side)
     o, h, l, c = m["o"], m["h"], m["l"], m["c"]
-    hi_a, lo_a = (c, c) if closes else (h, l)            # control: candle-close anchors
-    rule = "wick"
-    out = []
-    last_sh = last_sl = None                              # (index) of the latest confirmed 5-bar swing high / low
-    for t in range(4, b["n"] - 13):
-        k = t - 2                                         # a swing at k is confirmed once bar t (= k+2) has closed
-        if swings5(h, k):
-            last_sh = k
-        if swings5(-l, k):
-            last_sl = k
-        if last_sh is None or last_sl is None:
+    hi_a, lo_a = (c, c) if control else (h, l)          # control: candle-close anchors
+    out, main = [], not control
+    highs, lows = [], []                                  # confirmed 5-bar fractal indices
+    for x in range(4, b["n"] - 13):
+        k = x - 2
+        if frac5_high(h, k):
+            highs.append(k)
+        if frac5_high(-l, k):
+            lows.append(k)
+        sh = next((kk for kk in reversed(highs) if x - kk >= 4 and c[kk + 1:x].max(initial=-np.inf) <= h[kk]), None)
+        if sh is None or not c[x] > h[sh]:
             continue
-        if b["dow"][t] >= 5 or not (180 <= b["mod"][t] and b["mod"][t] + 15 <= 750):
+        sl = next((kk for kk in reversed(lows) if kk < x), None)
+        if sl is None:
             continue
-        sh = h[last_sh]
-        if not (c[t] > sh and c[t - 1] <= sh and c[t] > m["ema4h"][t]):
+        t0 = next((y for y in range(x + 1, x + 13) if c[y] < c[y - 1]), None)
+        if t0 is None or not in_window(b, t0, 180, 720):
             continue
-        if not closes:
-            count(rule, "structure shift above the 4h EMA")
-        u = next((x for x in range(t + 1, t + 13) if c[x] < c[x - 1]), None)
-        if u is None:
-            continue
-        seg_lo = range(last_sl, t + 1)
-        i_low = min(seg_lo, key=lambda x: lo_a[x])
-        w_low = lo_a[i_low]
-        i_high = max(range(t, u + 1), key=lambda x: hi_a[x])
-        w_high = hi_a[i_high]
+        i_low = min(range(sl, x + 1), key=lambda y: lo_a[y])
+        i_high = max(range(i_low, t0 + 1), key=lambda y: hi_a[y])
+        w_low, w_high = lo_a[i_low], hi_a[i_high]
         wr = w_high - w_low
-        atr = b["atr"][u]
-        if not (np.isfinite(atr) and 1.60 * atr <= wr <= 3.50 * atr):
+        atr = b["atr"][t0]
+        if not (np.isfinite(atr) and wr >= 1.80 * atr):
             continue
-        if not closes:
-            count(rule, "wick range 1.6–3.5 ATR")
-            mv = b["medvol"]
-            if not any(c[x] > o[x] and np.isfinite(mv[x]) and b["vol"][x] >= 1.35 * mv[x] for x in range(i_low, i_high + 1)):
-                continue
-            count(rule, "impulse volume ≥ 1.35×")
-        lvl = w_high - 0.382 * wr
-        if any(l[x] <= lvl for x in range(i_high + 1, u + 1)):
-            continue                                       # reached 38.2% before the order could be live
-        if not closes:
-            count(rule, "pullback not yet at 38.2%")
-        first = max(u + 1, i_high + 2)
-        j0, j1 = minute_span(b, first, i_high + 9)
-        if j1 <= j0:
+        if main:
+            count("wick", "base: structure break, wick range ≥ 1.8 ATR(5m)")
+        if not (np.isfinite(m["ema1h"][t0]) and c[t0] > m["ema1h"][t0]):
             continue
-        be_lvl, abort = w_high, w_high - 0.618 * wr
+        if main:
+            count("wick", "1h EMA agrees")
+        mv = b["medvol"][i_low:i_high + 1]
+        ok = np.isfinite(mv) & (b["vol"][i_low:i_high + 1] >= mv)
+        if not (ok.any() if main else (np.isfinite(mv).any() and not ok.any())):
+            continue
+        if main:
+            count("wick", "impulse volume ≥ MedVol")
+        lvl = w_high - 0.500 * wr
+        j0, j1 = minute_span(b, t0 + 1, t0 + 7)
 
-        def ex(e, r, be_lvl=be_lvl, abort=abort):
-            return Exits(target_r=2.0, be=(max(side * (side * be_lvl - e), 0.0) / r, 0.20), time_after_min=150,
-                         time_min_r=0.30, abort=side * abort)
-        out.append(Order(rule, side, "limit", side * lvl, j0, j1, None, 0.30 * wr, atr, 1.15, 0.0028, ex, "x"))
+        def ex(e, r):
+            return Exits(target_r=1.8, be=(1.0, 0.15), time_after_min=90, time_min_r=0.20)
+        out.append(Order("wick", side, "limit", side * lvl, j0, j1, 0.55 * wr, atr, 2.00, 0.0020, ex,
+                         main=main, **real_cancel(side, w_high, beyond=True)))
     return out
 
 
-# ── #3 internal sweep + displacement ──────────────────────────────────────────────────────────────────────────────────
-KZ = ((180, 345, "kz1"), (495, 615, "kz2"))
-
-
-def detect_sbs(b: dict, side: int, external: bool = False) -> list[Order]:
+# ── #3 internal sweep & reclaim (15m) ─────────────────────────────────────────────────────────────────────────────────
+def detect_sbs(b: dict, side: int, control: bool = False) -> list[Order]:
     m = mirrored(b, side)
     o, h, l, c = m["o"], m["h"], m["l"], m["c"]
-    rule = "sbs"
-    out = []
-    for t in range(30, b["n"] - 3):
-        if b["dow"][t] >= 5:
+    out, main = [], not control
+    for t in range(30, b["n"] - 1):
+        if not in_window(b, t, 120, 780):
             continue
-        kz = next((z for s0, s1, z in KZ if s0 <= b["mod"][t] and b["mod"][t] + 15 <= s1), None)
-        if kz is None:
+        atr = b["atr"][t]
+        if not np.isfinite(atr):
             continue
-        atr, ll4 = b["atr"][t], m["ll4_now"][t]
-        if not (np.isfinite(atr) and np.isfinite(ll4)):
-            continue
-        if external:
-            lvl_sw = ll4
-        else:
-            if not c[t] > m["ema4h"][t]:
-                continue
-            lvl_sw = None
-            for k in range(t - 2, max(t - 25, 1), -1):       # 3-bar fractal low confirmed by bar k+1 ≤ t-1
-                if l[k] < l[k - 1] and l[k] <= l[k + 1]:
-                    if l[k] > ll4 + 1.50 * atr:
-                        lvl_sw = l[k]
-                    break
-            if lvl_sw is None:
-                continue
-            count(rule, "internal swing low in the 4h uptrend")
-        if not (lvl_sw - 0.85 * atr <= l[t] <= lvl_sw - 0.10 * atr and (c[t] > lvl_sw or c[t + 1] > lvl_sw)):
-            continue
-        if not external:
-            count(rule, "sweep 0.10–0.85 ATR and close back")
-        d = None
-        for x in (t + 1, t + 2):
-            mv = b["medvol"][x]
-            if (c[x] > o[x] and c[x] > max(h[x - 3:x]) and l[x] > h[x - 2] and np.isfinite(mv)
-                    and b["vol"][x] >= 1.25 * mv):
-                d = x
+        sw = None
+        for k in range(t - 3, max(t - 25, 1), -1):          # most recent unbroken 3-bar fractal low, 3–24 bars old
+            if l[k] < l[k - 1] and l[k] <= l[k + 1] and c[k + 1:t].min(initial=np.inf) >= l[k]:
+                sw = l[k]
                 break
-        if d is None:
+        if sw is None or not (l[t] < sw < c[t] and h[t] - l[t] >= 0.70 * atr):
             continue
-        if not external:
-            count(rule, "displacement + FVG + volume")
-        lvl = l[d]
-        hh24 = h[max(d - 23, 0):d + 1].max()
-        j0, j1 = minute_span(b, d + 1, d + 5)
+        if main:
+            count("sbs", "base: sweep and close back, range ≥ 0.7 ATR")
+        e1, ll = m["ema1h"][t], m["ll1h"][t]
+        if not (np.isfinite(e1) and np.isfinite(ll)):
+            continue
+        trend = c[t] > e1 if main else c[t] < e1
+        if not (trend and l[t] > ll):
+            continue
+        if main:
+            count("sbs", "1h trend + inside the 20-hour range")
+        mv = b["medvol"][t]
+        if not (c[t] >= 0.5 * (h[t] + l[t]) and np.isfinite(mv) and b["vol"][t] >= 0.85 * mv):
+            continue
+        if main:
+            count("sbs", "close in upper half and volume ≥ 0.85×")
+        hh24 = h[max(t - 24, 0):t].max()
+        j0, j1 = minute_span(b, t + 1, t + 4)
 
         def ex(e, r, hh24=hh24):
-            need = (hh24 - side * e) / r
-            tgt = min(need, 2.5) if need > 2.0 else 2.0
-            return Exits(target_r=tgt, be=(1.0, 0.10), trail_mode="close", trail_trig=1.5, trail_k=1.5,
+            tgt = min(2.5, max(2.0, (hh24 - side * e) / r))
+            return Exits(target_r=tgt, be=(1.0, 0.15), trail_mode="close", trail_trig=1.5, trail_k=1.5,
                          time_after_min=150, time_min_r=0.25)
-        out.append(Order(rule, side, "limit", side * lvl, j0, j1, side * (l[t] - 0.20 * atr), 0.0, atr, 1.10, 0.0028,
-                         ex, kz))
+        out.append(Order("sbs", side, "stop", side * (h[t] + 0.30), j0, j1, h[t] - l[t] + 0.50, atr, 1.15, 0.0025, ex,
+                         main=main, **real_cancel(side, l[t], beyond=False)))
     return out
 
 
-# ── run + report ──────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── run ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def run_set(path: Path, want: list[str], rng) -> dict[str, dict[str, list]]:
     m1 = load(path)
     a = prep(m1)
-    b = build(m1, a)
+    b15 = build(m1, a, 15)
+    b5 = build(m1, a, 5) if "wick" in want else None
     del m1
-    blk15, blk10 = block_mask(a, 15, 15), block_mask(a, 10, 0)
+    blk = block_mask(a, 15, 15)
     out = {}
     if "bos" in want:
-        tr, ctl = execute(a, detect_bos(b, 1) + detect_bos(b, -1), rng, blk15)
-        dp, _ = execute(a, detect_bos(b, 1, deep=True) + detect_bos(b, -1, deep=True), rng, blk15)
-        out["bos"] = {"rule": tr, "coin-flip control": ctl, "deep 70.5% control": dp}
+        tr, ctl = execute(a, detect_bos(b15, 1) + detect_bos(b15, -1), rng, blk)
+        dp, _ = execute(a, detect_bos(b15, 1, deep=True) + detect_bos(b15, -1, deep=True), rng, blk)
+        out["bos"] = {"rule": tr, "coin-flip control": ctl, CONTROL["bos"]: dp}
     if "wick" in want:
-        tr, ctl = execute(a, detect_wick(b, 1) + detect_wick(b, -1), rng, blk10, per_session=2)
-        cl, _ = execute(a, detect_wick(b, 1, closes=True) + detect_wick(b, -1, closes=True), rng, blk10, per_session=2)
-        out["wick"] = {"rule": tr, "coin-flip control": ctl, "close-anchor control": cl}
+        tr, ctl = execute(a, detect_wick(b5, 1) + detect_wick(b5, -1), rng, blk)
+        cl, _ = execute(a, detect_wick(b5, 1, control=True) + detect_wick(b5, -1, control=True), rng, blk)
+        out["wick"] = {"rule": tr, "coin-flip control": ctl, CONTROL["wick"]: cl}
     if "sbs" in want:
-        tr, ctl = execute(a, detect_sbs(b, 1) + detect_sbs(b, -1), rng, blk15)
-        xt, _ = execute(a, detect_sbs(b, 1, external=True) + detect_sbs(b, -1, external=True), rng, blk15)
-        out["sbs"] = {"rule": tr, "coin-flip control": ctl, "external-sweep control": xt}
-    days = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(b["day"]))))
+        tr, ctl = execute(a, detect_sbs(b15, 1) + detect_sbs(b15, -1), rng, blk)
+        xt, _ = execute(a, detect_sbs(b15, 1, control=True) + detect_sbs(b15, -1, control=True), rng, blk)
+        out["sbs"] = {"rule": tr, "coin-flip control": ctl, CONTROL["sbs"]: xt}
+    days = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(b15["day"]))))
     out["_days"] = days[days.dayofweek < 5].tz_localize(NY)
     return out
 
@@ -470,7 +454,7 @@ def main():
         T.to_csv(a_.out / "trades.csv.gz", index=False)
     clean_keys = [k for k in day_sets if "clean" in k]
     clean_days = pd.DatetimeIndex(sorted(set().union(*[set(day_sets[k]) for k in clean_keys]))) if clean_keys else None
-    md = [f"# Gemini's rebuilt SMC/ICT/DTFX gold setups — out-of-sample design ({a_.data})", "",
+    md = [f"# Gemini's rebuilt SMC/ICT/DTFX gold setups (revision 2) — out-of-sample design ({a_.data})", "",
           "Rules exactly as Gemini specified (2026-10-17); open points fixed in fxagents/gemini_smc.py before any run. "
           "Gemini built them from our one-year setup table (trades 2025-10-08 → 2026-10-08), so that year is **in-sample: "
           "shown, not judged**. Judged = clean data only: Oct 2024–Oct 2025 + 2021–Sep 2024. Pass = on the clean data "
@@ -517,7 +501,7 @@ def main():
                           f"{r['hold_min_median']:.0f} min |")
         f = FUNNEL.get(rule, {})
         if f:
-            md += ["", "Setups reaching each stage (all data, longs + shorts, before fills and daily caps): " +
+            md += ["", "Setups reaching each stage (both data sets, longs + shorts; the last step counts fills after the daily caps): " +
                    " → ".join(f"{k} {v:,}" for k, v in f.items()), ""]
         md.append("")
     (a_.out / "report.md").write_text("\n".join(md) + "\n")
