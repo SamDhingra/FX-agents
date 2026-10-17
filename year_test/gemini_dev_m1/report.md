@@ -26,3 +26,42 @@ Data 2024-09-30 → 2026-09-30. Rules exactly as specified by Gemini (2026-10-17
 | coin-flip control | 2 | 0% | -0.547 | -1.00 to -0.09 | -1.1 | -0.610 | 0.063 | — (0) | -0.547 (2) | -1.00 / -0.09 | 88 min | -101 | stop 2 |
 | no-news-day control | 12 | 67% | +0.418 | -0.30 to +1.09 | +5.0 | +0.369 | 0.049 | +0.660 (9) | -0.309 (3) | -0.11 / +0.73 / +0.63 | 126 min | +468 | stop 7, time_stop 3, target 2 |
 
+## Why so few trades: how many days pass each condition
+
+Each evaluated day (or release bar for #1) counted once. *Alone* = share passing that condition by itself; *cumulative* = days still left after it and every condition above it (in the rule's order).
+
+**#2 London-to-NY momentum** — 480 days evaluated
+
+| Condition | Alone | Cumulative (days) |
+|---|---|---|
+| disp_ge_0_8 | 18% | 86 |
+| range_le_2_2 | 96% | 68 |
+| eff_ge_0_55 | 35% | 64 |
+| vol_ge_1_15 | 35% | 27 |
+| ema4h_agrees | 62% | 19 |
+| open_holds | 31% | 18 |
+| filled | 2% | 9 |
+
+**#3 Cross-asset US cash open** — 479 days evaluated
+
+| Condition | Alone | Cumulative (days) |
+|---|---|---|
+| nas_vol_ge_1_15 | 23% | 108 |
+| range_0_8_to_2_5_atr | 73% | 78 |
+| close_in_range_third | 68% | 51 |
+| ema1h_agrees | 57% | 29 |
+| equity_confirms | 44% | 12 |
+| filled | 2% | 9 |
+
+**#1 Post-release drift** — 81 days evaluated
+
+| Condition | Alone | Cumulative (days) |
+|---|---|---|
+| range_1_35_to_3_5_atr | 51% | 41 |
+| range_ge_1_35_atr (lower bound only, info) | 93% | — |
+| vol_ge_1_4 | 85% | 32 |
+| body_ge_0_55 | 37% | 11 |
+| close_near_extreme | 47% | 7 |
+| ema1h_agrees | 70% | 6 |
+| filled | 2% | 2 |
+
