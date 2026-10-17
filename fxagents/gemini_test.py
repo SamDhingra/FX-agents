@@ -56,6 +56,12 @@ from .usd_calendar import FOMC_DAYS, events
 PASSED_DEV: set[str] = set()          # filled in after the dev_m1 run; nothing else is scored on holdout data
 MIN = 60_000_000_000                  # ns per minute
 RULES = ("lny", "xeq", "pmrd")
+FUNNEL: dict[str, list[dict]] = {}    # rule → one {condition: bool} per evaluated day (diagnostics, rule runs only)
+
+
+def note(rule: str, on: bool, **conds) -> None:
+    if on:
+        FUNNEL.setdefault(rule, []).append(conds)
 
 
 # ── data ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -239,6 +245,11 @@ def run_lny(a: dict, rng, mode: str = "rule") -> tuple[list, list]:
         if not (np.isfinite(e4) and np.isfinite(atr)):
             continue
         lo_open, hi_open = a["m_l"][i0815:i0845].min(), a["m_h"][i0815:i0845].max()
+        sg = 1 if L["disp"] > 0 else -1
+        conds = dict(disp_ge_0_8=abs(L["disp"]) >= 0.80 * L["avg_rng"], range_le_2_2=L["rng"] <= 2.20 * L["avg_rng"],
+                     eff_ge_0_55=L["eff"] >= 0.55, vol_ge_1_15=L["vol"] >= 1.15 * L["med_vol"],
+                     ema4h_agrees=(c845 - e4) * sg > 0,
+                     open_holds=(lo_open > L["o"] + 0.35 * L["rng"]) if sg > 0 else (hi_open < L["o"] - 0.35 * L["rng"]))
         side = 0
         if mode == "rule":
             base = (abs(L["disp"]) >= 0.80 * L["avg_rng"] and L["rng"] <= 2.20 * L["avg_rng"] and L["eff"] >= 0.55
@@ -250,11 +261,13 @@ def run_lny(a: dict, rng, mode: str = "rule") -> tuple[list, list]:
         elif base and L["disp"] < 0 and c845 < e4 and hi_open < L["o"] - 0.35 * L["rng"]:
             side = -1
         if not side:
+            note("lny", mode == "rule", **conds, filled=False)
             continue
         level = (a["m_h"][i03:i0845].max() + 0.5) if side > 0 else (a["m_l"][i03:i0845].min() - 0.5)
         dist = max(0.50 * L["rng"], 1.50 * atr, 0.0035 * c845)
         stop0 = level - side * dist
         f = fill_stop(a, i0845, i1130, side, level, cancel=stop0)
+        note("lny", mode == "rule", **conds, filled=bool(f))
         if not f:
             continue
         j, px = f
@@ -309,12 +322,19 @@ def run_xeq(a: dict, nas: dict, dow: dict, rng, shuffle: bool = False) -> tuple[
             continue
         rx, dur = c / o - 1, N["r"] - U["r"]
         common = N["vol"] >= 1.15 * N["med_vol"] and 0.80 * atr <= rg <= 2.50 * atr
+        sg = 1 if rx > 0 else -1
+        conds = dict(nas_vol_ge_1_15=N["vol"] >= 1.15 * N["med_vol"], range_0_8_to_2_5_atr=0.80 * atr <= rg <= 2.50 * atr,
+                     close_in_range_third=(c >= lo + 0.65 * rg) if sg > 0 else (c <= lo + 0.35 * rg),
+                     ema1h_agrees=(c - e1) * sg > 0,
+                     equity_confirms=(dur >= 0.0015 or (N["r"] <= -0.003 and U["r"] <= -0.003)) if sg > 0
+                     else (dur <= -0.0015 or (N["r"] >= 0.003 and U["r"] >= 0.003)))
         side = 0
         if common and rx > 0 and c >= lo + 0.65 * rg and c > e1 and (dur >= 0.0015 or (N["r"] <= -0.003 and U["r"] <= -0.003)):
             side = 1
         elif common and rx < 0 and c <= lo + 0.35 * rg and c < e1 and (dur <= -0.0015 or (N["r"] >= 0.003 and U["r"] >= 0.003)):
             side = -1
         if not side:
+            note("xeq", not shuffle, **conds, filled=False)
             continue
         j0 = i1000
         if any(m == 600 for m, _ in cal.get(a["date"][d], [])):          # 10:00 release: wait for the 10:15 close
@@ -325,6 +345,7 @@ def run_xeq(a: dict, nas: dict, dow: dict, rng, shuffle: bool = False) -> tuple[
         dist = max(rg, 1.30 * atr, 0.0030 * c)
         stop0 = level - side * dist
         f = fill_stop(a, j0, i1130, side, level, cancel=stop0, spread_max=0.80)
+        note("xeq", not shuffle, **conds, filled=bool(f))
         if not f:
             continue
         j, px = f
@@ -385,17 +406,24 @@ def run_pmrd(a: dict, rng, control: bool = False) -> tuple[list, list]:
                 continue
             body = abs(c - o) / rg
             common = 1.35 * atr <= rg <= 3.50 * atr and a["vol"][i0:i1].sum() >= 1.40 * mv and body >= 0.55
+            sg = 1 if c > o else -1
+            conds = dict(range_1_35_to_3_5_atr=1.35 * atr <= rg <= 3.50 * atr, range_ge_1_35_atr=rg >= 1.35 * atr,
+                         vol_ge_1_4=a["vol"][i0:i1].sum() >= 1.40 * mv, body_ge_0_55=body >= 0.55,
+                         close_near_extreme=(hi - c <= 0.25 * rg) if sg > 0 else (c - lo <= 0.25 * rg),
+                         ema1h_agrees=(c - e1) * sg > 0)
             side = 0
             if common and c > o and hi - c <= 0.25 * rg and c > e1:
                 side = 1
             elif common and c < o and c - lo <= 0.25 * rg and c < e1:
                 side = -1
             if not side:
+                note("pmrd", not control, **conds, filled=False)
                 continue
             level = hi + 0.5 if side > 0 else lo - 0.5
             dist = max(0.65 * rg, 1.10 * atr, 0.0030 * c)
             stop0 = level - side * dist
             f = fill_stop(a, i1, min(at(a, s, e, slot + 45), i1550), side, level, spread_max=0.80)
+            note("pmrd", not control, **conds, filled=bool(f))
             if not f:
                 continue
             j, px = f
@@ -492,6 +520,22 @@ def main():
                       f"{r['ci_hi']:+.2f} | {r['total_R']:+.1f} | {r['avg_R_2x']:+.3f} | {r['cost_R']:.3f} | {r['long']} | "
                       f"{r['short']} | {' / '.join(f'{x:+.2f}' for x in r['thirds'])} | {r['hold_min_median']:.0f} min | "
                       f"{r['pips_net']:+,.0f} | {r['exits']} |")
+        md.append("")
+    md += ["## Why so few trades: how many days pass each condition", "",
+           "Each evaluated day (or release bar for #1) counted once. *Alone* = share passing that condition by itself; "
+           "*cumulative* = days still left after it and every condition above it (in the rule's order).", ""]
+    for name in want:
+        F = pd.DataFrame(FUNNEL.get(name, []))
+        if not len(F):
+            continue
+        md += [f"**{TITLE[name]}** — {len(F)} days evaluated", "", "| Condition | Alone | Cumulative (days) |", "|---|---|---|"]
+        cum = pd.Series(True, index=F.index)
+        for col in F.columns:
+            if col == "range_ge_1_35_atr":
+                md.append(f"| {col} (lower bound only, info) | {F[col].mean():.0%} | — |")
+                continue
+            cum &= F[col].astype(bool)
+            md.append(f"| {col} | {F[col].mean():.0%} | {int(cum.sum())} |")
         md.append("")
     (a_.out / "report.md").write_text("\n".join(md) + "\n")
     (a_.out / "run.json").write_text(json.dumps({"data": a_.data, "rows": rows}, indent=2, default=str))
