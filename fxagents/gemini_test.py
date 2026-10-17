@@ -118,6 +118,7 @@ class Exits:
     time_after_min: int | None = None      # relative time stop (minutes after the fill)
     time_min_r: float = 0.0
     checks: list = field(default_factory=list)   # absolute [(index, min R)]: exit at that minute's open if below
+    abort: float | None = None             # exit at a 15m bar's close if that mid close is beyond this level
 
 
 def fill_stop(a, j0: int, j1: int, side: int, level: float, cancel: float | None = None,
@@ -176,6 +177,8 @@ def manage(a, j: int, side: int, entry: float, stop: float, ex: Exits, j_flat: i
             be_done = True
         if ex.trail_mode and best >= ex.trail_trig * risk:
             trail_on = True
+        if ex.abort is not None and a["mod"][k] % 15 == 14 and side * (a["m_c"][k] - ex.abort) < 0:
+            return k, (a["bid_c"][k] if side > 0 else a["ask_c"][k]), "abort"
         if trail_on and a["mod"][k] % 15 == 14:            # this minute closes a 15m bar
             atr = last_closed(a["b15_end"], a["atr15"], a["ns"][k] + MIN)
             if np.isfinite(atr):
