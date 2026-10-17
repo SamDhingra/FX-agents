@@ -2699,7 +2699,7 @@ const LEDGER = [
    detail:"10,590 cells, best picked weekly. Year test on unseen weeks: −0.017R over 1,989 trades (95% −0.05 to +0.01). Still runs as a paper book."},
   {name:"Playbook + chop filter", sub:"scalps in chop, longer exits in trends", at:3, fail:1, when:"Oct 2026",
    detail:"Checked on the year test before going live: the trades it would drop (−0.102R) were no worse than the ones it keeps (−0.111R). Runs on paper with Jev's regime read logged."},
-  {name:"EMA21 + RSI 55 (15m)", sub:"Sam's trend rule, long only", at:3, fail:1, when:"Oct 2026",
+  {name:"EMA21 + RSI 55 (15m)", sub:"Sam's trend rule, long + mirrored short", at:3, fail:1, when:"Oct 2026",
    detail:"Gold and US30 positive but not significant over Oct 2024–Sep 2026, in a rising market; FX clearly negative. On paper on gold + US30."},
   {name:"Gold H1 volatility trend", sub:"outside audit spec", at:3, fail:null, when:"Oct 2026",
    detail:"Run on paper exactly as the audit specified, to build a forward record."},

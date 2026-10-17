@@ -59,3 +59,27 @@ def test_add_follows_its_rule_and_volume_filter_only_removes_trades():
     vol = run_ema21_rsi55(m1, "24h", "15min", 1.0, False, b)
     assert {t["entry_time"] for t in vol} <= {t["entry_time"] for t in base} | {t["entry_time"] for t in vol}
     assert all(t["rvol"] >= 1.0 for t in vol)
+
+
+def test_short_is_the_mirror_of_long():
+    rng = np.random.default_rng(3)
+    p = 100 + np.cumsum(rng.normal(0, 0.05, 15 * 400))
+    m1 = frame(p)
+    b = bars15(m1)
+    tr = run_ema21_rsi55(m1, "24h", side=-1)
+    assert tr, "expected some short trades on a random walk"
+    for t in tr:
+        sig = b[b.index <= t["entry_time"]].iloc[-2:]
+        assert sig.c.iloc[-1] < sig.ema21.iloc[-1] and sig.c.iloc[-2] >= sig.ema21.iloc[-2] and sig.rsi.iloc[-1] < 45
+        held = b[(b.index > t["entry_time"]) & (b.index <= t["exit_time"])]
+        assert (held.c.iloc[:-1] <= held.ema21.iloc[:-1]).all() and held.c.iloc[-1] > held.ema21.iloc[-1]
+        assert abs(t["entry"] - m1.loc[t["entry_time"], "bid_o"]) < 1e-12      # sold at the bid
+        assert abs(t["exit"] - m1.loc[t["exit_time"], "ask_o"]) < 1e-12        # bought back at the ask
+        assert abs(t["points"] - (t["entry"] - t["exit"])) < 1e-12 and t["side"] == -1
+        assert abs(t["cost_R"] * t["atr"] - 0.2) < 1e-9
+    # a mirrored price path gives the mirrored trades
+    m2 = frame(200 - p)
+    longs = run_ema21_rsi55(m1, "24h")
+    shorts2 = run_ema21_rsi55(m2, "24h", side=-1)
+    assert [t["entry_time"] for t in longs] == [t["entry_time"] for t in shorts2]
+    assert all(abs(a["points"] - b_["points"]) < 1e-9 for a, b_ in zip(longs, shorts2))

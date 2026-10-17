@@ -232,7 +232,8 @@ shadow:
   ema21_rsi55:                  # Sam's EMA21 + RSI 55 rule on paper, rules frozen (agents/ema_rsi_trader.py)
     symbols: [XAUUSD, US30]
     risk_pct: 0.001             # 0.10% of the book's equity at the protective stop
-    stop_atr: 3.0               # protective stop (not part of the tested rule): 3 × ATR(14, 15m) below entry
+    stop_atr: 3.0               # protective stop (not part of the tested rule): 3 × ATR(14, 15m) beyond entry
+    sides: [long, short]        # short = exact mirror (close crosses below EMA21, RSI < 45; exit on a close above); Oct 17 2026
   gold_breakout:                # Gold Breakout 15M (WillyAlgoTrader) on paper, rules frozen (agents/breakout_trader.py);
                                 # passed Oct 2024–Sep 2026, NOT the 2021–Sep 2024 holdout → forward record only
     symbols: [XAUUSD]

@@ -5,7 +5,7 @@ holdout export only if it passes there.
 
   python -m fxagents.simple_rules ema21_rsi55 --data dev_m1 --out data/year_test/ema21_rsi55_dev_m1
 
-ema21_rsi55 (Sam, 2026-10-11), 15-minute candles, long only:
+ema21_rsi55 (Sam, 2026-10-11), 15-minute candles, long (shorts, the mirror, in variant ema21_rsi55_short):
   entry  a completed 15m candle closes above EMA21 (the previous candle closed at or below it) and RSI(14) > 55
          on that candle → buy at the ASK on the next minute's open
   exit   the first completed 15m candle that closes below EMA21 → sell at the BID on the next minute's open
@@ -81,15 +81,18 @@ def bars15(m1: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_ema21_rsi55(m1: pd.DataFrame, version: str, tf: str = "15min", vol_min: float | None = None,
-                    add: bool = False, b: pd.DataFrame | None = None) -> list[dict]:
+                    add: bool = False, b: pd.DataFrame | None = None, side: int = 1) -> list[dict]:
     """The rule (see module doc). vol_min: also require rvol ≥ vol_min on the signal candle. add: once per trade,
     on a later candle that closes above EMA21 with 58 < RSI ≤ 70 while that close is above the entry price, buy a
     second, equal unit at the ask on the next minute; both units exit together. R is per INITIAL unit (ATR at entry),
-    so an added trade's R is the sum of both units."""
+    so an added trade's R is the sum of both units.
+    side -1: the exact mirror — close crosses below EMA21 with RSI < 45 → sell at the bid; exit at the ask after
+    the first close above EMA21 (add: a close below EMA21 with 30 ≤ RSI < 42 while below the entry)."""
     b = bars(m1, tf) if b is None else b
     t1 = m1.index
     ns = t1.as_unit("ns").asi8
-    ask_o, bid_o, bid_c = m1.ask_o.to_numpy(), m1.bid_o.to_numpy(), m1.bid_c.to_numpy()
+    ask_o, bid_o, bid_c, ask_c = m1.ask_o.to_numpy(), m1.bid_o.to_numpy(), m1.bid_c.to_numpy(), m1.ask_c.to_numpy()
+    in_o, out_o, out_c = (ask_o, bid_o, bid_c) if side > 0 else (bid_o, ask_o, ask_c)   # buy at ask / sell at bid
     sp_o = (m1.ask_o - m1.bid_o).to_numpy()
     gap = np.r_[np.diff(ns), 0] > 60 * 60 * 1_000_000_000
     loc = b.index.tz_convert(NY)
@@ -99,7 +102,9 @@ def run_ema21_rsi55(m1: pd.DataFrame, version: str, tf: str = "15min", vol_min: 
     out, i, n = [], 1, len(b)
     while i < n:
         ok = np.isfinite(e[i]) and np.isfinite(e[i - 1]) and np.isfinite(rsi[i]) and np.isfinite(atr[i]) and atr[i] > 0
-        if not (ok and c[i - 1] <= e[i - 1] and c[i] > e[i] and rsi[i] > 55):
+        cross = (c[i - 1] <= e[i - 1] and c[i] > e[i] and rsi[i] > 55) if side > 0 else \
+            (c[i - 1] >= e[i - 1] and c[i] < e[i] and rsi[i] < 45)
+        if not (ok and cross):
             i += 1
             continue
         if vol_min is not None and not (np.isfinite(rv[i]) and rv[i] >= vol_min):
@@ -112,7 +117,7 @@ def run_ema21_rsi55(m1: pd.DataFrame, version: str, tf: str = "15min", vol_min: 
         if j0 >= len(t1) or t1[j0] - b.index[i] > pd.Timedelta("5min"):  # no tradable minute right after the close
             i += 1
             continue
-        entry, sp_in = ask_o[j0], sp_o[j0]
+        entry, sp_in = in_o[j0], sp_o[j0]
         k, jx, why, ja = i + 1, None, None, None
         flat = None
         if version == "day":
@@ -126,26 +131,27 @@ def run_ema21_rsi55(m1: pd.DataFrame, version: str, tf: str = "15min", vol_min: 
             if flat is not None and b.index[k] > flat:
                 jx, why = int(np.searchsorted(ns, flat.value)), "flat_1550"
                 break
-            if c[k] < e[k]:
-                jx, why = jk, "close_below_ema"
+            if (c[k] < e[k]) if side > 0 else (c[k] > e[k]):
+                jx, why = jk, "close_below_ema" if side > 0 else "close_above_ema"
                 break
-            if add and ja is None and 58 < rsi[k] <= 70 and c[k] > entry and first_min[k] < len(t1) \
+            add_ok = (58 < rsi[k] <= 70 and c[k] > entry) if side > 0 else (30 <= rsi[k] < 42 and c[k] < entry)
+            if add and ja is None and add_ok and first_min[k] < len(t1) \
                     and t1[first_min[k]] - b.index[k] <= pd.Timedelta("5min") \
                     and (flat is None or b.index[k] <= flat - pd.Timedelta("20min")):
                 ja = first_min[k]
             k += 1
         if jx is None or jx >= len(t1):
             break                                                       # still open at the end of the data
-        px = bid_c[jx] if why == "closure" else bid_o[jx]
+        px = out_c[jx] if why == "closure" else out_o[jx]
         sp_out = sp_o[jx]
-        pts = px - entry
+        pts = (px - entry) * side
         cost = (sp_in + sp_out) / 2                                    # vs mid: half a spread each side = one spread
         add_pts, add_cost = 0.0, 0.0
         if ja is not None and ja < jx:
-            add_pts = px - ask_o[ja]
+            add_pts = (px - in_o[ja]) * side
             add_cost = (sp_o[ja] + sp_out) / 2
         tot = pts + add_pts
-        out.append({"entry_time": t1[j0], "exit_time": t1[jx], "entry": entry, "exit": px, "atr": atr[i],
+        out.append({"entry_time": t1[j0], "exit_time": t1[jx], "side": side, "entry": entry, "exit": px, "atr": atr[i],
                     "points": tot, "points_base": pts, "added": ja is not None and ja < jx, "add_points": add_pts,
                     "R": tot / atr[i], "R_base": pts / atr[i],
                     "R_2x": (tot - cost - add_cost) / atr[i], "cost_R": (cost + add_cost) / atr[i],
@@ -185,6 +191,10 @@ VARIANTS = {
                        [(tf, v, vm, ad) for tf in ("15min", "1h") for v in ("24h", "day")
                         for vm in (None, 1.0) for ad in (False, True)]),
 }
+# shorts (Sam, 2026-10-17): the exact mirror of the base rule, and long + short together as the shadow book now
+# runs it. Same instruments as the shadow book (+ NDQ), 15m, both versions. side: 1 long, -1 short, 0 both.
+VARIANTS["ema21_rsi55_short"] = (["XAUUSD", "US30", "NDQ"],
+                                 [("15min", v, None, False, sd) for sd in (-1, 0) for v in ("24h", "day")])
 RVOL_BUCKETS = [(0, 0.8, "< 0.8"), (0.8, 1.2, "0.8–1.2"), (1.2, 2.0, "1.2–2.0"), (2.0, np.inf, "≥ 2.0")]
 
 
@@ -205,20 +215,26 @@ def main():
         days = pd.DatetimeIndex(sorted(set(m1.index.tz_convert(NY).normalize())))
         days = days[days.dayofweek < 5]
         cache = {}
-        for tf, v, vm, ad in grid:
+        for g in grid:
+            tf, v, vm, ad = g[:4]
+            sd = g[4] if len(g) > 4 else 1
             if tf not in cache:
                 cache[tf] = bars(m1, tf)
-            t = pd.DataFrame(run_ema21_rsi55(m1, v, tf, vm, ad, cache[tf]))
+            sides = (1, -1) if sd == 0 else (sd,)
+            t = pd.DataFrame([x for s_ in sides for x in run_ema21_rsi55(m1, v, tf, vm, ad, cache[tf], s_)])
+            if len(t):
+                t = t.sort_values("entry_time", ignore_index=True)
             st = stats(t, days)
             if len(t):
                 st |= pip_stats(t, PIP.get(sym, 1.0))
                 st["added_share"] = float(t.added.mean())
                 st["add_R_added"] = float((t.R - t.R_base)[t.added].mean()) if t.added.any() else None
-            key = {"symbol": sym, "tf": tf, "version": v, "volume": "rvol≥1" if vm else "—", "add": "yes" if ad else "—"}
+            key = {"symbol": sym, "tf": tf, "version": v, "volume": "rvol≥1" if vm else "—", "add": "yes" if ad else "—",
+                   "side": {1: "long", -1: "short", 0: "both"}[sd]}
             rows.append({**key, **st})
             if len(t):
                 trades.append(t.assign(**key))
-            print(f"  {sym:7s} {tf:5s} {v:3s} vol={key['volume']:6s} add={key['add']:3s} {st.get('trades', 0):5d} trades  "
+            print(f"  {sym:7s} {key['side']:5s} {tf:5s} {v:3s} vol={key['volume']:6s} add={key['add']:3s} {st.get('trades', 0):5d} trades  "
                   f"avg {st.get('avg_R', float('nan')):+.3f}R  95% [{st.get('ci_lo', float('nan')):+.3f}, "
                   f"{st.get('ci_hi', float('nan')):+.3f}]  2×cost {st.get('avg_R_2x', float('nan')):+.3f}", flush=True)
         del m1, cache
@@ -229,8 +245,9 @@ def main():
     npass = sum(bool(r.get("pass")) for r in rows)
     md = [f"# Rule test: {a.rule} on {a.data}", "",
           "Base rule (frozen before testing): candle closes above EMA21 (previous close at/below it) with RSI(14) > 55 → buy "
-          "at the ask on the next minute; exit at the bid on the next minute after the first close below EMA21. Long only, "
-          "no stop. R = ATR(14) of that timeframe at entry. Real OANDA bid/ask (one spread per round trip, already in every "
+          "at the ask on the next minute; exit at the bid on the next minute after the first close below EMA21. Short "
+          "(mirror): close below EMA21 (previous at/above) with RSI(14) < 45 → sell at the bid; exit at the ask after the first "
+          "close above EMA21. Side both = long and short trades together. No stop. R = ATR(14) of that timeframe at entry. Real OANDA bid/ask (one spread per round trip, already in every "
           "result); 2× costs pays that spread once more. Versions: 24h = as written (forced out before closures > 60 min); "
           "day = entries 02:00–15:30 NY, flat 15:50 NY. Volume rvol≥1 = the signal candle's tick volume at least the median of "
           "the same time-of-day candle over the previous 20 days. Add = one extra equal unit, once, on a later close above "
@@ -238,10 +255,10 @@ def main():
           "", f"Trades span {span}. Pass = ≥100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs. "
           f"**{npass} of {len(rows)} variants pass.** With {len(rows)} variants, about {len(rows) * 0.025:.0f} could pass by "
           "luck alone, so anything that passes here goes to the holdout once, unchanged, before it counts.", "",
-          "| Symbol | TF | Version | Volume | Add | Trades | Win | Avg R | 95% range | Total R | Avg R 2× costs | Spread (R) | Thirds | Median hold | Pass |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "| Symbol | Side | TF | Version | Volume | Add | Trades | Win | Avg R | 95% range | Total R | Avg R 2× costs | Spread (R) | Thirds | Median hold | Pass |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        k = f"| {r['symbol']} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} |"
+        k = f"| {r['symbol']} | {r.get('side', 'long')} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} |"
         if not r.get("trades"):
             md.append(k + " 0 | | | | | | | | | no |")
             continue
@@ -251,11 +268,11 @@ def main():
                   f"{'**PASS**' if r['pass'] else 'no'} |")
     md += ["", "## Pips (after the real spread)", "",
            "1 pip = 0.0001 for FX majors, 0.10 for gold, 1 point for NDQ/US30. With adds, pips count both units.", "",
-           "| Symbol | TF | Version | Volume | Add | Trades | Pips won | Pips lost | Net pips | Avg win | Avg loss | Spread per trade | Largest win / loss |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| Symbol | Side | TF | Version | Volume | Add | Trades | Pips won | Pips lost | Net pips | Avg win | Avg loss | Spread per trade | Largest win / loss |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if r.get("trades"):
-            md.append(f"| {r['symbol']} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} | {r['trades']} | "
+            md.append(f"| {r['symbol']} | {r.get('side', 'long')} | {r['tf']} | {r['version']} | {r['volume']} | {r['add']} | {r['trades']} | "
                       f"{r['pips_won']:+,.0f} | {r['pips_lost']:+,.0f} | **{r['pips_net']:+,.0f}** | {r['avg_win_pips']:+.1f} | "
                       f"{r['avg_loss_pips']:+.1f} | {r['spread_pips_avg']:.1f} | {r['largest_win_pips']:+.0f} / {r['largest_loss_pips']:+.0f} |")
     if len(T) and "rvol" in T:
@@ -263,14 +280,14 @@ def main():
         md += ["", "## Volume: how the base rule did by the signal candle's relative volume", "",
                "Descriptive only (no add, no volume filter). Buckets were fixed before the run; reading the best bucket and "
                "filtering on it would be fitting to this data.", "",
-               "| Symbol | TF | Version | " + " | ".join(f"rvol {lab}: trades / win / avg R" for _, _, lab in RVOL_BUCKETS) + " |",
-               "|---|---|---|" + "---|" * len(RVOL_BUCKETS)]
-        for (sym, tf, v), g in base.groupby(["symbol", "tf", "version"], sort=False):
+               "| Symbol | Side | TF | Version | " + " | ".join(f"rvol {lab}: trades / win / avg R" for _, _, lab in RVOL_BUCKETS) + " |",
+               "|---|---|---|---|" + "---|" * len(RVOL_BUCKETS)]
+        for (sym, sd_, tf, v), g in base.groupby(["symbol", "side", "tf", "version"], sort=False):
             cells = []
             for lo, hi, _ in RVOL_BUCKETS:
                 x = g[(g.rvol >= lo) & (g.rvol < hi)]
                 cells.append(f"{len(x)} / {(x.R > 0).mean():.0%} / {x.R.mean():+.2f}" if len(x) else "0")
-            md.append(f"| {sym} | {tf} | {v} | " + " | ".join(cells) + " |")
+            md.append(f"| {sym} | {sd_} | {tf} | {v} | " + " | ".join(cells) + " |")
     adds = [r for r in rows if r.get("trades") and r["add"] == "yes"]
     if adds:
         md += ["", "## Adds: what the second unit contributed", "",
