@@ -186,6 +186,8 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 15 python -m fxagents.setup_report "${@:2}" </dev/null ;;
   why)       # what each book saw and why it did/didn't trade in a time window (NY):  ./fx.sh why 20:00 23:59 2
              $DC exec -T fxagents python -m fxagents.why "${@:2}" ;;
+  record)    # closed-trade record per book and strategy for one instrument, as a Markdown table: ./fx.sh record XAUUSD
+             $DC exec -T fxagents python -m fxagents.record "${2:-XAUUSD}" ;;
   pause)     curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/pause; echo ;;
   resume)    curl -fsS -X POST -H "x-token: $(grep ^DASHBOARD_TOKEN .env | cut -d= -f2-)" localhost:8088/api/control/resume; echo ;;
   flatten)   read -rp "Flatten ALL positions and halt trading? [y/N] " a; [[ "$a" == y ]] || exit 0
@@ -195,7 +197,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | jevcheck | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
