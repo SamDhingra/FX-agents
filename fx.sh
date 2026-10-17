@@ -150,6 +150,14 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.breakout_test --data "$set_" \
                $([[ "$set_" == holdout* ]] && echo --frozen) --out "data/year_test/breakout_${set_}" </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  gemini)    # Gemini's three gold rules (fxagents/gemini_test.py) with their controls: ./fx.sh gemini [dev_m1|holdout_m1] [lny,xeq,pmrd]
+             # holdout runs score only the rules in PASSED_DEV, unchanged
+             need_env; mkdir -p logs; set_="${2:-dev_m1}"; only="${3:-lny,xeq,pmrd}"
+             [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/gemini-build.log 2>&1 || { echo "build failed — see logs/gemini-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.gemini_test --data "$set_" --only "$only" \
+               $([[ "$set_" == holdout* ]] && echo --frozen) --out "data/year_test/gemini_${set_}" </dev/null | grep -v "^  "
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -197,7 +205,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
