@@ -299,18 +299,20 @@ def detect_wick(b: dict, side: int, control: bool = False) -> list[Order]:
     o, h, l, c = m["o"], m["h"], m["l"], m["c"]
     hi_a, lo_a = (c, c) if control else (h, l)          # control: candle-close anchors
     out, main = [], not control
-    highs, lows = [], []                                  # confirmed 5-bar fractal indices
+    unbroken, last_low = [], None                         # confirmed 5-bar fractal highs with no close above since
     for x in range(4, b["n"] - 13):
         k = x - 2
-        if frac5_high(h, k):
-            highs.append(k)
+        if frac5_high(h, k) and c[k + 1] <= h[k]:
+            unbroken.append(k)
         if frac5_high(-l, k):
-            lows.append(k)
-        sh = next((kk for kk in reversed(highs) if x - kk >= 4 and c[kk + 1:x].max(initial=-np.inf) <= h[kk]), None)
-        if sh is None or not c[x] > h[sh]:
+            last_low = k
+        sh = next((kk for kk in reversed(unbroken) if x - kk >= 4), None)   # most recent unbroken, ≥ 4 bars old
+        broke = sh is not None and c[x] > h[sh]
+        unbroken = [kk for kk in unbroken if h[kk] >= c[x]]               # this close breaks every high below it
+        if not broke:
             continue
-        sl = next((kk for kk in reversed(lows) if kk < x), None)
-        if sl is None:
+        sl = last_low
+        if sl is None or sl >= x:
             continue
         t0 = next((y for y in range(x + 1, x + 13) if c[y] < c[y - 1]), None)
         if t0 is None or not in_window(b, t0, 180, 720):
