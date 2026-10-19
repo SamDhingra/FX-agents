@@ -7,7 +7,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.CH
 const out=path.resolve(process.env.OUT||'docs/ui-review');fs.mkdirSync(out,{recursive:true});
 const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:2});
 const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.stack));
-await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
+await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
 await page.routeWebSocket('**/ws*',ws=>setTimeout(()=>ws.send(JSON.stringify(state)),30));
 await page.goto('http://fx-ui.test/');await page.waitForTimeout(500);
 await page.evaluate(()=>window.scrollTo(0,600));await page.waitForTimeout(100);           // opened from a scrolled page

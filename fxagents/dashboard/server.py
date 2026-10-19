@@ -352,6 +352,15 @@ def build_app(ctx) -> FastAPI:
         return PlainTextResponse((STATIC / "sw.js").read_text(), media_type="application/javascript",
                                  headers={"Cache-Control": "no-cache"})
 
+    @app.get("/lib/{name}.js")
+    async def lib(name: str):
+        """Self-hosted third-party scripts (static/lib; see NOTICE.txt)."""
+        from fastapi.responses import FileResponse
+        f = STATIC / "lib" / f"{name}.js"
+        if not name.replace("-", "").replace(".", "").isalnum() or not f.exists():
+            raise HTTPException(404)
+        return FileResponse(f, media_type="application/javascript", headers={"Cache-Control": "max-age=604800"})
+
     @app.get("/fonts/{name}.woff2")
     async def font(name: str):
         from fastapi.responses import FileResponse

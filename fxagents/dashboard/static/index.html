@@ -829,6 +829,18 @@ button,input,select,textarea{font-family:inherit}
 .patlist{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11.5px}
 .patlist span{padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--text-2)}
 .patlist span.b1{border-color:var(--up);color:var(--up-text)}.patlist span.b-1{border-color:var(--down);color:var(--down-text)}
+
+/* ══ v9: trade chart on TradingView Lightweight Charts ══ */
+.lwbox{position:relative;height:280px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.lwbtns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+#replay>h3{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+@media (max-width:520px){#replay .lwbtns{margin-left:0;width:100%}#replay .lwbtns .btn{flex:1}}
+.lwbtns .btn{padding:6px 10px;font-size:12.5px}
+.lwfull{position:fixed;inset:0;z-index:80;background:var(--bg);display:flex;flex-direction:column;padding:calc(8px + var(--sat,0px)) 8px calc(8px + env(safe-area-inset-bottom)) 8px}
+.lwfull[hidden]{display:none}
+.lwfull .lwbody{flex:1;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.lwlegend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
+.lwlegend b{font-weight:600}
 </style>
 </head>
 <body>
@@ -1080,7 +1092,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.4</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.5</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3605,6 +3617,171 @@ setCfTf = async function(m){
   CF.patterns = await fetchPatterns(CF.t, CF.raw, m); drawCf();
   const note = $("#cfNote"); if(note) note.innerHTML = "Drag to pan · pinch, scroll or +/− to zoom · tap a candle for its prices." + (PAT.on ? patSummary(CF.patterns) : "");
 };
+
+/* ══ v9: trade chart on TradingView Lightweight Charts (static/lib, Apache-2.0) ══
+   fast canvas rendering with native pinch-zoom, pan, kinetic scroll, crosshair and price-scale drag on phones */
+let LWP = null;
+function ensureLW(){
+  if(window.LightweightCharts) return Promise.resolve(window.LightweightCharts);
+  if(!LWP) LWP = new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "lib/lightweight-charts-5.0.9.js";
+    sc.onload = () => res(window.LightweightCharts); sc.onerror = () => { LWP = null; rej(new Error("chart library failed to load")); }; document.head.appendChild(sc); });
+  return LWP;
+}
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+const nyFull = sec => new Date(sec * 1000).toLocaleString([], {timeZone:"America/New_York", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", hour12:false});
+const ROLEC = {leg:"--accent", zone:"--warn", level:"--accent-2", invalid:"--down", target:"--up", trend:"--muted", signal:"--warn", event:"--warn"};
+/* build a chart in `el`. o = {t, bars:[{ts,o,h,l,c}], ghosts, patterns, big}. Returns a handle with update() and remove(). */
+function lwBuild(LW, el, o){
+  el.innerHTML = "";
+  const t = o.t, bars = o.bars;
+  const chart = LW.createChart(el, {autoSize:true,
+    layout:{background:{type:"solid", color:cssv("--card")}, textColor:cssv("--text-2"), fontSize:o.big ? 12 : 11, fontFamily:getComputedStyle(document.body).fontFamily, attributionLogo:true},
+    grid:{vertLines:{color:cssv("--line")}, horzLines:{color:cssv("--line")}},
+    rightPriceScale:{borderColor:cssv("--line"), scaleMargins:{top:.08, bottom:.08}},
+    timeScale:{borderColor:cssv("--line"), timeVisible:true, secondsVisible:false, rightOffset:4,
+      tickMarkFormatter:(time) => nyHM(time * 1000)},
+    localization:{timeFormatter:nyFull, priceFormatter:p => fpx(p)},
+    crosshair:{mode:0},
+    handleScroll:{mouseWheel:true, pressedMouseMove:true, horzTouchDrag:true, vertTouchDrag:!!o.big},
+    handleScale:{axisPressedMouseMove:true, mouseWheel:true, pinch:true}});
+  const candles = chart.addSeries(LW.CandlestickSeries, {upColor:cssv("--up"), downColor:cssv("--down"), borderVisible:false,
+    wickUpColor:cssv("--up"), wickDownColor:cssv("--down"), priceLineVisible:false, lastValueVisible:!t.closed});
+  const toData = B => { const out = [], seen = new Set(); for(const b of B){ const tm = Math.floor(+b.ts / 1000); if(seen.has(tm)) continue; seen.add(tm); out.push({time:tm, open:b.o, high:b.h, low:b.l, close:b.c}); } return out; };
+  let data = toData(bars); candles.setData(data);
+  const times = data.map(d => d.time);
+  const snap = ts => { if(ts == null) return null; const v = Math.floor(+new Date(ts) / 1000); let lo = 0, hi = times.length - 1;
+    if(v <= times[0]) return times[0]; if(v >= times[hi]) return times[hi];
+    while(lo < hi){ const m = (lo + hi + 1) >> 1; if(times[m] <= v) lo = m; else hi = m - 1; } return times[lo]; };
+  const nextT = tm => { const i = times.indexOf(tm); return i >= 0 && i < times.length - 1 ? times[i+1] : null; };
+  const view = {candles:data.length, lines:[], markers:[]};
+  const extra = [];
+  const seg = (t0, p0, t1, p1, color, style, width, label) => {
+    let a = snap(t0), b = snap(t1 ?? times[times.length-1]); if(a == null || b == null) return;
+    if(b <= a){ const n2 = nextT(a); if(n2 == null) return; b = n2; if(p1 === p0) p1 = p0; }
+    const ls = chart.addSeries(LW.LineSeries, {color, lineWidth:width, lineStyle:style, priceLineVisible:false, lastValueVisible:false,
+      crosshairMarkerVisible:false, autoscaleInfoProvider:() => null});
+    ls.setData([{time:a, value:p0}, {time:b, value:p1}]); extra.push(ls); if(label) view.lines.push(label);
+  };
+  const markers = [];
+  const mark = (ts, price, text, color, shape = "circle", pos = "atPriceMiddle", size = 1) => { const tm = snap(ts); if(tm == null || price == null) return;
+    markers.push({time:tm, position:pos, price, shape, color, text, size}); if(text) view.markers.push(text); };
+  // the trade's levels
+  const ev = t.events || [], en = ev.find(e => e.kind === "entry") || {};
+  const entry = t.entry ?? en.price, fs = t.final_stop ?? t.stop;
+  const pl = (price, color, style, title) => price == null ? null : candles.createPriceLine({price, color, lineWidth:1, lineStyle:style, axisLabelVisible:true, title});
+  const lines = [pl(entry, cssv("--accent"), 0, "entry"), pl(t.initial_stop, cssv("--down"), 2, "stop")];
+  if(fs != null && fs !== t.initial_stop) lines.push(pl(fs, cssv("--warn"), 1, t.closed ? "final stop" : "stop now"));
+  view.prices = lines.filter(Boolean).map(x => x.options().title);
+  // the setup's own drawing
+  for(const d of drawsOf(t)){ const col = cssv(ROLEC[d.role] || "--accent-2");
+    if(d.k === "box"){ seg(d.t0, d.hi, d.t1 || t.opened, d.hi, col, 0, 1, d.label); seg(d.t0, d.lo, d.t1 || t.opened, d.lo, col, 0, 1); }
+    else if(d.k === "line"){ seg(d.t0, d.px, t.closed || null, d.px, col, d.role === "invalid" ? 1 : d.role === "target" ? 2 : 0, 1, d.label); }
+    else if(d.k === "mark") mark(d.t0, d.px, "", col, "square", "atPriceMiddle", .6); }
+  // chart patterns
+  for(const pt of (o.patterns || [])){ if(pt.status === "failed" && !PAT.failed) continue;
+    const col = cssv(pt.dir > 0 ? "--up" : pt.dir < 0 ? "--down" : "--ghost"), st = pt.status === "forming" ? 2 : 0;
+    pt.segs.forEach((g, k) => seg(g[0], g[1], g[2], g[3], col, st, 2, k ? null : pt.label));
+    const top = Math.max(...pt.segs.flatMap(g => [g[1], g[3]]));
+    mark(pt.t0, top, pt.label + (pt.status === "confirmed" ? " ✓" : pt.status === "failed" ? " ✗" : " …"), col, "square", "atPriceTop", .5);
+    if(pt.target != null && pt.t_break) seg(pt.t_break, pt.target, null, pt.target, col, 1, 1, null); }
+  // ghosts (setups the bot passed on)
+  for(const g of (o.ghosts || [])) mark(g.entry_ts || g.ts, g.entry, "", (g.r||0) > 0 ? cssv("--up") : cssv("--down"), "circle", "atPriceMiddle", .5);
+  // entry / partials / adds / exit
+  mark(t.opened, entry, "E", cssv("--accent"), "circle", "atPriceMiddle", 1.4);
+  ev.filter(e => e.kind === "partial").forEach(e => mark(e.ts, e.price, "P", cssv("--up"), "circle", "atPriceMiddle", 1.2));
+  ev.filter(e => e.kind === "add").forEach(e => mark(e.ts, e.price, "+", cssv("--accent-2"), "circle", "atPriceMiddle", 1.2));
+  if(t.closed) mark(t.closed, t.exit_price, "X", (t.r_multiple||0) > 0 ? cssv("--up") : cssv("--down"), "circle", "atPriceMiddle", 1.4);
+  markers.sort((a, b) => a.time - b.time);
+  const mk = LW.createSeriesMarkers(candles, markers);
+  // open on the trade: from a little before entry to the exit (or now)
+  const i0 = Math.max(0, times.indexOf(snap(t.opened)) - (o.big ? 60 : 30)), i1 = t.closed ? Math.min(times.length - 1, times.indexOf(snap(t.closed)) + 15) : times.length - 1;
+  try{ chart.timeScale().setVisibleLogicalRange({from:i0, to:i1 + 3}); }catch(e){ chart.timeScale().fitContent(); }
+  return {chart, candles, view, markers:mk,
+    update(newBars, nt){ data = toData(newBars); candles.setData(data); },
+    replayTo(k){ candles.setData(data.slice(0, k)); },
+    restore(){ candles.setData(data); },
+    remove(){ try{ chart.remove(); }catch(e){} }};
+}
+
+/* the trade view's chart */
+replay = async function(t){
+  const box = $("#replay"); if(!box) return;
+  const o = new Date(t.opened), c = t.closed ? new Date(t.closed) : new Date();
+  const tf = Math.max(1, tfMin(t));
+  // live refresh of an open trade already on screen: new candles and stop, same zoom, no flicker
+  if(RP && RP.lw && RP.t && RP.t.id === t.id && $("#lwSmall") && !t.closed){
+    let B = null; try{ B = await api("api/bars?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(RP.bars[0].ts.toISOString()) + "&end=" + encodeURIComponent(new Date(Date.now() + 20*60000).toISOString())); }catch(e){}
+    if(!B || !B.bars || !B.bars.length || !RP || RP.t.id !== t.id) return;
+    const range = RP.lw.chart.timeScale().getVisibleLogicalRange();
+    RP.t = t; RP.bars = B.bars.map(b => ({ts:new Date(b[0]), o:b[1], h:b[2], l:b[3], c:b[4]}));
+    const LW = await ensureLW(); RP.lw.remove();
+    RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:RP.ghosts, patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view;
+    if(range) try{ RP.lw.chart.timeScale().setVisibleLogicalRange(range); }catch(e){}
+    return;
+  }
+  box.innerHTML = `<h3>Chart <span class="mut" style="font-weight:500;font-size:12px" id="lwCount"></span><span class="lwbtns"><button class="btn patbtn" aria-pressed="${PAT.on}">Patterns</button><button class="btn" id="lwPlay">▶ Replay</button><button class="btn" id="lwFullBtn">⤢ Full screen</button></span></h3>
+    <div class="rphead"><span class="chip">${esc(sname(stratOf(t)))}${tf>1?` · ${tf>=60?tf/60+"h":tf+"m"}`:""}</span>${t.closed ? "" : `<span class="tag">open</span>`}
+    <span class="mut" style="font-size:12px">${drawsOf(t).length ? "the setup's own levels are drawn" : "no setup drawing recorded for this trade (trades before 19 Oct)"}</span>${t.reason ? `<span class="why">${esc(t.reason)}</span>` : ""}</div>
+    <div class="lwbox" id="lwSmall"><div class="note" style="padding:12px">Loading candles…</div></div>
+    <div class="lwlegend" id="lwLegend"></div><div class="patwrap"></div>`;
+  let B = null;
+  try{ B = await api("api/bars?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(new Date(o - Math.max(45, tf * 40) * 60000).toISOString()) + "&end=" + encodeURIComponent(new Date(+c + 20*60000).toISOString())); }catch(e){}
+  if(!$("#replay") || $("#replay").dataset.id !== t.id) return;
+  if(!B || !B.bars || !B.bars.length){ $("#lwSmall").innerHTML = `<div class="note" style="padding:12px">${esc((B && B.note) || "No candles available")}. Charts work for trades from the last couple of weeks.</div>`; return; }
+  const bars = B.bars.map(b => ({ts:new Date(b[0]), o:b[1], h:b[2], l:b[3], c:b[4]}));
+  let ghosts = [];
+  try{ const g = await api(q("api/ghosts?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(bars[0].ts.toISOString()) + "&end=" + encodeURIComponent(bars[bars.length-1].ts.toISOString())));
+    ghosts = (g.recent || []).filter(x => x.action !== "taken" && x.entry != null); }catch(e){}
+  if(RP && RP.lw) RP.lw.remove();
+  RP = {t, bars, ghosts, patterns:[], n:Infinity};
+  let LW; try{ LW = await ensureLW(); }catch(e){ $("#lwSmall").innerHTML = `<div class="note" style="padding:12px">The chart library didn't load (offline?).</div>`; return; }
+  const draw = () => { if(RP.lw) RP.lw.remove(); RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:RP.ghosts, patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view; };
+  draw();
+  $("#lwCount").textContent = `${bars.length} candles · drag, pinch, tap for prices`;
+  const roles = [...new Set(drawsOf(t).map(d => d.role))].filter(r => r !== "signal");
+  const nice = {leg:"impulse leg", zone:"zone", level:"setup level", invalid:"invalidation", target:"structural target", trend:"trend line", event:"event"};
+  $("#lwLegend").innerHTML = `<span><b style="color:var(--accent)">E</b> entry · <b style="color:var(--up)">P</b> partial · <b>X</b> exit · red dashed = initial stop</span>`
+    + roles.map(r => `<span style="color:${cssv(ROLEC[r] || "--accent-2")}">— ${nice[r] || r}</span>`).join("") + (ghosts.length ? `<span>faint dots = ${ghosts.length} setups passed on</span>` : "");
+  const pats = async () => { RP.patterns = PAT.on ? await fetchPatterns(t, RP.bars, tf) : []; if(!RP || RP.t.id !== t.id) return; draw();
+    box.querySelector(".patwrap").innerHTML = PAT.on ? `<div class="mut" style="font-size:11.5px;margin-top:6px">Chart patterns on ${tf}m candles (green bullish, red bearish; solid = confirmed, dashed = forming)</div>` + patSummary(RP.patterns) : ""; };
+  box.querySelector(".patbtn").onclick = () => { setPat(!PAT.on); pats(); };
+  $("#lwFullBtn").onclick = () => openLwFull(t, RP.bars, RP.ghosts);
+  $("#lwPlay").onclick = () => { if(!RP.lw) return; let k = 1; const n = RP.lw.view.candles, stp = Math.max(1, Math.round(n / 120));
+    const step = () => { if(!RP || !RP.lw || RP.t.id !== t.id) return; k += stp; RP.lw.replayTo(k); if(k < n) requestAnimationFrame(step); else RP.lw.restore(); }; requestAnimationFrame(step); };
+  await pats();
+};
+drawReplay = function(){};
+
+/* full screen */
+const LF = {t:null, raw:[], ghosts:[], tf:1, lw:null};
+function openLwFull(t, bars, ghosts){
+  let el = $("#lwFull");
+  if(!el){ document.body.insertAdjacentHTML("beforeend", `<div class="lwfull" id="lwFull" hidden><div class="cfhead"><button class="btn" id="lfBack">‹ Back</button><h3 id="lfTitle"></h3>
+      <div class="cfctl"><button class="btn patbtn" id="lfPat">Patterns</button><div class="seg" id="lfTf"></div><button class="btn" id="lfFit">Fit</button></div></div>
+      <div class="lwbody" id="lfChart"></div><div class="cfnote" id="lfNote"></div></div>`);
+    el = $("#lwFull");
+    $("#lfBack").onclick = closeLwFull; $("#lfFit").onclick = () => LF.lw && LF.lw.chart.timeScale().fitContent();
+    $("#lfPat").onclick = () => { setPat(!PAT.on); setLfTf(LF.tf); };
+    document.addEventListener("keydown", e => { if(e.key === "Escape" && !$("#lwFull").hidden){ e.stopPropagation(); closeLwFull(); } }, true);
+    window.addEventListener("popstate", () => { const f = $("#lwFull"); if(f && !f.hidden && !(history.state && history.state.lwFull)) hideLwFull(); }); }
+  LF.t = t; LF.raw = bars; LF.ghosts = ghosts || [];
+  const tf = Math.max(1, tfMin(t)), opts = [...new Set([1, 5, tf, 15, 60].filter(m => m <= 60))].sort((a, b) => a - b);
+  $("#lfTf").innerHTML = opts.map(m => `<button data-m="${m}">${m>=60?m/60+"h":m+"m"}</button>`).join("");
+  $$("#lfTf button").forEach(b => b.onclick = () => setLfTf(+b.dataset.m));
+  $("#lfTitle").innerHTML = `<span class="side ${t.side[0]}">${t.side}</span> ${esc(t.symbol)} <span class="mut" style="font-weight:500;font-size:13px">${esc(sname(stratOf(t)))}</span>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+  try{ history.pushState({lwFull:1, drawer:1}, ""); }catch(e){}
+  setLfTf(tf);
+}
+async function setLfTf(m){
+  LF.tf = m; $$("#lfTf button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.m === m))); $("#lfPat").setAttribute("aria-pressed", String(PAT.on));
+  const LW = await ensureLW(), bars = aggBars(LF.raw, m), pats = PAT.on ? await fetchPatterns(LF.t, LF.raw, m) : [];
+  if(LF.lw) LF.lw.remove();
+  LF.lw = lwBuild(LW, $("#lfChart"), {t:LF.t, bars, ghosts:LF.ghosts, patterns:pats, big:true});
+  $("#lfNote").innerHTML = "Drag to pan · pinch or scroll to zoom · drag the price scale to stretch it · tap a candle for its prices." + (PAT.on ? patSummary(pats) : "");
+}
+function closeLwFull(){ const el = $("#lwFull"); if(!el || el.hidden) return; if(history.state && history.state.lwFull) history.back(); else hideLwFull(); }
+function hideLwFull(){ const el = $("#lwFull"); if(el) el.hidden = true; if(LF.lw){ LF.lw.remove(); LF.lw = null; } if(!$("#drawer").classList.contains("on")) document.body.classList.remove("noscroll"); }
 </script>
 </body>
 </html>

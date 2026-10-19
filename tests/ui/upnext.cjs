@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');const fs=require('fs');const assert=require('assert');const {state,api}=require('./fixture.cjs');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});const c=await b.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true});
 const p=await c.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});if(u.pathname.startsWith('/fonts/'))return r.fulfill({contentType:'font/woff2',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});return r.fulfill({json:api(r.request().url())})});
+await p.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});if(u.pathname.startsWith('/fonts/'))return r.fulfill({contentType:'font/woff2',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});return r.fulfill({json:api(r.request().url())})});
 await p.routeWebSocket('**/ws*',ws=>setTimeout(()=>ws.send(JSON.stringify(state)),30));
 await p.goto('http://fx-ui.test/');await p.waitForTimeout(900);
 assert(await p.locator('#nowLine').isVisible());

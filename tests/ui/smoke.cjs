@@ -12,6 +12,7 @@ for(const width of [1440,390,768]){
  const page=await context.newPage();let socket;page.on('pageerror',e=>errors.push(e.stack));
  await page.route('**/*',async route=>{
   const req=route.request(),u=new URL(req.url());
+  if(u.pathname.startsWith('/lib/'))return route.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});
   if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
   if(req.method()==='POST'){posts.push(u.pathname);return route.fulfill({json:{ok:true}})}
   return route.fulfill({json:api(req.url())});

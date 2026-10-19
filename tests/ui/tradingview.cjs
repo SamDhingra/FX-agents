@@ -7,6 +7,7 @@ const ctx=await browser.newContext({viewport:{width:390,height:844},permissions:
 page.on('pageerror',e=>errors.push(e.stack));
 const pine='//@version=6\nindicator("FX-Agents · XAUUSD · live (2 trades)", overlay=true)';
 await page.route('**/*',r=>{const u=new URL(r.request().url());
+ if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});
  if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
  if(u.pathname.endsWith('/api/tradingview'))return r.fulfill({json:{symbol:u.searchParams.get('symbol'),tv_symbol:'OANDA:XAUUSD',script:pine}});
  return r.fulfill({json:api(r.request().url())})});

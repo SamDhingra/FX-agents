@@ -7,7 +7,7 @@ const out=path.resolve(process.env.OUT||'docs/ui-review');fs.mkdirSync(out,{recu
 for(const [width,scheme] of [[1440,'dark'],[390,'light'],[390,'dark']]){
  const ctx=await browser.newContext({viewport:{width,height:width===390?844:1000},colorScheme:scheme});const page=await ctx.newPage();
  page.on('pageerror',e=>errors.push(width+': '+e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(width+' console: '+m.text())});
- await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
+ await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
  let sock;await page.routeWebSocket('**/ws*',ws=>{sock=ws;setTimeout(()=>ws.send(JSON.stringify(state)),30)});
  await page.goto('http://fx-ui.test/');await page.waitForTimeout(700);
  const tag=`${width}-${scheme}`;
@@ -26,10 +26,10 @@ for(const [width,scheme] of [[1440,'dark'],[390,'light'],[390,'dark']]){
  await page.evaluate(()=>go('backtests'));await page.waitForTimeout(300);await page.locator('#journey .jrow').first().click();
  await page.screenshot({path:path.join(out,`v3-journey-${tag}.png`),fullPage:true});
  await page.evaluate(()=>go('trades'));await page.waitForTimeout(400);await page.locator('#trades [data-i]').first().click();await page.waitForTimeout(900);
- assert((await page.locator('#court').textContent()).includes('Risk'));assert(await page.locator('#rpSvg rect').count()>50);
+ assert((await page.locator('#court').textContent()).includes('Risk'));await page.waitForFunction(()=>RP&&RP.view&&RP.view.candles>50);
  await page.locator('#drawer').screenshot({path:path.join(out,`v3-trade-${tag}.png`)});
- assert(await page.locator('#rpSvg path[d^="M"]').count()>=3,'ghost diamonds');
- await page.locator('#rpPlay').click();await page.waitForTimeout(2500);
+ assert(await page.evaluate(()=>RP.ghosts.length)>=3,'ghosts');
+ await page.locator('#lwPlay').click();await page.waitForTimeout(2500);
  await page.keyboard.press('Escape');await page.waitForTimeout(200);
  await page.locator('#askFab').click();await page.waitForTimeout(200);await page.locator('#askIdeas button').first().click();await page.waitForTimeout(600);
  assert((await page.locator('#askLog').textContent()).includes('bias rule'));

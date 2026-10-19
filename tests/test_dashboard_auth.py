@@ -49,3 +49,11 @@ def test_old_token_links_redirect_to_clean_address():
 def test_logout_clears_the_cookie():
     r = client().get("/logout", follow_redirects=False)
     assert r.status_code == 303 and 'fx_token=""' in r.headers["set-cookie"] or "max-age=0" in r.headers["set-cookie"].lower()
+
+
+def test_chart_library_is_self_hosted():
+    c = client()
+    c.post("/login", data={"token": "s3cret-token"})
+    r = c.get("/lib/lightweight-charts-5.0.9.js")
+    assert r.status_code == 200 and "javascript" in r.headers["content-type"] and "createChart" in r.text
+    assert c.get("/lib/..%2Fserver.js").status_code == 404 and c.get("/lib/nope.js").status_code == 404

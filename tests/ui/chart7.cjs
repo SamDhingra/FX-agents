@@ -13,6 +13,7 @@ for(const [w,h] of [[390,844],[1280,900]]){
  page.on('pageerror',e=>errors.push(w+': '+e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(w+' console: '+m.text())});
  const st={...state,positions:state.positions.map(p=>({...p,opened:B(40),draw,events:[{ts:B(40),kind:'entry',price:p.entry,qty:1}],pips_now:12,stop_pips:48,lots:.17}))};
  await page.route('**/*',r=>{const u=new URL(r.request().url());
+  if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});
   if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
   if(u.pathname.endsWith('/api/trades'))return r.fulfill({json:trades.map((t,i)=>i===0?{...t,draw}:t)});
   return r.fulfill({json:api(r.request().url())})});
@@ -22,23 +23,31 @@ for(const [w,h] of [[390,844],[1280,900]]){
  await page.evaluate(()=>go('trades'));await page.waitForTimeout(400);await page.locator('#trades [data-i]').first().click();await page.waitForTimeout(900);
  const rp=await page.locator('#replay').textContent();
  assert(rp.includes("the setup's own levels are drawn"),'no drawing note: '+rp.slice(0,200));
- const svgTxt=await page.locator('#rpSvg').textContent();
- for(const k of ['impulse leg (BOS)','50% fib','invalidation','structural target']) assert(svgTxt.includes(k),'missing '+k);
+ await page.waitForFunction(()=>RP&&RP.view&&RP.view.candles>0,null,{timeout:5000});
+ const v=await page.evaluate(()=>RP.view);
+ for(const k of ['impulse leg (BOS)','50% fib','invalidation','structural target']) assert(v.lines.includes(k),'missing '+k);
+ for(const k of ['E','X']) assert(v.markers.includes(k),'marker '+k);
+ assert(await page.locator('#lwSmall canvas').count()>0,'canvas chart');
  assert(await page.locator('#replay .chip').count()===1,'strategy chip');
- await page.locator('#replay').screenshot({path:path.join(out,`v7-replay-${w}.png`)});
+ await page.locator('#replay').screenshot({path:path.join(out,`v9-replay-${w}.png`)});
+ // the chart pans on drag (native), the drawer still scrolls on phones
+ const r0=await page.evaluate(()=>RP.lw.chart.timeScale().getVisibleLogicalRange());
+ const sb=await page.locator('#lwSmall').boundingBox();
+ await page.mouse.move(sb.x+sb.width*.5,sb.y+sb.height*.5);await page.mouse.down();await page.mouse.move(sb.x+sb.width*.8,sb.y+sb.height*.5,{steps:6});await page.mouse.up();await page.waitForTimeout(200);
+ const r1=await page.evaluate(()=>RP.lw.chart.timeScale().getVisibleLogicalRange());
+ assert(r1.from<r0.from-1,`drag pans ${r0.from}→${r1.from}`);
  // full screen
- await page.locator('#rpSvg').click();await page.waitForTimeout(400);
- assert(await page.locator('#chartFull').isVisible(),'full screen opens');
- const n0=await page.locator('#cfSvg rect').count();
- await page.locator('#cfIn').click();await page.locator('#cfIn').click();await page.waitForTimeout(200);
- const n1=await page.locator('#cfSvg rect').count();assert(n1<n0,`zoom in shows fewer candles ${n0}→${n1}`);
- const box=await page.locator('#cfSvg').boundingBox();
- await page.mouse.move(box.x+box.width*.5,box.y+box.height*.5);await page.mouse.down();await page.mouse.up();await page.waitForTimeout(200);
- assert(await page.locator('#cfTip').isVisible(),'crosshair tip');assert((await page.locator('#cfTip').textContent()).includes('O '),'OHLC');
- await page.locator('#cfTf button').nth(1).click();await page.waitForTimeout(200);
- await page.screenshot({path:path.join(out,`v7-full-${w}.png`)});
- await page.locator('#cfBack').click();await page.waitForTimeout(400);
- assert(!(await page.locator('#chartFull').isVisible()),'back closes full screen');
+ await page.locator('#lwFullBtn').click();await page.waitForTimeout(600);
+ assert(await page.locator('#lwFull').isVisible(),'full screen opens');
+ await page.waitForFunction(()=>LF.lw&&LF.lw.view.candles>0);
+ const n0=await page.evaluate(()=>LF.lw.view.candles);
+ assert((await page.evaluate(()=>LF.lw.view.lines)).includes('50% fib'),'drawing in full screen');
+ await page.locator('#lfTf button[data-m="60"]').click();await page.waitForTimeout(500);
+ const n1=await page.evaluate(()=>LF.lw.view.candles);assert(n1<n0,`bigger candles → fewer ${n0}→${n1}`);
+ const fb=await page.locator('#lfChart').boundingBox();await page.mouse.move(fb.x+fb.width*.5,fb.y+fb.height*.5);await page.waitForTimeout(150);
+ await page.screenshot({path:path.join(out,`v9-full-${w}.png`)});
+ await page.locator('#lfBack').click();await page.waitForTimeout(400);
+ assert(!(await page.locator('#lwFull').isVisible()),'back closes full screen');
  assert(await page.locator('#drawer').evaluate(d=>d.classList.contains('on')),'trade stays open under it');
  await page.keyboard.press('Escape');await page.waitForTimeout(300);
  // an open position opens the live trade view
@@ -46,8 +55,9 @@ for(const [w,h] of [[390,844],[1280,900]]){
  await page.locator('#positions .pcard').first().click();await page.waitForTimeout(900);
  assert(await page.locator('#drawer').evaluate(d=>d.classList.contains('on')),'position opens the trade view');
  {const tx=await page.locator("#replay").textContent();assert(tx.includes("open"),"marked open: "+tx.slice(0,300));}
- assert((await page.locator('#rpSvg').textContent()).includes('stop now'),'live stop line');
- await page.locator('#drawer').screenshot({path:path.join(out,`v7-open-${w}.png`)});
+ await page.waitForFunction(()=>RP&&RP.view&&RP.view.candles>0,null,{timeout:5000});
+ assert((await page.evaluate(()=>RP.view.prices)).includes('stop now'),'live stop line');
+ await page.locator('#drawer').screenshot({path:path.join(out,`v9-open-${w}.png`)});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow');
  await ctx.close();
 }

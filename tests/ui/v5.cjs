@@ -7,7 +7,7 @@ const out=path.resolve(process.env.OUT||'docs/ui-review');fs.mkdirSync(out,{recu
 for(const [width,touch] of [[1440,false],[390,true]]){
  const ctx=await browser.newContext({viewport:{width,height:width===390?844:1000},isMobile:touch,hasTouch:touch,colorScheme:'dark'});const page=await ctx.newPage();const posts=[];
  page.on('pageerror',e=>errors.push(width+': '+e.stack));
- await page.route('**/*',r=>{const req=r.request(),u=new URL(req.url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
+ await page.route('**/*',r=>{const req=r.request(),u=new URL(req.url());if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
   if(req.method()==='POST'){posts.push([u.pathname,req.postData()]);if(u.pathname.endsWith('/api/ask'))return r.fulfill({json:api(req.url())});return r.fulfill({json:{ok:true}})}return r.fulfill({json:api(req.url())})});
  await page.routeWebSocket('**/ws*',ws=>setTimeout(()=>ws.send(JSON.stringify(state)),30));
  await page.goto('http://fx-ui.test/');await page.waitForTimeout(500);const tag=String(width);

@@ -13,6 +13,7 @@ for(const [jq,R,outs,word,stamp] of cases){
  const ctx=await browser.newContext({viewport:{width:390,height:844}});const page=await ctx.newPage();
  page.on('pageerror',e=>errors.push(e.stack));
  await page.route('**/*',r=>{const u=new URL(r.request().url());
+  if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});
   if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});
   const j=api(r.request().url());
   if(u.pathname.includes('/api/story/')){j.trade={...j.trade,jev_quality:jq,jev_confidence:jq==null?null:0.4,r_multiple:R};

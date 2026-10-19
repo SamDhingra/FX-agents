@@ -9,7 +9,7 @@ const ctx=await browser.newContext({viewport:{width:393,height:852},screen:{widt
   userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'});
 await ctx.addInitScript(()=>Object.defineProperty(navigator,'standalone',{get:()=>true}));
 const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.stack));
-await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
+await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.pathname.startsWith('/lib/'))return r.fulfill({contentType:'application/javascript',body:fs.readFileSync('fxagents/dashboard/static'+u.pathname)});if(u.pathname==='/')return r.fulfill({contentType:'text/html',body:fs.readFileSync('fxagents/dashboard/static/index.html','utf8')});return r.fulfill({json:api(r.request().url())})});
 await page.routeWebSocket('**/ws*',ws=>setTimeout(()=>ws.send(JSON.stringify(state)),30));
 await page.goto('http://fx-ui.test/');await page.waitForTimeout(500);
 assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--sat').trim()),'54px');
