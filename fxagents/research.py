@@ -104,12 +104,16 @@ def mgmt_profiles(cfg, tf: str) -> dict[str, Mgmt]:
         # was simulated as all-out at 2R — audit F08.)
         out["trend"] = dataclasses.replace(std, rr=max(std.rr, 2.0), pyramid=False, max_adds=0, add_frac=0.0,
                                            max_hold_bars=max(2, int(480 / bm)))
+    study = (cfg.get("research") or {}).get("exit_study")
+    if study:                                  # each base profile × the early-protection variants ("std|B", …)
+        out = {f"{name}|{v}": dataclasses.replace(m, **ch) for name, m in out.items() for v, ch in study.items()}
     return out
 
 
 def full_exit(cfg, pname: str) -> bool:
     """Does the first target close the whole position? Live (PositionManager): yes when the profile sets
     meta.full_exit (scalp, tpX) or pyramiding is globally disabled; trend/std bank a partial and run the rest."""
+    pname = pname.split("|")[0]
     return pname == "scalp" or pname.startswith("tp") or not cfg["management"]["pyramid"]["enabled"]
 
 
@@ -138,6 +142,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
     lvl = lambda k: px_in + side * (m.rr + (k - 1) * m.trail_step_r) * R                 # noqa: E731
     stop_after = lambda k: px_in + side * ((0.0 if k == 1 else m.rr + (k - 2) * m.trail_step_r) + m.lock_r) * R  # noqa: E731
     stop_px, step, adds = stop, 0, 0
+    early_done = False
     open_q, avg, realized = 1.0, px_in, 0.0          # realized in price × qty (initial qty = 1)
     mfe, best_j = 0.0, j0
     k = int(m.struct_k)
@@ -191,6 +196,23 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             return done(mkt, "session_flat", j)
         if tmin[j] - tmin[j0] >= max_hold:
             return done(mkt, "max_hold", j)
+        # 2b) protection before the first target (exit study; all off by default)
+        if step == 0:
+            if not early_done and ((m.early_partial_r > 0 and mfe >= m.early_partial_r)
+                                   or (m.early_partial_pts > 0 and mfe * R >= m.early_partial_pts)):
+                early_done = True
+                q = min(m.early_partial_frac, open_q)
+                realized += (mkt - avg) * side * q
+                open_q -= q
+                r = move(px_in + side * m.early_lock_r * R, j, "early_lock_stop")
+                if r:
+                    return r
+            if m.early_be_r > 0 and mfe >= m.early_be_r:
+                r = move(px_in + side * m.early_lock_r * R, j, "early_lock_stop")
+                if r:
+                    return r
+        if m.giveback_after_r > 0 and mfe >= m.giveback_after_r and (mkt - px_in) * side / R <= mfe * (1 - m.giveback_frac):
+            return done(mkt, "giveback", j)
         # 3) target steps on the mid high/low
         hi = H[j] if side > 0 else L[j]
         while (hi - lvl(step + 1)) * side >= 0:
@@ -198,7 +220,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             if step == 1:
                 if full_exit:                         # scalp / tpX (or adds globally off): all out
                     return done(mkt, "target", j)
-                q = min(m.partial, open_q)
+                q = 0.0 if early_done else min(m.partial, open_q)     # an early partial replaces the 1R one
                 realized += (mkt - avg) * side * q
                 open_q -= q
             ns = stop_after(step)
@@ -372,7 +394,8 @@ def run_job(args) -> list[dict]:
                 keep = [(s, j0) for s, j0 in keep if verify_live_window(st, df, s.i, s.side)]
             for pname, m in profiles.items():
                 busy_until = -1
-                max_hold = 30.0 if pname == "scalp" else 480.0 if pname == "trend" else float(s_cfg["max_hold_minutes"])
+                base = pname.split("|")[0]
+                max_hold = 30.0 if base == "scalp" else 480.0 if base == "trend" else float(s_cfg["max_hold_minutes"])
                 fx = full_exit(cfg, pname)
                 for s, j0 in keep:
                     # the cell's own trade still open → keep the candidate, flagged (the portfolio may have

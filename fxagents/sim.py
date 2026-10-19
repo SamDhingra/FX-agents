@@ -41,6 +41,14 @@ class Mgmt:
     max_hold_bars: int = 48
     min_stop_atr: float = 0.5
     max_stop_pct: float = 0.10
+    # protection BEFORE the first target (exit study, Oct 2026; all off by default = today's live rules):
+    early_partial_r: float = 0.0      # bank `early_partial_frac` once the best price reaches this many R …
+    early_partial_pts: float = 0.0    # … or this many price points (e.g. 10.0 on gold = 100 pips); the 1R partial is then skipped
+    early_partial_frac: float = 0.5
+    early_be_r: float = 0.0           # once the best price reaches this many R, the stop moves to entry + early_lock_r
+    early_lock_r: float = 0.0         # where early moves put the stop (0 = break-even)
+    giveback_after_r: float = 0.0     # once the best price reached this many R, exit if the trade gives back …
+    giveback_frac: float = 0.5        # … this share of its best open profit
 
     @classmethod
     def from_cfg(cls, cfg, rr: float | None = None, bar_minutes: int = 5) -> "Mgmt":
