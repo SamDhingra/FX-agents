@@ -448,6 +448,8 @@ class RiskAgent(Agent):
                        jev_quality=req["grade"]["quality"], jev_confidence=req["grade"]["confidence"],
                        jev_source=req["grade"]["source"], reason=sig.reason,
                        bias_mode=gate["mode"], risk_mult=round(risk_mult, 3))
+        if sig.features.get("draw"):
+            pos.meta["draw"] = sig.features["draw"]                      # what the setup saw, for the trade chart
         if bound:
             pos.meta["price_bound"] = round(price + sig.side * slip, 10)
         if gate.get("no_pyramid"):

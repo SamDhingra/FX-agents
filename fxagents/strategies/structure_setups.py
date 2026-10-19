@@ -7,7 +7,7 @@ import pandas as pd
 
 from .. import structure as sx
 from ..structure import BULL_BOS, BULL_CHOCH
-from .base import RawSignal
+from .base import dbox, dline, RawSignal
 from .ict import KILLZONES, _Fast, _mask
 
 
@@ -44,7 +44,10 @@ class SMCDisplacement(_Fast):
                 elif L[i] <= lvl and win[i]:
                     ref = zone["low"] if p["stop"] == "disp_low" else zone["bot"]
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(min(ref, L[i]) - p["stop_buf_atr"] * a[i]),
-                                         f"Displacement BOS → FVG {p['entry']}"))
+                                         f"Displacement BOS → FVG {p['entry']}",
+                                         features={"draw": [dbox(v.px, zone["bot"], zone["top"], zone["created"] - 2, i, "FVG"),
+                                                            dline(v.px, lvl, zone["created"], i, f"entry level ({p['entry']})"),
+                                                            dline(v.px, zone["low"], zone["created"] - 1, i, "displacement low", "invalid")]}))
                     zone = None
         return out
 
@@ -79,7 +82,11 @@ class _RetestBase(_Fast):
                         and C[i] > O[i] and win[i]:
                     ref = st["origin"] if p["stop"] == "origin" else st["lvl"] - a[i]
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(min(ref, L[i]) - p["stop_buf_atr"] * a[i]),
-                                         f"{self.label} → retest of the broken level"))
+                                         f"{self.label} → retest of the broken level",
+                                         features={"draw": [dline(v.px, st["lvl"], int(ms["brk_src"][st["i"]]), i,
+                                                                  f"broken level ({self.label})"),
+                                                            dline(v.px, st["origin"], int(ms["brk_src"][st["i"]]), i,
+                                                                  "leg origin", "invalid")]}))
                     st = None
         return out
 
@@ -134,7 +141,9 @@ class SMCMss(_Fast):
                     sweep = None
                 elif ms["event"][i] == BULL_CHOCH and disp[i] and win[i]:
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(sweep["low"] - p["stop_buf_atr"] * a[i]),
-                                         "Sweep → MSS (displacement CHoCH)"))
+                                         "Sweep → MSS (displacement CHoCH)",
+                                         features={"draw": [dline(v.px, sweep["low"], sweep["i"], i, "sweep low", "invalid"),
+                                                            dline(v.px, ms["brk"][i], max(0, i - 6), i, "structure shifted")]}))
                     sweep = None
         return out
 

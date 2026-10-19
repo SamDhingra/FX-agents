@@ -260,6 +260,7 @@ def build_app(ctx) -> FastAPI:
         rows = bk(request).journal.trades(limit)
         for r in rows:
             r["events"] = json.loads(r["events"] or "[]")
+            r["draw"] = json.loads(r["draw"]) if r.get("draw") else None
             units.trade(bk(request).cfg, r)
         return rows
 

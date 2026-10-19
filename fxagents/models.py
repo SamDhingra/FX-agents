@@ -138,4 +138,5 @@ class Position:
             "jev_quality": self.jev_quality, "jev_confidence": self.jev_confidence,
             "jev_source": self.jev_source, "opened": self.opened_ts.isoformat(), "reason": self.reason,
             "bias_mode": self.bias_mode, "risk_mult": self.risk_mult,
+            "events": self.events[-40:], "draw": self.meta.get("draw"),
         }

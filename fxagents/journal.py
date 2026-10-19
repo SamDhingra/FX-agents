@@ -38,6 +38,10 @@ class Journal:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(trades)")}
+        if "draw" not in cols:                           # added Oct 2026: the setup's drawing for the trade chart
+            self.db.execute("ALTER TABLE trades ADD COLUMN draw TEXT")
+            self.db.commit()
 
     # ── writes ────────────────────────────────────────────────────────────
     def upsert_trade(self, pos, mult: float, exit_price: float | None = None) -> None:
@@ -53,7 +57,8 @@ class Journal:
             mae_r=round(pos.mae_r, 2), exit_reason=pos.exit_reason, jev_quality=pos.jev_quality,
             jev_confidence=pos.jev_confidence, jev_source=pos.jev_source, reason=pos.reason,
             events=json.dumps(pos.events, default=str), notes=None, bias_mode=pos.bias_mode,
-            tf=pos.strategy.split(":")[1].split("@")[0] if ":" in pos.strategy and "@" in pos.strategy else "")
+            tf=pos.strategy.split(":")[1].split("@")[0] if ":" in pos.strategy and "@" in pos.strategy else "",
+            draw=json.dumps(pos.meta.get("draw")) if pos.meta.get("draw") else None)
         cols = ",".join(row)
         q = ",".join("?" * len(row))
         upd = ",".join(f"{k}=excluded.{k}" for k in row if k not in ("id", "notes"))

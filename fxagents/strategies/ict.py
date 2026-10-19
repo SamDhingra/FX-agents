@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .. import structure as sx
-from .base import RawSignal, Strategy
+from .base import dbox, dline, RawSignal, Strategy
 
 KILLZONES = [["02:00", "05:00"], ["08:30", "11:00"], ["13:30", "15:00"]]
 SB_WINDOWS = {"all": [["03:00", "04:00"], ["10:00", "11:00"], ["14:00", "15:00"]],
@@ -125,7 +125,9 @@ class ICT2022(_Fast):
                             out.append(RawSignal(i, v.side, v.px(C[i]), v.px(ref - p["stop_buf_atr"] * a[i]),
                                                  "ICT 2022: raid → MSS w/ displacement → FVG",
                                                  structural_target=v.px(hi),
-                                                 features={"fvg_atr": float((zone["top"] - zone["bot"]) / a[i])}))
+                                                 features={"fvg_atr": float((zone["top"] - zone["bot"]) / a[i]),
+                                                           "draw": [dbox(v.px, zone["bot"], zone["top"], zone["created"] - 2, i, "FVG"),
+                                                                    dline(v.px, zone["lo"], zone["start"], i, "raid low", "invalid")]}))
                             zone = None
         return out
 
@@ -171,7 +173,9 @@ class ICTSilverBullet(_Fast):
                 elif L[i] <= zone["top"] and C[i] >= zone["bot"]:
                     ref = zone["c1"] if p["stop"] == "fvg" else min(zone["sweep"], zone["c1"])
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(ref - p["stop_buf_atr"] * a[i]),
-                                         f"Silver Bullet ({p['sb']}): displacement FVG retrace"))
+                                         f"Silver Bullet ({p['sb']}): displacement FVG retrace",
+                                         features={"draw": [dbox(v.px, zone["bot"], zone["top"], zone["created"] - 2, i, "FVG"),
+                                                            dline(v.px, zone["sweep"], zone["created"] - 2, i, "sweep low", "invalid")]}))
                     zone = None
         return out
 
@@ -224,7 +228,11 @@ class ICTTurtleSoup(_Fast):
                 if ok and win[i]:
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(st["low"] - p["stop_buf_atr"] * a[i]),
                                          f"Turtle Soup ({p['level']}, {p['confirm']})",
-                                         features={"pierce_atr": float((st["lvl"] - st["low"]) / a[i])}))
+                                         features={"pierce_atr": float((st["lvl"] - st["low"]) / a[i]),
+                                                   "draw": [dline(v.px, st["lvl"], max(0, st["i"] - 12), i, f"swept level ({p['level']})"),
+                                                            dline(v.px, st["low"], st["i"], i, "false-break low", "invalid")]
+                                                   + ([dline(v.px, st["choch"], st["i"], i, "CHoCH level")]
+                                                      if p["confirm"] != "close_back" and np.isfinite(st["choch"]) else [])}))
                     st = None
         return out
 
@@ -270,7 +278,10 @@ class ICTAMD(_Fast):
                 if ok:
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(st["low"] - p["stop_buf_atr"] * a[i]),
                                          f"AMD ({p['model']}): manipulation → distribution",
-                                         structural_target=v.px(lv["asia_hi"][i]) if p["model"] == "asia" else None))
+                                         structural_target=v.px(lv["asia_hi"][i]) if p["model"] == "asia" else None,
+                                         features={"draw": [dline(v.px, x, max(0, i - 24), i,
+                                                                  "Asia low" if p["model"] == "asia" else "midnight open"),
+                                                            dline(v.px, st["low"], max(0, i - 12), i, "manipulation low", "invalid")]}))
                     done.add(day[i]); st = None
         return out
 

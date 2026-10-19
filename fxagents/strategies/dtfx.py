@@ -57,6 +57,26 @@ class _DTFX(_Fast):
     def definition(cls) -> dict:
         return {"break": cls.rule, "zone": cls.zone_kind, "anchor": cls.anchor if cls.zone_kind == "fib" else None}
 
+    def _draw(self, v, zone: dict, i: int, lvl: float, floor: float) -> list[dict]:
+        """Chart drawing in real prices (v.px un-mirrors shorts)."""
+        lo, hi = sorted((v.px(zone["origin"]), v.px(zone["ext"])))
+        out = [{"k": "box", "lo": lo, "hi": hi, "i0": zone["oi"], "i1": i, "label": f"impulse leg ({zone['kind']})",
+                "role": "leg"}]
+        if self.zone_kind == "origin":
+            zlo, zhi = sorted((v.px(zone["zlo"]), v.px(zone["zhi"])))
+            out.append({"k": "box", "lo": zlo, "hi": zhi, "i0": zone.get("zk", zone["oi"]), "i1": i,
+                        "label": "origin zone", "role": "zone"})
+        else:
+            out.append({"k": "line", "px": v.px(lvl), "i0": zone["start"], "i1": i,
+                        "label": (f"{self.params['level']}% zone" if isinstance(self.params["level"], str)
+                                  else f"{round(self.params['level'] * 100, 1):g}% fib"),
+                        "role": "level"})
+            if "deep" in zone:
+                out.append({"k": "line", "px": v.px(zone["deep"]), "i0": zone["start"], "i1": i, "label": "deep edge",
+                            "role": "level"})
+        out.append({"k": "line", "px": v.px(floor), "i0": zone["oi"], "i1": i, "label": "invalidation", "role": "invalid"})
+        return out
+
     def _scan(self, df, ctx):
         p, a = self.params, ctx["atr"]
         win = _mask(ctx, KILLZONES if p["sessions"] == "killzones" else None)
@@ -75,10 +95,11 @@ class _DTFX(_Fast):
                     zone = None
                     if hi - origin < p["min_leg_atr"] * a[i]:
                         continue
-                    z = {"start": i, "origin": origin, "ext": hi, "brk_hi": hi, "kind": "BOS" if ev == BULL_BOS else "flip"}
+                    z = {"start": i, "origin": origin, "ext": hi, "brk_hi": hi, "kind": "BOS" if ev == BULL_BOS else "flip",
+                         "oi": oi}
                     if self.zone_kind == "origin":
                         k = next((k for k in range(oi, max(src, oi - 3) - 1, -1) if C[k] < O[k]), oi)
-                        z["zhi"], z["zlo"] = H[k], min(L[k], origin)
+                        z["zhi"], z["zlo"], z["zk"] = H[k], min(L[k], origin), k
                     zone = z
                     continue
                 if ev < 0:                                               # bearish break → bullish zone gone
@@ -113,7 +134,8 @@ class _DTFX(_Fast):
                         out.append(RawSignal(i, v.side, v.px(C[i]), v.px(floor - p["stop_buf_atr"] * a[i]),
                                              f"DTFX {self.name[5:]} {zone['kind']} → {p['level']}% zone rejection",
                                              structural_target=v.px(zone["ext"]),
-                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i])}))
+                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i]),
+                                                       "draw": self._draw(v, zone, i, lvl, floor)}))
                     zone = None
                     continue
                 if L[i] > lvl:
@@ -129,7 +151,8 @@ class _DTFX(_Fast):
                         out.append(RawSignal(i, v.side, v.px(C[i]), v.px(floor - p["stop_buf_atr"] * a[i]),
                                              f"DTFX {self.name[5:]} {zone['kind']} → {p['level']}% zone rejection",
                                              structural_target=v.px(zone["ext"]),
-                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i])}))
+                                             features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i]),
+                                                       "draw": self._draw(v, zone, i, lvl, floor)}))
                         zone = None
                     continue
                 # first touch → zone mitigated, trade or not
@@ -140,7 +163,8 @@ class _DTFX(_Fast):
                                          + (f"{int(p['level'] * 100)}% " if self.zone_kind == "fib" else "origin zone ")
                                          + p["confirm"],
                                          structural_target=v.px(zone["ext"]),
-                                         features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i])}))
+                                         features={"leg_atr": float((zone["ext"] - zone["origin"]) / a[i]),
+                                                       "draw": self._draw(v, zone, i, lvl, floor)}))
                 zone = None
         return out
 

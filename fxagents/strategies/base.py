@@ -164,6 +164,7 @@ class Strategy:
                 continue
             s.features.setdefault("atr", float(a[s.i]))
             s.features.setdefault("risk_atr", float(risk / a[s.i]) if a[s.i] else None)
+            s.features["draw"] = drawing(df, s)
             out.append(s)
         return out
 
@@ -178,6 +179,40 @@ class Strategy:
         if len(combos) > max_n:
             combos = [combos[j] for j in rng.choice(len(combos), max_n, replace=False)]
         return combos
+
+
+def dbox(px, a, b, i0, i1, label: str, role: str = "zone") -> dict:
+    """A drawn box between two prices (mirror-space values; px maps them to real prices)."""
+    lo, hi = sorted((float(px(a)), float(px(b))))
+    return {"k": "box", "lo": lo, "hi": hi, "i0": int(i0), "i1": int(i1), "label": label, "role": role}
+
+
+def dline(px, x, i0, i1, label: str, role: str = "level") -> dict:
+    return {"k": "line", "px": float(px(x)), "i0": int(i0), "i1": int(i1), "label": label, "role": role}
+
+
+def drawing(df: pd.DataFrame, s: RawSignal) -> list[dict]:
+    """What the setup saw, for the trade chart: the setup's own `features["draw"]` items (bar indices i0/i1 →
+    bar start times t0/t1, prices real) plus the structural target. Kinds: box (lo–hi between t0 and t1),
+    line (px from t0 to t1), mark (px at t0). Display only — never used for trading decisions."""
+    idx = df.index
+    def ts(i):
+        return idx[max(0, min(int(i), len(idx) - 1))].isoformat() if i is not None else None
+    out = []
+    for d in (s.features.get("draw") or []):
+        d = dict(d)
+        for k in ("i0", "i1"):
+            if k in d:
+                d["t" + k[1]] = ts(d.pop(k))
+        for k in ("lo", "hi", "px"):
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 6)
+        out.append(d)
+    if s.structural_target is not None and np.isfinite(s.structural_target):
+        out.append({"k": "line", "px": round(float(s.structural_target), 6), "t0": ts(s.i), "label": "structural target",
+                    "role": "target"})
+    out.append({"k": "mark", "px": round(float(s.entry), 6), "t0": ts(s.i), "label": "signal bar", "role": "signal"})
+    return out
 
 
 def in_window(ctx: dict, i: int, windows: list[list[str]] | None) -> bool:

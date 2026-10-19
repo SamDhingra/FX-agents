@@ -9,9 +9,14 @@ import numpy as np
 import pandas as pd
 
 from ..indicators import Pivot, take_known
-from .base import RawSignal, Strategy, in_window
+from .base import RawSignal, Strategy, dbox, dline, in_window
 
 KILLZONES = [["02:00", "05:00"], ["08:30", "11:00"], ["13:30", "15:00"]]
+
+
+def _px(side: int):
+    """Mirror-space price → real price for drawings."""
+    return lambda x: side * x
 
 
 def _mirror(df: pd.DataFrame, piv: list[Pivot]):
@@ -80,9 +85,12 @@ class ICTFvgSweep(Strategy):
                             and in_window(ctx, i, p["killzones"]) \
                             and (not p["use_htf"] or htf[i] * side >= 0):
                         stop = min(f["stop"], L[f["created"]:i + 1].min()) - p["stop_buf_atr"] * a[i]
+                        px = _px(side)
                         out.append(RawSignal(i, side, side * C[i], side * stop,
                                              "Sweep → MSS → FVG retrace",
-                                             features={"fvg_atr": float((f["top"] - f["bottom"]) / a[i])}))
+                                             features={"fvg_atr": float((f["top"] - f["bottom"]) / a[i]),
+                                                       "draw": [dbox(px, f["bottom"], f["top"], f["created"] - 2, i, "FVG"),
+                                                                dline(px, f["stop"], max(0, f["created"] - 6), i, "sweep low", "invalid")]}))
                         continue
                     keep.append(f)
                 active = keep
@@ -131,10 +139,14 @@ def _leg_retrace_scan(self: Strategy, df, ctx, fib_touch: float, fib_floor: floa
             if not in_window(ctx, i, windows) or (use_htf and htf[i] * side < 0):
                 continue
             stop = leg["low"] - p["stop_buf_atr"] * a[i]
+            px = _px(side)
             out.append(RawSignal(i, side, side * C[i], side * stop, label,
                                  structural_target=side * leg["high"],
                                  features={"leg_atr": float(rng / a[i]),
-                                           "retrace": float((leg["high"] - L[i]) / rng)}))
+                                           "retrace": float((leg["high"] - L[i]) / rng),
+                                           "draw": [dbox(px, leg["low"], leg["high"], leg["start"] - 3, i, "impulse leg", "leg"),
+                                                    dline(px, touch_lvl, leg["start"], i, f"{fib_touch:.0%} retrace"),
+                                                    dline(px, floor_lvl, leg["start"], i, f"{fib_floor:.0%} floor", "invalid")]}))
             leg = None
     return out
 
@@ -293,7 +305,8 @@ class SMCOrderBlock(Strategy):
                     if i > b["created"] and L[i] <= b["hi"] and C[i] >= b["lo"]:
                         out.append(RawSignal(i, side, side * C[i], side * (b["lo"] - p["stop_buf_atr"] * a[i]),
                                              "BOS → return to order block",
-                                             features={"ob_atr": float((b["hi"] - b["lo"]) / a[i])}))
+                                             features={"ob_atr": float((b["hi"] - b["lo"]) / a[i]),
+                                                       "draw": [dbox(_px(side), b["lo"], b["hi"], b["created"] - 3, i, "order block")]}))
                         continue
                     keep.append(b)
                 blocks = keep
@@ -333,7 +346,9 @@ class SMCBreaker(Strategy):
                     if i > z["created"] and L[i] <= z["hi"] and C[i] >= z["lo"]:
                         ref = z["lo"] if p["stop_at"] == "breaker" else z["sweep"]
                         out.append(RawSignal(i, side, side * C[i], side * (min(ref, L[i]) - p["stop_buf_atr"] * a[i]),
-                                             "Sweep → MSS → breaker retest"))
+                                             "Sweep → MSS → breaker retest",
+                                             features={"draw": [dbox(_px(side), z["lo"], z["hi"], z["created"] - 3, i, "breaker"),
+                                                                dline(_px(side), z["sweep"], z["created"] - 3, i, "sweep low", "invalid")]}))
                         continue
                     keep.append(z)
                 zones = keep
@@ -373,7 +388,10 @@ class SMCInverseFVG(Strategy):
                         continue
                     if i > g["inv"] and L[i] <= g["top"] and C[i] >= g["top"]:
                         out.append(RawSignal(i, side, side * C[i], side * (g["bot"] - p["stop_buf_atr"] * a[i]),
-                                             "Inverse FVG retest"))
+                                             "Inverse FVG retest",
+                                             features={"draw": [dbox(_px(side), g["bot"], g["top"], g["created"] - 2, i, "inverted FVG"),
+                                                                {"k": "mark", "px": float(side * C[g["inv"]]), "i0": int(g["inv"]),
+                                                                 "label": "closed through (inversion)", "role": "event"}]}))
                         continue
                     keep.append(g)
                 inverted = keep
@@ -415,6 +433,10 @@ class SMCLiquiditySweep(Strategy):
                         raid = None
                     elif i > raid["i"] and C[i] > raid["choch"]:
                         out.append(RawSignal(i, side, side * C[i], side * (raid["low"] - p["stop_buf_atr"] * a[i]),
-                                             "Liquidity raid → CHoCH", features={"pool": raid["level"] * side}))
+                                             "Liquidity raid → CHoCH",
+                                             features={"pool": raid["level"] * side,
+                                                       "draw": [dline(_px(side), raid["level"], max(0, raid["i"] - 12), i, "liquidity pool"),
+                                                                dline(_px(side), raid["choch"], raid["i"], i, "CHoCH level"),
+                                                                dline(_px(side), raid["low"], raid["i"], i, "raid low", "invalid")]}))
                         raid = None
         return out

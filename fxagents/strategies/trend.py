@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from .. import structure as sx
-from .base import RawSignal
+from .base import dbox, dline, RawSignal
 from .ict import _Fast
 
 
@@ -100,5 +100,7 @@ class TrendBreakout(_Fast):
                 if C[i] > hh[i] and C[i] > e50[i] > e50[i - 5]:
                     last = i
                     out.append(RawSignal(i, v.side, v.px(C[i]), v.px(C[i] - p["stop_atr"] * a[i]),
-                                         f"Trend breakout of the {n}-bar high with the {p['htf']} trend ({p['trend']})"))
+                                         f"Trend breakout of the {n}-bar high with the {p['htf']} trend ({p['trend']})",
+                                         features={"draw": [dline(v.px, hh[i], i - n, i, f"{n}-bar high broken"),
+                                                            dline(v.px, e50[i], i - 5, i, "EMA50", "trend")]}))
         return out

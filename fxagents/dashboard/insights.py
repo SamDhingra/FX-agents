@@ -235,6 +235,7 @@ def story(main, c, trade_id: str) -> dict | None:
         return None
     t = dict(r)
     t["events"] = json.loads(t.get("events") or "[]")
+    t["draw"] = json.loads(t["draw"]) if t.get("draw") else None
     opened = pd.Timestamp(t["opened"])
     lo, hi = (opened - pd.Timedelta(minutes=10)).isoformat(), (opened + pd.Timedelta(minutes=2)).isoformat()
     sig = c.journal.db.execute("SELECT * FROM signals WHERE symbol=? AND ts>=? AND ts<=? ORDER BY "
