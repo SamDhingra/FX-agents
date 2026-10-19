@@ -203,6 +203,19 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.sweep_vwap --sweep-only \
                --data dev_m1,holdout_m1 --out data/year_test/sweep_only_gold </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  reclaimv2) # author's sweep_reclaim_v2 (fxagents/sweep_reclaim_v2.py): step 1 on the seen sets (dev_m1 + holdout_m1);
+             # only if that passes is the untouched 2016–2020 export (old_m1) opened and judged, once
+             need_env; mkdir -p logs
+             for s_ in dev_m1 holdout_m1; do [[ -d "data/export/$s_" ]] || { echo "no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/reclaimv2-build.log 2>&1 || { echo "build failed — see logs/reclaimv2-build.log"; exit 1; }
+             if [[ ! -f data/export/old_m1/XAUUSD_M1.csv.gz ]]; then
+               echo "exporting untouched 2016–2020 gold (OANDA bid/ask, one-time, ~10–20 min)…"
+               $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.export_history --name old_m1 --gran M1 \
+                 --from 2016-01-01 --until 2020-12-31 --symbols XAUUSD </dev/null || { echo "export failed"; exit 1; }
+             fi
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.sweep_reclaim_v2 \
+               --known dev_m1,holdout_m1 --judge old_m1 --out data/year_test/sweep_reclaim_v2 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
              for k in FOREXCOM_USERNAME FOREXCOM_PASSWORD FOREXCOM_APPKEY; do grep -q "^$k=." .env || { echo "add $k=... to .env"; exit 1; }; done
@@ -261,7 +274,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
