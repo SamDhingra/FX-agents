@@ -1,50 +1,40 @@
 """SMC inducement trap: 1H dealing range → 15m demand/supply + inducement → 5m CHoCH + FVG → 3m order-block limit entry.
 Proposed by the outside strategy author (Oct 19 2026), coded from their description and frozen here before any run.
 
-    python -m fxagents.smc_idm --judge dev_m1 --then holdout_m1,old_m1 --out data/year_test/smc_idm     (./fx.sh smcidm)
+    python -m fxagents.smc_idm --known dev_m1,holdout_m1 --judge old_m1 --out data/year_test/smc_idm   (./fx.sh smcidm)
 
 All signals on mid candles; fills on the real bid/ask (a buy limit fills when the ASK trades at or below it, a sell limit
 when the BID trades at or above it; at the minute's open if price gaps through). Times New York. Long logic is
 described; shorts are its mirror image except where the author made them asymmetric (marked).
 
-Open points fixed here (Oct 19 2026, before testing):
-  Swings        a swing high/low = a candle whose high (low) beats the 2 candles on each side; it is known only once
-                those 2 later candles have closed. Used on 1H, 15m, 5m and 3m.
+Definitions — the author's exact scale-invariant spec (sent Oct 19 2026, before any run), plus the points it left
+open, fixed here:
+  Swings        2-candle fractals (a high/low beating the 2 candles each side), known 2 candles later; the 5m
+                "lower high" uses a 1-candle fractal, known 1 candle later.
   1H bias +     bullish after a 1H close above the last confirmed 1H swing high (BOS); bearish after a close below the
-  dealing range last confirmed swing low. Bullish range = from the last confirmed swing low at the BOS to the highest
-                1H high since; equilibrium = its midpoint. Longs only while bullish AND the 15m zone's top is below
-                equilibrium (discount). Mirror for shorts (premium).
-  15m zone      a 15m close above the last confirmed 15m swing high (BOS) creates a demand zone = the last bearish 15m
-                candle in the 10 candles before the BOS candle (its full high–low), provided the move from it left a
-                15m fair value gap (some candle's low above the high two candles earlier, after the zone candle, by the
-                BOS close). Unmitigated = not traded into since; it lives 2 days. A 15m close below it kills it.
-  Inducement    a confirmed 5m swing low formed after the zone, above the zone top and at most 1.5 × ATR(14,15m) above
-                it. Required at the moment of the tap; the tap itself takes it (sweep).
-  Tap           a 5m candle trades into the zone (low ≤ zone top) while the inducement exists. A 5m close below the
-                zone kills the setup.
-  5m CHoCH      within 12 five-minute candles after the tap, a 5m close above the last confirmed 5m swing high before
-                the tap ("the lower high that pushed price into the zone"), with a 5m FVG formed after the tap by that
-                close or the next candle (the setup is confirmed at whichever comes last).
-  3m order      the 3m swing low = lowest 3m low from the tap to the confirmation; the order block = the first bearish
-  block         3m candle at or before that low (looking back up to 5 candles). The 3m FVG = the first 3m imbalance
-                after the order block, by the confirmation.
-  Entry         LONG: buy limit at the 3m FVG midpoint (else the order block's top) + $0.20, stop $0.45 below the 3m
-                swing low. SHORT (author's asymmetric rule): sell limit at the bottom of the 3m supply order block, stop
-                $0.50 above the 3m swing high. The limit lives 30 min; it is cancelled if price (mid) covers 75% of the
-                way to TP1 first, or reaches the stop first.
-  Targets       TP1 (50%) = internal liquidity: the swing high price fell from into the zone (highest 5m high
-                between the zone's creation and the tap — above the CHoCH level, as in the author's diagram), at
-                least 1.5R from the entry. TP2 (50%) = external: the 1H dealing range's high, at least 1R beyond
-                TP1. The stop does not move (the author gives no break-even rule). Out at 16:30 NY at the latest.
-  Not tested    the Unicorn and Judas-swing variants, the discretionary failure-swing exit and the 20% long-term hold.
-  Window        fills 02:00–12:00 NY (London + New York), none within 15 min of a scheduled USD release (FOMC, CPI,
-                NFP, PPI). At most 3 trades a day, one at a time.
+  dealing range last confirmed swing low. Range = last confirmed swing low at the BOS → highest 1H high since;
+                equilibrium = midpoint. Longs only while bullish and the 15m zone's top is below equilibrium.
+  15m zone      base candle i_ob whose move left a 3-candle FVG (low[i_ob+2] > high[i_ob]); zone = its high–low,
+                known at the close of i_ob+2. Lives 2 days; a 15m close below it kills it.
+  Inducement    a confirmed 5m or 15m swing low formed after the zone, above the zone top, existing at the tap; the tap
+                (a 5m low into the zone) sweeps it. A 5m close below the zone kills the setup.
+  5m CHoCH      within 12 five-minute candles of the tap, a 5m close above the last 1-candle fractal high before the
+                tap, with a 5m or 3m FVG formed after the tap (by that close or the next 5m candle).
+  3m order      the last bearish 3m candle at or before the lowest 3m low since the tap (up to 5 candles back); the 3m
+  block + FVG   FVG = the first 3m imbalance after it.
+  Entry         limit at the 3m FVG midpoint (else the order block's top), valid 24 minutes; cancelled if price (mid)
+                covers 75% of the way to TP1 first, or reaches the stop first. Symmetric for shorts.
+  Stop          0.15 × ATR(14,15m) beyond the order block's far end, and at least 0.80 × ATR15 from the limit.
+  Targets       TP1 (50%) = 1.8R, or the internal high price fell from into the zone if that is further; TP2 (50%) =
+                3.0R, or the 1H dealing range's high if further. Fixed stop. Flat 16:30 NY.
+  Not tested    the Unicorn / Judas variants, the discretionary failure-swing exit, the 20% long-term hold.
+  Window        fills 02:00–12:00 NY, none within 15 min of a scheduled USD release; ≤ 3 trades a day, one at a time.
   Controls      coin flip (same minute, random side, market entry, same stop distance and R targets) and the same model
-                WITHOUT the 1H bias / premium-discount filter.
+                without the 1H bias / premium-discount filter.
 
 Gates: ≥ 100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves, better
-than both controls. Protocol: judged first on --judge (dev_m1, Oct 2024–Sep 2026). Only if it passes are the --then
-sets (2021–Sep 2024, and the untouched 2016–2020 export if present) opened and judged once each.
+than both controls. Protocol (author's): step 1 on the seen sets dev_m1 + holdout_m1 (2021 → Sep 2026) combined, each
+also positive; only then is the untouched old_m1 (2016–2020) opened and judged once.
 """
 from __future__ import annotations
 
@@ -63,12 +53,11 @@ WIN = (120, 720)                 # fills 02:00–12:00 NY
 FLAT = 990
 MAX_DAY = 3
 OB_LOOK, ZONE_LIFE_15 = 10, 192  # 15m candles: order-block look-back; zone lifetime (2 days)
-IDM_MAX_ATR = 1.5
 CHOCH_BARS = 12
 OB3_LOOK = 5
-LIMIT_MIN, CANCEL_FRAC = 30, 0.75
-LONG_PAD, LONG_STOP, SHORT_STOP = 0.20, 0.45, 0.50
-TP1_MIN_R, TP2_GAP_R = 1.5, 1.0
+LIMIT_MIN, CANCEL_FRAC = 24, 0.75          # limit valid 24 min (eight 3m candles)
+STOP_ATR_BUF, MIN_STOP_ATR = 0.15, 0.80    # stop 0.15 × ATR15 beyond the 3m OB; at least 0.80 × ATR15 from the entry
+TP1_R, TP2_R = 1.8, 3.0                    # TP1 ≥ 1.8R (or the internal high if further), TP2 ≥ 3R (or the 1H range high)
 FUNNEL: dict[str, int] = {}          # diagnostics: setups reaching each stage (rule run, both sides)
 
 
@@ -125,22 +114,26 @@ def h1_state(b60: pd.DataFrame, side: int):
 
 
 def zones15(b15: pd.DataFrame, side: int, atr15: np.ndarray) -> list[dict]:
-    """Demand zones (in the side's direction) with their creation time and death conditions precomputed lazily."""
-    O, H, L, C = ohlc(b15, side)
-    shp, _, _, _ = swings(H, L)
+    """Author's definition: base candle i_ob whose move left a 3-candle FVG (low[i_ob+2] > high[i_ob]); zone = its
+    full range, known at the close of i_ob+2."""
+    _, H, L, _ = ohlc(b15, side)
     E = b15.end.to_numpy()
-    out, broken = [], np.nan
-    for i in range(OB_LOOK + 2, len(C)):
-        if not np.isfinite(shp[i - 1]) or C[i] <= shp[i - 1] or shp[i - 1] == broken:
-            continue
-        broken = shp[i - 1]
-        ob = next((j for j in range(i - 1, i - 1 - OB_LOOK, -1) if C[j] < O[j]), None)
-        if ob is None:
-            continue
-        if not any(L[n] > H[n - 2] for n in range(ob + 2, i + 1)):
-            continue
-        out.append({"top": float(H[ob]), "bot": float(L[ob]), "made": int(E[i]), "i15": i, "ob": ob,
-                    "atr": float(atr15[i])})
+    out = []
+    for i in range(14, len(H) - 2):
+        if L[i + 2] > H[i]:
+            out.append({"top": float(H[i]), "bot": float(L[i]), "made": int(E[i + 2]), "i15": i + 2, "ob": i,
+                        "atr": float(atr15[i + 2])})
+    return out
+
+
+def fractal1_highs(H: np.ndarray) -> np.ndarray:
+    """Last confirmed 1-bar fractal high as of each candle's close (high above both neighbours, known one candle later)."""
+    out, cur = np.full(len(H), np.nan), np.nan
+    for t in range(len(H)):
+        i = t - 1
+        if i >= 1 and H[i] > H[i - 1] and H[i] > H[i + 1]:
+            cur = H[i]
+        out[t] = cur
     return out
 
 
@@ -150,11 +143,16 @@ def find_setups(a: dict, side: int, htf: bool = True) -> list[dict]:
     O3, H3, L3, C3 = ohlc(b3, side)
     S5, E5, S3, E3 = b5.start.to_numpy(), b5.end.to_numpy(), b3.start.to_numpy(), b3.end.to_numpy()
     E15, E60 = b15.end.to_numpy(), b60.end.to_numpy()
-    sh5, _, sl5, sl5i = swings(H5, L5)
+    _, _, sl5, sl5i = swings(H5, L5)
+    lh5 = fractal1_highs(H5)
+    _, H15, L15, _ = ohlc(b15, side)
+    _, _, sl15, sl15i = swings(H15, L15)
+    S15 = b15.start.to_numpy()
+    atr15 = a["atr15"]
     bull, rlo, rhi = a["h1"][side]
     _, _, _, C15 = ohlc(b15, side)
     zs = zones15(b15, side, a["atr15"])
-    FUNNEL["15m zones (OB + FVG)"] = FUNNEL.get("15m zones (OB + FVG)", 0) + len(zs) * htf
+    FUNNEL["15m zones (base + FVG)"] = FUNNEL.get("15m zones (base + FVG)", 0) + len(zs) * htf
     out = []
     zi = 0
     active: list[dict] = []
@@ -173,9 +171,15 @@ def find_setups(a: dict, side: int, htf: bool = True) -> list[dict]:
             if z["state"] == "armed":
                 if L5[k] > z["top"]:
                     continue
-                # tap: needs an inducement swing low formed after the zone, just above it, confirmed before this candle
-                idm_i = sl5i[k - 1]
-                ok = idm_i >= 0 and S5[idm_i] >= z["made"] and z["top"] < sl5[k - 1] <= z["top"] + IDM_MAX_ATR * z["atr"]
+                # tap: needs an inducement — a confirmed 5m or 15m swing low formed after the zone, above its top
+                idm_i, idm_t = -1, None
+                if sl5i[k - 1] >= 0 and S5[sl5i[k - 1]] >= z["made"] and sl5[k - 1] > z["top"]:
+                    idm_i, idm_t = sl5i[k - 1], S5[sl5i[k - 1]]
+                j15 = int(np.searchsorted(E15, S5[k], side="right")) - 1
+                if j15 >= 0 and sl15i[j15] >= 0 and S15[sl15i[j15]] >= z["made"] and sl15[j15] > z["top"]:
+                    if idm_t is None or S15[sl15i[j15]] > idm_t:
+                        idm_t = S15[sl15i[j15]]
+                ok = idm_t is not None
                 count("zone tapped", htf)
                 if not ok or C5[k] < z["bot"]:
                     z["state"] = "done"
@@ -187,7 +191,7 @@ def find_setups(a: dict, side: int, htf: bool = True) -> list[dict]:
                         z["state"] = "done"
                         continue
                 count("in 1H bias + discount", htf)
-                z.update(state="tapped", tap=k, lh=sh5[k - 1], idm=idm_i,
+                z.update(state="tapped", tap=k, lh=lh5[k - 1],
                          dol=float(rhi[int(np.searchsorted(E60, E5[k], side="right")) - 1]) if htf else np.nan)
                 continue
             if z["state"] == "tapped":
@@ -198,14 +202,19 @@ def find_setups(a: dict, side: int, htf: bool = True) -> list[dict]:
                     continue
                 count("5m CHoCH", htf)
                 conf = None
+                m0_ = int(np.searchsorted(S3, S5[z["tap"]]))
                 for n in (k, k + 1):
-                    if n < len(b5) and any(L5[q] > H5[q - 2] for q in range(z["tap"] + 2, n + 1)):
+                    if n >= len(b5):
+                        break
+                    m1n = int(np.searchsorted(E3, E5[n], side="right"))
+                    if any(L5[q] > H5[q - 2] for q in range(z["tap"] + 2, n + 1)) or \
+                            any(L3[q] > H3[q - 2] for q in range(m0_ + 2, m1n)):
                         conf = n
                         break
                 z["state"] = "done"
                 if conf is None:
                     continue
-                count("with 5m FVG", htf)
+                count("with 5m/3m FVG", htf)
                 t_conf = int(E5[conf])
                 m0 = int(np.searchsorted(S3, S5[z["tap"]]))
                 m1_ = int(np.searchsorted(E3, t_conf, side="right"))
@@ -216,18 +225,17 @@ def find_setups(a: dict, side: int, htf: bool = True) -> list[dict]:
                 if ob is None:
                     continue
                 count("3m order block found", htf)
-                swing_lo = float(L3[m0:m1_].min())
                 fvg = next((n for n in range(ob + 2, m1_) if L3[n] > H3[n - 2]), None)
-                if side > 0:
-                    limit = ((L3[fvg] + H3[fvg - 2]) / 2 if fvg is not None else H3[ob]) + LONG_PAD
-                    stop = swing_lo - LONG_STOP
-                else:                                   # author's asymmetric short rule: limit at the OB's bottom
-                    limit = H3[ob]                      # (mirrored top = real bottom), no FVG, wider stop pad
-                    stop = swing_lo - SHORT_STOP
+                i15c = int(np.searchsorted(E15, t_conf, side="right")) - 1
+                A = float(atr15[i15c])
+                if not np.isfinite(A) or A <= 0:
+                    continue
+                limit = (L3[fvg] + H3[fvg - 2]) / 2 if fvg is not None else H3[ob]
+                stop = min(L3[ob] - STOP_ATR_BUF * A, limit - MIN_STOP_ATR * A)
                 i_made = int(np.searchsorted(S5, z["made"]))       # internal liquidity: the swing high price fell
                 tp1 = float(H5[i_made:z["tap"]].max()) if z["tap"] > i_made else np.nan   # from into the zone
                 out.append({"t": t_conf, "side": side, "limit": float(limit), "stop": float(stop), "tp1": tp1,
-                            "dol": z["dol"], "zone": (z["bot"], z["top"])})
+                            "dol": z["dol"], "zone": (z["bot"], z["top"]), "atr15": A})
         active = keep
     return out
 
@@ -280,7 +288,7 @@ def execute(a: dict, setups: list[dict], blocked: np.ndarray, rng):
         risk_plan = s["limit"] - s["stop"]
         if risk_plan <= 0:
             continue
-        tp1 = max(s["tp1"] if np.isfinite(s["tp1"]) else -np.inf, s["limit"] + TP1_MIN_R * risk_plan)
+        tp1 = max(s["tp1"] if np.isfinite(s["tp1"]) else -np.inf, s["limit"] + TP1_R * risk_plan)
         cancel_at = s["limit"] + CANCEL_FRAC * (tp1 - s["limit"])
         fill = None
         for k in range(j0, min(len(ns), j0 + LIMIT_MIN)):
@@ -302,9 +310,9 @@ def execute(a: dict, setups: list[dict], blocked: np.ndarray, rng):
         risk = entry - s["stop"]
         if risk <= 0:
             continue
-        tp1 = max(s["tp1"] if np.isfinite(s["tp1"]) else -np.inf, entry + TP1_MIN_R * risk)
+        tp1 = max(s["tp1"] if np.isfinite(s["tp1"]) else -np.inf, entry + TP1_R * risk)
         dol = s["dol"] if np.isfinite(s["dol"]) else -np.inf
-        tp2 = max(dol, tp1 + TP2_GAP_R * risk)
+        tp2 = max(dol, entry + TP2_R * risk, tp1)
         spread = a["ask_o"][j] - a["bid_o"][j]
         jx, pts, why = manage(a, X, j, entry, s["stop"], tp1, tp2)
         trades.append(row(a, j, jx, side, entry, pts, risk, spread, why, tp1_R=(tp1 - entry) / risk,
@@ -389,44 +397,52 @@ def detail(T: pd.DataFrame) -> list[str]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--judge", default="dev_m1")
-    ap.add_argument("--then", default="holdout_m1,old_m1")
+    ap.add_argument("--known", default="dev_m1,holdout_m1")
+    ap.add_argument("--judge", default="old_m1")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=43)
     a_ = ap.parse_args()
     a_.out.mkdir(parents=True, exist_ok=True)
-    md = ["# SMC inducement trap → 5m CHoCH → 3m order-block limit (gold)", "",
-          "Author's model as described (Oct 19 2026); every open point fixed in fxagents/smc_idm.py before this run. "
-          "Real OANDA bid/ask fills (limit orders fill only when the ask/bid actually trades there); R per whole "
-          "position (50% TP1, 50% TP2) after spread; 2× costs pays one more spread.", "",
+    md = ["# SMC inducement trap → 5m CHoCH → 3m order-block limit (gold), scale-invariant spec", "",
+          "Author's model in the author's own exact definitions (Oct 19 2026), every open point fixed in "
+          "fxagents/smc_idm.py before any run. Real OANDA bid/ask fills (a limit fills only when the ask/bid actually "
+          "trades there); R per whole position (50% TP1, 50% TP2) after spread; 2× costs pays one more spread.", "",
           "Gates: ≥ 100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves, "
-          "better than the coin flip and than the same model without the 1H bias. Step 1 judges the first set; the "
-          "later sets are opened only if step 1 passes.", ""]
-    out, days = run_set(a_.judge, a_.seed)
-    res, ok = evaluate(out, days)
-    T = pd.DataFrame(out["rule"][0])
-    T.to_csv(a_.out / f"trades_{a_.judge}.csv.gz", index=False)
-    md += table(a_.judge, res, ok, "step 1") + detail(T)
+          "better than the coin flip and than the same model without the 1H bias. **Step 1:** the seen sets "
+          "(2021 → Sep 2026) must clear every gate combined and be positive in each. **Step 2:** only then is the "
+          "untouched 2016–2020 export opened, once, and judged.", ""]
+    outs, dayss, rows = {}, {}, {}
+    for ds in a_.known.split(","):
+        outs[ds], dayss[ds] = run_set(ds, a_.seed)
+        res, ok = evaluate(outs[ds], dayss[ds])
+        rows[ds] = res
+        T = pd.DataFrame(outs[ds]["rule"][0])
+        T.to_csv(a_.out / f"trades_{ds}.csv.gz", index=False)
+        md += table(ds, res, ok, "seen (step 1)") + detail(T)
+        print(f"  {ds}: {len(T)} trades", flush=True)
+    comb = {k: tuple(sum((list(outs[ds][k][i]) for ds in outs), []) for i in range(2)) for k in ("rule", "no HTF filter")}
+    cdays = pd.DatetimeIndex(sorted(set().union(*[set(d) for d in dayss.values()])))
+    cres, cok = evaluate(comb, cdays)
+    step1 = cok and all(rows[ds]["rule"].get("avg_R", -1) > 0 for ds in outs)
+    md += table("seen, combined", cres, cok, "step 1 gate")
+    rows["combined"] = cres
     if FUNNEL:
-        md += ["Setups reaching each stage (rule, longs + shorts): " + " → ".join(f"{k} {v:,}" for k, v in FUNNEL.items())
-               + f" → limit filled and taken {len(T):,}", ""]
+        md += ["Setups reaching each stage (rule, longs + shorts, seen sets): "
+               + " → ".join(f"{k} {v:,}" for k, v in FUNNEL.items())
+               + f" → limit filled and taken {cres['rule'].get('trades', 0):,}", ""]
         FUNNEL.clear()
-    rows = {a_.judge: res}
-    if not ok:
-        md += [f"**Step 1 failed — {a_.then} not opened.**", ""]
+    if not step1:
+        md += [f"**Step 1 failed — {a_.judge} was NOT opened** and stays untouched.", ""]
+    elif not (Path("data/export") / a_.judge / "XAUUSD_M1.csv.gz").exists():
+        md += [f"**Step 1 passed** — export {a_.judge} (2016–2020) and rerun to judge it.", ""]
     else:
-        for ds in a_.then.split(","):
-            if not (Path("data/export") / ds / "XAUUSD_M1.csv.gz").exists():
-                md += [f"{ds}: no export — skipped.", ""]
-                continue
-            o2, d2 = run_set(ds, a_.seed)
-            r2, ok2 = evaluate(o2, d2)
-            T2 = pd.DataFrame(o2["rule"][0])
-            T2.to_csv(a_.out / f"trades_{ds}.csv.gz", index=False)
-            md += table(ds, r2, ok2, "judged once") + detail(T2)
-            rows[ds] = r2
+        o2, d2 = run_set(a_.judge, a_.seed)
+        r2, ok2 = evaluate(o2, d2)
+        pd.DataFrame(o2["rule"][0]).to_csv(a_.out / f"trades_{a_.judge}.csv.gz", index=False)
+        md += table(a_.judge, r2, ok2, "UNTOUCHED — judged once") + detail(pd.DataFrame(o2["rule"][0]))
+        rows[a_.judge] = r2
     (a_.out / "report.md").write_text("\n".join(md) + "\n")
-    (a_.out / "run.json").write_text(json.dumps(rows, indent=2, default=str))
+    (a_.out / "run.json").write_text(json.dumps({"step1": step1, "rows": rows}, indent=2, default=str))
     print("\n".join(md))
 
 

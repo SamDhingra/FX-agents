@@ -19,7 +19,7 @@ def test_setups_and_trades_follow_the_frozen_geometry():
     ss = I.find_setups(a, 1, False) + I.find_setups(a, -1, False)
     assert len(ss) >= 10
     for s in ss:
-        assert s["limit"] > s["stop"]                                  # mirrored prices: stop always below the limit
+        assert s["limit"] - s["stop"] >= I.MIN_STOP_ATR * s["atr15"] - 1e-9   # stop ≥ 0.8 ATR15 below the limit
     tr, ctl = I.execute(a, ss, block_mask(a, 15, 15), np.random.default_rng(1))
     T = pd.DataFrame(tr)
     if len(T):
@@ -27,7 +27,7 @@ def test_setups_and_trades_follow_the_frozen_geometry():
         loc = pd.to_datetime(T.entry_time).dt.tz_convert("America/New_York")
         m = loc.dt.hour * 60 + loc.dt.minute
         assert ((m >= I.WIN[0]) & (m < I.WIN[1])).all()
-        assert (T.tp1_R >= I.TP1_MIN_R - 1e-9).all() and (T.tp2_R >= T.tp1_R + I.TP2_GAP_R - 1e-9).all()
+        assert (T.tp1_R >= I.TP1_R - 1e-9).all() and (T.tp2_R >= I.TP2_R - 1e-9).all() and (T.tp2_R >= T.tp1_R).all()
 
 
 def test_buy_limit_fills_only_when_the_ask_trades_there():
@@ -38,3 +38,12 @@ def test_buy_limit_fills_only_when_the_ask_trades_there():
     s = {"t": int(a["ns"][j]), "side": 1, "limit": lim, "stop": lim - 5, "tp1": lim + 50, "dol": np.nan, "zone": (0, 0)}
     first = next(k for k in range(j, j + 30) if X["in_l"][k] <= lim)
     assert X["in_l"][first] <= lim and first <= j + 3
+
+
+def test_setups_are_mirror_symmetric():
+    from tests.test_gemini_smc import reflect
+    mid = walk(seed=8, n_days=200)
+    a, r = I.prepare(frame(mid)), I.prepare(frame(reflect(mid)))
+    A = {(x["t"], round(x["limit"], 6)) for x in I.find_setups(a, 1, False)}
+    B = {(x["t"], round(x["limit"] + 6000.0, 6)) for x in I.find_setups(r, -1, False)}   # mirrored short = p - 6000
+    assert len(A) >= 5 and len(A ^ B) <= 0.1 * len(A)
