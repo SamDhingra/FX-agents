@@ -823,6 +823,8 @@ button,input,select,textarea{font-family:inherit}
 .cfnote{font-size:11.5px;color:var(--muted);margin-top:6px}
 .pcard{cursor:pointer}
 .pcard .popen{font-size:11.5px;color:var(--accent-2);margin-left:6px}
+.tvbox{margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card-2);font-size:13px}
+.tvbox ol{margin:6px 0 8px 18px;padding:0}.tvbox textarea{width:100%;box-sizing:border-box;height:120px;font:12px ui-monospace,monospace;border-radius:8px;border:1px solid var(--line-2);background:var(--card);color:var(--text)}
 </style>
 </head>
 <body>
@@ -1074,7 +1076,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.2</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.3</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3519,6 +3521,28 @@ setInterval(() => {
   if(!p){ RP.t.open = false; return; }
   const t = posTrade(p); RP.t = t; replay(t);
 }, 30000);
+
+/* TradingView: copy a Pine Script that draws this book's trades on the symbol */
+async function tvExport(t){
+  const box = $("#tvBox"); if(!box) return;
+  box.hidden = false; box.innerHTML = `<div class="mut">Building the TradingView script…</div>`;
+  let r = null; try{ r = await api(q("api/tradingview?symbol=" + encodeURIComponent(t.symbol) + "&days=30")); }catch(e){}
+  if(!r || !r.script){ box.innerHTML = `<div class="mut">Couldn't build the script (${esc(String(r && r.detail || "network"))}).</div>`; return; }
+  let copied = false; try{ await navigator.clipboard.writeText(r.script); copied = true; }catch(e){}
+  const url = "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(r.tv_symbol);
+  box.innerHTML = `<b>${copied ? "Script copied." : "Copy the script below."}</b> It marks this book's ${esc(t.symbol)} trades from the last 30 days: entry, strategy, result, stop.
+    <ol><li>Open <a href="${url}" target="_blank" rel="noopener">${esc(r.tv_symbol)} on TradingView</a>.</li><li>Pine Editor → New → Indicator, replace everything with the script, Save, Add to chart.</li><li>Come back here and copy again to include newer trades.</li></ol>
+    ${copied ? "" : `<textarea readonly>${esc(r.script)}</textarea>`}<button class="btn" id="tvAgain" style="margin-top:6px">${copied ? "Copy again" : "Select all"}</button>`;
+  $("#tvAgain").onclick = async () => { const ta = box.querySelector("textarea"); if(ta){ ta.select(); return; } try{ await navigator.clipboard.writeText(r.script); $("#tvAgain").textContent = "Copied"; }catch(e){} };
+}
+const _openTrade7 = openTrade;
+openTrade = function(t){
+  _openTrade7(t);
+  const btns = $("#drawer .labbtns"); if(!btns) return;
+  btns.insertAdjacentHTML("beforeend", `<button class="btn" id="dTv">TradingView</button>`);
+  btns.insertAdjacentHTML("afterend", `<div class="tvbox" id="tvBox" hidden></div>`);
+  $("#dTv").onclick = () => tvExport(t);
+};
 </script>
 </body>
 </html>

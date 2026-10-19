@@ -168,3 +168,65 @@ def recap(main, day: str | None) -> dict:
     if not main.state.trading_enabled:
         lines.append(f"Entries are paused: {main.state.halt_reason}.")
     return {"day": ds, "books": out, "script": " ".join(lines), "lines": lines}
+
+
+# ── TradingView: the bot's trades as a Pine Script indicator ──────────────────────────────────────────────────────────
+def tv_symbol(cfg, sym: str) -> str:
+    """OANDA's TradingView ticker for an instrument (XAU_USD → OANDA:XAUUSD, NAS100_USD → OANDA:NAS100USD)."""
+    inst = ((cfg["instruments"].get(sym) or {}).get("oanda") or {}).get("instrument") or sym
+    return "OANDA:" + str(inst).replace("_", "")
+
+
+def pine_script(cfg, c, sym: str, book: str = "live", days: int = 30, max_trades: int = 150) -> str:
+    """Pine Script v6 indicator that marks each trade of `book` on `sym` from the last `days`: an entry label with the
+    strategy, a line from entry to exit coloured by the result, and the initial stop. Paste into TradingView's Pine
+    editor on the matching chart (see tv_symbol). Times are UNIX ms, so the chart's time zone doesn't matter."""
+    since = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)).isoformat()
+    rows = [dict(r) for r in c.journal.db.execute(
+        "SELECT opened, closed, side, strategy, entry, exit_price, initial_stop, r_multiple, status FROM trades "
+        "WHERE symbol=? AND opened>=? ORDER BY opened DESC LIMIT ?", (sym, since, max_trades))][::-1]
+    ms = lambda ts: int(pd.Timestamp(ts).value // 1_000_000)                     # noqa: E731
+    clean = lambda s: str(s or "").replace('"', "'").replace("\\", "/")[:60]      # noqa: E731
+    num = lambda v: "float(na)" if v is None or (isinstance(v, float) and not math.isfinite(v)) else repr(float(v))  # noqa: E731
+    stamp = pd.Timestamp.now(tz=cfg["timezone"]).strftime("%Y-%m-%d %H:%M")
+    head = [f"// FX-Agents — {book} book trades on {sym} ({tv_symbol(cfg, sym)}), last {days} days, generated {stamp} NY.",
+            "// Paste into TradingView: Pine Editor → New → Indicator → replace everything → Save → Add to chart.",
+            "// Re-generate it from the dashboard to include newer trades. Read-only: it only draws.",
+            "//@version=6",
+            f'indicator("FX-Agents · {sym} · {book} ({len(rows)} trades)", overlay=true, max_labels_count=500, max_lines_count=500)',
+            'showStop = input.bool(true, "Show initial stops")',
+            'showName = input.bool(true, "Show strategy names")']
+    if not rows:
+        return "\n".join(head + ['var table t = table.new(position.top_right, 1, 1)',
+                                 'if barstate.islast',
+                                 f'    table.cell(t, 0, 0, "No {sym} trades in the last {days} days", text_color=color.gray)', ""])
+    strat = [r["strategy"].split("@")[0] for r in rows]
+    body = [
+        f"var tIn = array.from({', '.join(str(ms(r['opened'])) for r in rows)})",
+        f"var tOut = array.from({', '.join(str(ms(r['closed'])) if r['closed'] else '0' for r in rows)})",
+        f"var pIn = array.from({', '.join(num(r['entry']) for r in rows)})",
+        f"var pOut = array.from({', '.join(num(r['exit_price']) for r in rows)})",
+        f"var pStop = array.from({', '.join(num(r['initial_stop']) for r in rows)})",
+        f"var rMul = array.from({', '.join(num(r['r_multiple']) for r in rows)})",
+        f"var sides = array.from({', '.join('1' if r['side'] == 'LONG' else '-1' for r in rows)})",
+        "var names = array.from(" + ", ".join(f'"{clean(s)}"' for s in strat) + ")",
+        "if barstate.islastconfirmedhistory",
+        "    for i = 0 to array.size(tIn) - 1",
+        "        t0 = array.get(tIn, i)",
+        "        t1 = array.get(tOut, i)",
+        "        px = array.get(pIn, i)",
+        "        sd = array.get(sides, i)",
+        "        r = array.get(rMul, i)",
+        "        isOpen = t1 == 0",
+        "        col = isOpen ? color.orange : na(r) ? color.gray : r > 0 ? color.new(color.green, 0) : color.new(color.red, 0)",
+        "        txt = (sd > 0 ? \"LONG\" : \"SHORT\") + (showName ? \"\\n\" + array.get(names, i) : \"\") + (isOpen ? \"\\nopen\" : na(r) ? \"\" : \"\\n\" + str.tostring(r, \"+0.00;-0.00\") + \"R\")",
+        "        label.new(t0, px, txt, xloc=xloc.bar_time, style=sd > 0 ? label.style_label_up : label.style_label_down, "
+        "color=color.new(sd > 0 ? color.teal : color.maroon, 10), textcolor=color.white, size=size.small)",
+        "        if not isOpen",
+        "            line.new(t0, px, t1, array.get(pOut, i), xloc=xloc.bar_time, color=col, width=2, style=line.style_dashed)",
+        "            label.new(t1, array.get(pOut, i), \"x\", xloc=xloc.bar_time, style=label.style_circle, color=col, size=size.tiny)",
+        "        if showStop and not na(array.get(pStop, i))",
+        "            line.new(t0, array.get(pStop, i), isOpen ? t0 + 3600000 : t1, array.get(pStop, i), xloc=xloc.bar_time, "
+        "color=color.new(color.red, 40), style=line.style_dotted)",
+        ""]
+    return "\n".join(head + body)
