@@ -182,6 +182,13 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.pattern_test --prereg gold_1h \
                --data dev_m1,holdout_m1 --out data/year_test/patterns_gold_1h </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  scalp)     # gold scalp: 15m EMA20/50 trend → 5m breakout + retest → 3m confirmation (fxagents/gold_scalp.py): ./fx.sh scalp
+             need_env; mkdir -p logs
+             [[ -d data/export/dev_m1 ]] || { echo "no data/export/dev_m1 — run ./fx.sh export first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/scalp-build.log 2>&1 || { echo "build failed — see logs/scalp-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.gold_scalp --data dev_m1 \
+               --out data/year_test/gold_scalp_dev_m1 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
              for k in FOREXCOM_USERNAME FOREXCOM_PASSWORD FOREXCOM_APPKEY; do grep -q "^$k=." .env || { echo "add $k=... to .env"; exit 1; }; done
@@ -240,7 +247,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
