@@ -35,9 +35,10 @@ def atr14(h: np.ndarray, l: np.ndarray, c: np.ndarray) -> np.ndarray:
     return pd.Series(tr).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean().bfill().to_numpy()
 
 
-def zigzag(h: np.ndarray, l: np.ndarray, a: np.ndarray, k: float = ZZ_K) -> list[tuple[int, float, str]]:
+def zigzag(h: np.ndarray, l: np.ndarray, a: np.ndarray, k: float = ZZ_K, conf: bool = False) -> list[tuple]:
     """Alternating swing pivots (index, price, 'H'|'L'). A swing high is confirmed when price falls k·ATR below the
-    running high (and the running low is tracked from there); mirror for lows."""
+    running high (and the running low is tracked from there); mirror for lows. conf=True adds a 4th field: the bar
+    at whose close the pivot became known (it only uses bars up to then, so it is causal)."""
     piv: list[tuple[int, float, str]] = []
     if len(h) < 3:
         return piv
@@ -48,10 +49,10 @@ def zigzag(h: np.ndarray, l: np.ndarray, a: np.ndarray, k: float = ZZ_K) -> list
         if d <= 0 and l[i] < l[lo_i]:
             lo_i = i
         if d >= 0 and h[hi_i] - l[i] >= k * a[i] and i > hi_i:
-            piv.append((hi_i, float(h[hi_i]), "H"))
+            piv.append((hi_i, float(h[hi_i]), "H") + ((i,) if conf else ()))
             d, lo_i = -1, i
         elif d <= 0 and h[i] - l[lo_i] >= k * a[i] and i > lo_i:
-            piv.append((lo_i, float(l[lo_i]), "L"))
+            piv.append((lo_i, float(l[lo_i]), "L") + ((i,) if conf else ()))
             d, hi_i = 1, i
     return piv
 

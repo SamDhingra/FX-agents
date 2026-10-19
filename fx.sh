@@ -166,6 +166,15 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.gemini_smc --data dev_m1,holdout_m1 \
                --only "$only" --out data/year_test/gemini_smc </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  pattest)   # chart patterns as entry signals, stage 2 (fxagents/pattern_test.py): ./fx.sh pattest [dev_m1]
+             # XAUUSD, NDQ, US30 on 15m + 1h, real bid/ask, coin-flip control; holdout only via --frozen for passers
+             need_env; mkdir -p logs; set_="${2:-dev_m1}"
+             [[ -d "data/export/$set_" ]] || { echo "no data/export/$set_ — run ./fx.sh export first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/pattest-build.log 2>&1 || { echo "build failed — see logs/pattest-build.log"; exit 1; }
+             extra=""; [[ "$set_" == holdout* ]] && extra="--frozen"
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.pattern_test --data "$set_" $extra \
+               --out "data/year_test/patterns_$set_" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
              for k in FOREXCOM_USERNAME FOREXCOM_PASSWORD FOREXCOM_APPKEY; do grep -q "^$k=." .env || { echo "add $k=... to .env"; exit 1; }; done
@@ -224,7 +233,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | fxcprobe [days] | exitstudy [days] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
