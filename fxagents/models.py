@@ -139,4 +139,6 @@ class Position:
             "jev_source": self.jev_source, "opened": self.opened_ts.isoformat(), "reason": self.reason,
             "bias_mode": self.bias_mode, "risk_mult": self.risk_mult,
             "events": self.events[-40:], "draw": self.meta.get("draw"),
+            "analyst": {k: (self.meta.get("analyst") or {}).get(k) for k in ("verdict", "checks", "ts")}
+            if self.meta.get("analyst") else None,
         }

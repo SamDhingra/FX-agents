@@ -349,7 +349,9 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
         trader = PlaybookTrader(sctx)
     else:
         trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)
-    agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), JournalAgent(sctx), MonitorAgent(sctx)]
+    from .analyst import TradeAnalystAgent
+    agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), TradeAnalystAgent(sctx), JournalAgent(sctx),
+              MonitorAgent(sctx)]
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
     sctx.book_key = mode

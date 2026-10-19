@@ -841,6 +841,13 @@ button,input,select,textarea{font-family:inherit}
 .lwfull .lwbody{flex:1;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
 .lwlegend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
 .lwlegend b{font-weight:600}
+
+/* trade analyst (shadow) */
+.anl{margin:6px 0 2px;padding:5px 8px;border-radius:8px;font-size:12px;background:var(--bg-2,rgba(127,127,127,.08));border-left:3px solid var(--muted)}
+.anl.v-hold{border-left-color:var(--up)} .anl.v-tighten{border-left-color:var(--warn)} .anl.v-exit{border-left-color:var(--down)}
+.anl-t{font-weight:600} .anl-t.v-exit{color:var(--down)} .anl-t.v-tighten{color:var(--warn)} .anl-t.v-hold{color:var(--up)}
+.anltab{width:100%;border-collapse:collapse;font-size:13px} .anltab th,.anltab td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+.anltab td.num{text-align:right} .anltab th.num{text-align:right} .anltab{min-width:440px} .anltab td,.anltab th{white-space:nowrap} .anltab td:first-child{white-space:normal}
 </style>
 </head>
 <body>
@@ -1067,6 +1074,7 @@ button,input,select,textarea{font-family:inherit}
           <div class="mcleg"><span><i style="background:#5b9bff"></i>market data</span><span><i style="background:#f2b84b"></i>setups &amp; picks</span><span><i style="background:#b48cff"></i>Jev</span><span><i style="background:#3fd08f"></i>trades</span><span><i style="background:#ff6f6a"></i>alerts &amp; flatten</span></div>
           <div class="mcinfo" id="mcInfo"></div></div>
         <div class="card c12"><h3>Agents</h3><div class="health" id="health"></div></div>
+        <div class="card c12"><h3>Trade analyst <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">advice only — scored against how each trade really finished</span></h3><div id="anlBody"><div class="empty">Loading…</div></div></div>
         <div class="card c6"><h3>Jev decisions</h3><div class="feed" id="decisions"></div></div>
         <div class="card c6"><h3>Activity &amp; alerts</h3><div class="feed" id="alerts"></div></div>
       </div>
@@ -1092,7 +1100,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.6</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.7</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -1265,6 +1273,7 @@ function positions(s){
         <i class="rtick" style="left:calc(${x(sR_)}% - 1px);background:var(--warn);width:3px;height:14px;top:-4px" title="stop"></i></div>
       <div class="rlabels"><span>stop ${sR(sR_,1)} ${p.stop_in_profit?"protected":""}</span><span class="num"><b class="${cls(p.r_now)}">${sR(p.r_now)}</b> now</span><span>step ${p.stage}${p.adds?` · +${p.adds} adds`:""}</span></div>
       <div class="rlabels"><span>stop ${sPip(p.locked_pips)}</span><span class="num"><b class="${cls(p.pips_now)}">${sPip(p.pips_now)}</b></span><span>risk ${fmt(p.stop_pips,0)} pips</span></div>
+      ${p.analyst && p.analyst.verdict ? `<div class="anl v-${esc(p.analyst.verdict)}" title="Shadow analyst — advice only, it never touches the trade"><b>Analyst: ${esc(ANL_V[p.analyst.verdict] || p.analyst.verdict)}</b>${(p.analyst.checks||[]).length ? " · " + (p.analyst.checks||[]).map(c => esc(ANL_C[c] || c)).join(" · ") : " · trade on track"}</div>` : ""}
       <div class="mini"><span><b>${lots(p.lots)}</b> (${fmt(p.qty,p.qty%1?2:0)} units)</span><span>avg ${fpx(p.avg_entry)}</span><span>stop ${fpx(p.stop)}</span><span>Jev ${fmt(p.jev_quality,2)}/${fmt(p.jev_confidence,2)}</span>${p.risk_mult<1?`<span>size ×${p.risk_mult}</span>`:""}</div>
     </div>`;
   }).join("");
@@ -1492,7 +1501,10 @@ function openTrade(t){
       <div class="card kpi"><div class="l">Size</div><div class="v num">${lots(t.lots)}</div><div class="s">${t.lots_max>t.lots?`peak ${lots(t.lots_max)} after adds`:"no adds"}</div></div>
       <div class="card kpi"><div class="l">Best excursion</div><div class="v num">${sR(t.mfe_r,1)}</div></div>
       <div class="card kpi"><div class="l">Jev grade</div><div class="v num">${fmt(t.jev_quality,2)}</div><div class="s">${esc(t.jev_source||"")} · bias ${esc(t.bias_mode||"")}</div></div></div>
-    <div class="tl">${ev.map(e => { const {ts, kind, ...rest} = e; return `<div><span class="k">${kind.replace(/_/g," ")}</span> <span class="mut num">${hm(ts)}</span>
+    <div class="tl">${ev.map(e => { const {ts, kind, ...rest} = e;
+      if(kind === "analyst") return `<div><span class="k">analyst (shadow)</span> <span class="mut num">${hm(ts)}</span>
+      <small><span class="anl-t v-${esc(e.verdict)}">${esc(ANL_V[e.verdict] || e.verdict)}</span>${e.why ? " — " + esc(e.why) : ""}${e.r!=null ? ` · at ${sR(e.r)}` : ""}</small></div>`;
+      return `<div><span class="k">${kind.replace(/_/g," ")}</span> <span class="mut num">${hm(ts)}</span>
       <small class="num">${Object.entries(rest).map(([k,v])=>`${k.replace(/_/g," ")}: ${typeof v==="number"?fmt(v, Number.isInteger(v)?0:2):esc(v)}`).join(" · ")}</small></div>`; }).join("")}</div>
     <button class="btn dback" id="dback">Back to trades</button>`;
   const d = $("#drawer"); d.scrollTop = 0;
@@ -2583,6 +2595,7 @@ async function courtroom(t){
     if(/stop/.test(e.kind) && e.stop!=null) return `${w} stop moved to <span class="num">${fpx(e.stop)}</span>`;
     if(e.kind === "exit" || e.kind === "closed") return `${w} out at <span class="num">${fpx(e.price ?? T.exit_price)}</span> — ${esc(String(e.reason || T.exit_reason || "").replace(/_/g," "))}`;
     if(e.kind === "exit_signal") return `${w} exit signal${e.why ? ": " + esc(e.why) : ""}`;
+    if(e.kind === "analyst") return `${w} <span class="anl-t v-${esc(e.verdict)}">Analyst (shadow): ${esc(ANL_V[e.verdict] || e.verdict)}</span>${e.why ? " — " + esc(e.why) : ""}${e.r!=null ? ` <span class="mut">at ${sR(e.r)}</span>` : ""}`;
     return `${w} ${esc(e.kind.replace(/_/g," "))}`;
   });
   if(mg.length) lines.push(say("pm", mg.join("<br>"), 5));
@@ -2781,7 +2794,7 @@ go = function(p){
   if(p === "home") loadNow(true);
   if(p === "compare") loadEvidence();
   if(p === "backtests") renderJourney();
-  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); }
+  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); loadAnalyst(); }
 };
 const _openTrade0 = openTrade;
 openTrade = function(t){
@@ -3793,6 +3806,26 @@ async function setLfTf(m){
 }
 function closeLwFull(){ const el = $("#lwFull"); if(!el || el.hidden) return; if(history.state && history.state.lwFull) history.back(); else hideLwFull(); }
 function hideLwFull(){ const el = $("#lwFull"); if(el) el.hidden = true; if(LF.lw){ LF.lw.remove(); LF.lw = null; } if(!$("#drawer").classList.contains("on")) document.body.classList.remove("noscroll"); }
+
+/* ══ trade analyst (shadow): verdict labels, scorecard on the Agents page ══ */
+const ANL_V = {hold: "hold", tighten: "tighten the stop", exit: "would exit"};
+const ANL_C = {trend_flip: "15m trend flipped", structure_break: "5m structure broke", stall: "stalled",
+               h1_against: "1H trend against", giveback: "gave back half", news_soon: "news < 20 min"};
+async function loadAnalyst(){
+  const el = $("#anlBody"); if(!el) return;
+  let d = null; try{ d = await api(q("api/analyst")); }catch(e){}
+  if(!d){ el.innerHTML = `<div class="empty">Couldn't load the analyst's scorecard.</div>`; return; }
+  const rows = (d.checks || []).map(c => `<tr><td>${esc(c.label)}${c.kind==="tighten"?' <span class="mut">(tighten)</span>':''}</td><td class="num">${c.n}</td>
+      <td class="num"><b class="${cls(c.avg_value_r)}">${sR(c.avg_value_r,2)}</b></td><td class="num mut">${sR(c.lo,2)} to ${sR(c.hi,2)}</td><td class="num">${Math.round(c.helped*100)}%</td></tr>`).join("");
+  const rec = (d.recent || []).slice(0, 12).map(r => `<div class="fi"><span class="when">${md(r.ts)} ${hm(r.ts)}</span><div style="flex:1;min-width:0">
+      <b>${esc(r.symbol)}</b> <span class="anl-t v-${esc(r.verdict)}">${esc(ANL_V[r.verdict] || r.verdict)}</span> <span class="mut">${esc(sname(String(r.strategy||"").split(":")[0]))}</span><br>
+      <small class="mut">${esc(r.why)}</small></div><b class="num ${cls(r.r_now)}">${sR(r.r_now,2)}</b></div>`).join("");
+  el.innerHTML = (rows ? `<div style="overflow-x:auto"><table class="anltab"><thead><tr><th>Advice</th><th class="num">Trades</th><th class="num">Value if followed</th><th class="num">95% range</th><th class="num">Helped</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="mut" style="font-size:12px;margin:8px 0 0">Value = R the whole position would have had if closed when the analyst first said so, minus the R it really finished with (after spread). Positive = following it would have helped. ${d.n_trades} closed trades scored. It earns the right to act only with a positive, steady record here and in the historical check (<code>./fx.sh analystcheck</code>).</div>`
+      : `<div class="empty">No closed trades scored yet. The analyst watches every open trade at each 5-minute close; its advice shows on the trade's timeline and on the position card.</div>`)
+    + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest verdicts</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
+}
+setInterval(() => { if(page === "agents") loadAnalyst(); }, 60000);
 </script>
 </body>
 </html>

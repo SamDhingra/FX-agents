@@ -127,6 +127,12 @@ sessions:
   max_hold_minutes: 240
 
 # ── Trade management: start steady at 1:1, pyramid winners, stops only move toward profit ──
+# ── trade analyst (fxagents/agents/analyst.py): SHADOW ONLY — watches every open trade at each 5-minute close and
+#    logs hold / tighten / exit with reasons on the trade's timeline; never touches a position. Each piece of advice
+#    is scored against how the trade really finished (dashboard: Agents → Trade analyst; /api/analyst).
+analyst:
+  enabled: true
+
 management:
   rr_initial: 1.0              # first target = 1R (the learner may raise per strategy)
   rr_max: 2.5                  # the learner can never push the first target past this

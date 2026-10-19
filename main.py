@@ -135,8 +135,9 @@ async def build(cfg, args):
     ctx.selection_mode = sel_mode
     notifier = NotifierAgent(ctx)
     pm = PositionManagerAgent(ctx)
+    from fxagents.agents.analyst import TradeAnalystAgent
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
-              trader, RiskAgent(ctx), pm, JournalAgent(ctx), notifier,
+              trader, RiskAgent(ctx), pm, TradeAnalystAgent(ctx), JournalAgent(ctx), notifier,
               MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
     # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay).
     # Started at the end of build, after the startup reconciliation has put saved positions back.

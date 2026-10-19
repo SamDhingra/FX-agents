@@ -384,6 +384,16 @@ def build_app(ctx) -> FastAPI:
         ghosts.resolve(c, limit=200)
         return JSONResponse({"scorecard": ghosts.scorecard(c, since), "recent": ghosts.recent(c, symbol, start, end)})
 
+    @app.get("/api/analyst")
+    async def api_analyst(request: Request):
+        """Trade analyst (shadow): per-check scorecard of its advice vs what the trades really did, + recent verdicts."""
+        need(request)
+        from ..agents.analyst import scorecard
+        c = bk(request)
+        if getattr(c, "journal", None) is None:
+            return JSONResponse({"n_trades": 0, "checks": [], "recent": []})
+        return JSONResponse(scorecard(c.journal))
+
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):
         need(request)
