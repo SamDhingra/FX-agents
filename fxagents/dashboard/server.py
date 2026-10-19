@@ -308,6 +308,13 @@ def build_app(ctx) -> FastAPI:
         need(request)
         return JSONResponse(extras.atlas(ctx))
 
+    @app.get("/api/patterns")
+    async def api_patterns(request: Request, symbol: str, start: str, end: str, tf: int = 15):
+        need(request)
+        if symbol not in ctx.cfg["instruments"]:
+            raise HTTPException(400, "unknown symbol")
+        return JSONResponse(insights.patterns(ctx, symbol, start, end, tf))
+
     @app.get("/api/tradingview")
     async def api_tradingview(request: Request, symbol: str, days: int = 30):
         """Pine Script (v6) that draws the selected book's trades on this symbol in TradingView."""

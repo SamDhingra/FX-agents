@@ -825,6 +825,10 @@ button,input,select,textarea{font-family:inherit}
 .pcard .popen{font-size:11.5px;color:var(--accent-2);margin-left:6px}
 .tvbox{margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card-2);font-size:13px}
 .tvbox ol{margin:6px 0 8px 18px;padding:0}.tvbox textarea{width:100%;box-sizing:border-box;height:120px;font:12px ui-monospace,monospace;border-radius:8px;border:1px solid var(--line-2);background:var(--card);color:var(--text)}
+.patbtn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-2);border-color:var(--accent)}
+.patlist{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11.5px}
+.patlist span{padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--text-2)}
+.patlist span.b1{border-color:var(--up);color:var(--up-text)}.patlist span.b-1{border-color:var(--down);color:var(--down-text)}
 </style>
 </head>
 <body>
@@ -1076,7 +1080,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.3</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.4</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3388,6 +3392,21 @@ function chartSVG(svg, o){
     } else if(d.k === "mark" && inView(d.t0)){ const x0 = X(d.t0), y0 = Y(d.px);
       h += `<path d="M${x0} ${y0-7} L${x0+5} ${y0} L${x0} ${y0+7} L${x0-5} ${y0}Z" fill="${r.c}" opacity=".85"><title>${esc(d.label)}</title></path>`; }
   }
+  for(const pt of (o.patterns || [])){
+    if(pt.status === "failed" && !PAT.failed) continue;
+    const ends = pt.segs.flatMap(g => [+new Date(g[0]), +new Date(g[2])]);
+    if(Math.max(...ends) < t0 || Math.min(...ends) > t1) continue;
+    const col = pt.dir > 0 ? "var(--up)" : pt.dir < 0 ? "var(--down)" : "var(--ghost)";
+    const dash = pt.status === "forming" ? "6 4" : pt.status === "failed" ? "2 3" : "";
+    const op = pt.status === "failed" ? .4 : .85;
+    for(const g of pt.segs){ if(Math.max(g[1], g[3]) < lo - (hi-lo) || Math.min(g[1], g[3]) > hi + (hi-lo)) continue;
+      h += `<line x1="${X(g[0])}" y1="${Y(g[1])}" x2="${X(g[2])}" y2="${Y(g[3])}" stroke="${col}" stroke-width="${o.big?2:1.6}" ${dash?`stroke-dasharray="${dash}"`:""} opacity="${op}" stroke-linecap="round"/>`; }
+    if(pt.target != null && pt.target >= lo && pt.target <= hi && pt.t_break && inView(pt.t_break))
+      h += `<line x1="${X(pt.t_break)}" x2="${Math.min(W - pr, X(pt.t_break) + 60)}" y1="${Y(pt.target)}" y2="${Y(pt.target)}" stroke="${col}" stroke-dasharray="1 3" opacity=".8"/>`;
+    const top = Math.min(hi, Math.max(...pt.segs.flatMap(g => [g[1], g[3]])));
+    const lx = X(pt.t0), ly = Math.max(Y(top) - 5, 22);
+    h += lab(Math.min(lx + 2, W - pr - 120), ly, pt.label + (pt.status === "confirmed" ? " ✓" : pt.status === "failed" ? " ✗" : " …"), col);
+  }
   for(let i = 0; i < n; i++){ const b = bars[i], up = b.c >= b.o, col = up ? "var(--up)" : "var(--down)", x = X(b.ts);
     h += `<line x1="${x}" x2="${x}" y1="${Y(b.h)}" y2="${Y(b.l)}" stroke="${col}" stroke-width="1"/><rect x="${x-cw/2}" y="${Y(Math.max(b.o,b.c))}" width="${cw}" height="${Math.max(1, Math.abs(Y(b.o)-Y(b.c)))}" fill="${col}"/>`; }
   const hl = (v, col, dash, txt) => v == null || v < lo || v > hi ? "" : `<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${col}" stroke-width="1.3" ${dash?`stroke-dasharray="${dash}"`:""}/>` + lab(W - pr - 4 - txt.length * 6, Y(v) - 3, txt, col);
@@ -3542,6 +3561,49 @@ openTrade = function(t){
   btns.insertAdjacentHTML("beforeend", `<button class="btn" id="dTv">TradingView</button>`);
   btns.insertAdjacentHTML("afterend", `<div class="tvbox" id="tvBox" hidden></div>`);
   $("#dTv").onclick = () => tvExport(t);
+};
+
+/* chart patterns overlay (fxagents/patterns.py) — display only */
+const PAT = {on:true, failed:false};
+try{ PAT.on = localStorage.getItem("fx-patterns") !== "off"; }catch(e){}
+async function fetchPatterns(t, bars, tf){
+  if(!PAT.on || !bars || !bars.length) return [];
+  try{ const r = await api("api/patterns?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(bars[0].ts.toISOString())
+      + "&end=" + encodeURIComponent(bars[bars.length-1].ts.toISOString()) + "&tf=" + tf); return (r && r.patterns) || []; }catch(e){ return []; }
+}
+function patSummary(list){
+  const shown = list.filter(p => p.status !== "failed" || PAT.failed);
+  return shown.length ? `<div class="patlist">${shown.map(p => `<span class="b${p.dir}">${esc(p.label)} · ${p.status}</span>`).join("")}</div>` : `<div class="patlist"><span>no patterns in view</span></div>`;
+}
+function setPat(on){ PAT.on = on; try{ localStorage.setItem("fx-patterns", on ? "on" : "off"); }catch(e){}
+  $$(".patbtn").forEach(b => b.setAttribute("aria-pressed", String(on))); }
+const _drawReplay7 = drawReplay;
+drawReplay = function(){
+  const svg = $("#rpSvg"); if(!svg || !RP) return;
+  chartSVG(svg, {bars:RP.bars, t:RP.t, n:RP.n, ghosts:RP.ghosts, patterns:PAT.on ? RP.patterns : []});
+};
+const _replay8 = replay;
+replay = async function(t){
+  await _replay8(t);
+  const box = $("#replay"); if(!box || box.dataset.id !== t.id || !RP || RP.t.id !== t.id) return;
+  const h = box.querySelector("h3"); if(h && !h.querySelector(".patbtn")) h.querySelector("#rpPlay").insertAdjacentHTML("beforebegin", `<button class="btn patbtn" aria-pressed="${PAT.on}" style="margin-right:6px">Patterns</button>`);
+  const tf = Math.max(1, tfMin(t));
+  const refresh = async () => { RP.patterns = await fetchPatterns(t, RP.bars, tf); if(!RP || RP.t.id !== t.id) return; drawReplay();
+    let el = box.querySelector(".patwrap"); if(!el){ box.querySelector("svg").insertAdjacentHTML("afterend", `<div class="patwrap"></div>`); el = box.querySelector(".patwrap"); }
+    el.innerHTML = PAT.on ? `<div class="mut" style="font-size:11.5px;margin-top:6px">Chart patterns on ${tf}m candles (green bullish, red bearish; solid = confirmed, dashed = forming)</div>` + patSummary(RP.patterns) : ""; };
+  box.querySelector(".patbtn").onclick = () => { setPat(!PAT.on); refresh(); };
+  await refresh();
+};
+const _drawCf7 = drawCf;
+drawCf = function(){ const svg = $("#cfSvg"); if(!svg || $("#chartFull").hidden) return;
+  CF.geo = chartSVG(svg, {bars:CF.bars, t:CF.t, from:CF.from, to:CF.to, big:true, ghosts:CF.ghosts, cross:CF.cross, patterns:PAT.on ? CF.patterns : []}); };
+const _setCfTf7 = setCfTf;
+setCfTf = async function(m){
+  _setCfTf7(m);
+  const ctl = $(".cfctl"); if(ctl && !ctl.querySelector(".patbtn")){ ctl.insertAdjacentHTML("afterbegin", `<button class="btn patbtn" aria-pressed="${PAT.on}">Patterns</button>`);
+    ctl.querySelector(".patbtn").onclick = () => { setPat(!PAT.on); setCfTf(CF.tf); }; }
+  CF.patterns = await fetchPatterns(CF.t, CF.raw, m); drawCf();
+  const note = $("#cfNote"); if(note) note.innerHTML = "Drag to pan · pinch, scroll or +/− to zoom · tap a candle for its prices." + (PAT.on ? patSummary(CF.patterns) : "");
 };
 </script>
 </body>

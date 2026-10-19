@@ -271,3 +271,21 @@ def bars(c, sym: str, start: str, end: str, max_rows: int = 720) -> dict:
             {"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
     return {"bars": [[ts.isoformat(), round(float(x.open), 5), round(float(x.high), 5), round(float(x.low), 5),
                       round(float(x.close), 5)] for ts, x in seg.iterrows()]}
+
+
+def patterns(c, sym: str, start: str, end: str, tf: int = 15, lookback: int = 80) -> dict:
+    """Chart patterns (fxagents/patterns.py) on `tf`-minute candles overlapping [start, end], detected with `lookback`
+    extra candles of context before start. Display only."""
+    from ..indicators import resample_ohlc
+    from ..patterns import detect, to_json
+    try:
+        m1 = c.store.m1(sym)
+    except Exception:  # noqa: BLE001
+        return {"patterns": [], "note": "no price history"}
+    a, b = pd.Timestamp(start), pd.Timestamp(end)
+    tf = max(1, min(int(tf), 240))
+    seg = m1[(m1.index >= a - pd.Timedelta(minutes=tf * lookback)) & (m1.index <= b)]
+    if len(seg) < 30:
+        return {"patterns": [], "note": "not enough candles"}
+    df = resample_ohlc(seg, f"{tf}min") if tf > 1 else seg
+    return {"tf": tf, "patterns": to_json(df, detect(df), since=a)}
