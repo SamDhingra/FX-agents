@@ -164,8 +164,11 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
       check uses the level (as live does) but the add fills at the close; time exits at the close.
     Runner rules (Mgmt): gap trail, structure trail (confirmed 1m pivots), stall tightening, structure adds.
     Every stop change is decided at a bar's close and protects from the next bar on.
-    Accounting is average-cost. Returns R in units of the filled entry's risk."""
-    px_in = C[j0] + side * hs
+    Accounting is average-cost. Returns R in units of the filled entry's risk.
+    `hs` = half the bid/ask spread: one number, or an array per 1m bar (the real spread of a bid/ask export)."""
+    HS = hs if np.ndim(hs) else None
+    hsj = (lambda j: HS[j]) if HS is not None else (lambda j: hs)          # noqa: E731
+    px_in = C[j0] + side * hsj(j0)
     R = abs(px_in - stop)
     if R <= 0:
         return None
@@ -195,7 +198,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
         q = m.add_frac
         chk = (avg * open_q + ref * q) / (open_q + q)
         if realized + (worst_stop - chk) * side * (open_q + q) >= 0:          # never risk open profit
-            fill = C[j] + side * hs
+            fill = C[j] + side * hsj(j)
             avg, open_q, adds = (avg * open_q + fill * q) / (open_q + q), open_q + q, adds + 1
 
     def move(ns, j, why):
@@ -203,20 +206,21 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
         nonlocal stop_px
         if (ns - stop_px) * side < 0.1 * R:
             return None
-        if ((C[j] - side * hs) - ns) * side <= 0:
-            return done(C[j] - side * hs, why, j)
+        if ((C[j] - side * hsj(j)) - ns) * side <= 0:
+            return done(C[j] - side * hsj(j), why, j)
         stop_px = ns
         return None
 
     j = j0
     for j in range(j0 + 1, n):
         # 1) resting stop (the broker checks stops before the manager runs)
-        far_lo = (L[j] - hs) if side > 0 else (H[j] + hs)
+        h_ = hsj(j)
+        far_lo = (L[j] - h_) if side > 0 else (H[j] + h_)
         if (far_lo - stop_px) * side <= 0:
-            far_open = (O[j] - hs) if side > 0 else (O[j] + hs)
+            far_open = (O[j] - h_) if side > 0 else (O[j] + h_)
             fill = far_open if (far_open - stop_px) * side < 0 else stop_px
             return done(fill, "stop" if step == 0 else ("breakeven_plus_stop" if step == 1 else "trail_stop"), j)
-        mkt = C[j] - side * hs                                                   # exit at market
+        mkt = C[j] - side * h_                                                   # exit at market
         prev_best = px_in + side * mfe * R
         new_best = ((H[j] if side > 0 else L[j]) - px_in) * side / R
         if new_best > mfe:
@@ -277,7 +281,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
                 last_pivot = piv
                 armed = True
                 if m.trail_struct:
-                    r = move(piv - side * (hs + m.struct_buf_r * R), j, "trail_stop")
+                    r = move(piv - side * (h_ + m.struct_buf_r * R), j, "trail_stop")
                     if r:
                         return r
         if m.add_mode in ("structure", "both") and armed and ((H[j] if side > 0 else L[j]) - prev_best) * side > 0:
@@ -291,7 +295,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             r = move(px_in + side * (mfe - m.stall_gap_r) * R, j, "trail_stop")
             if r:
                 return r
-    return done(C[j] - side * hs, "end", j)
+    return done(C[j] - side * hsj(j), "end", j)
 
 
 def margin_weight(cfg, ic: dict, price: float, dist: float, equity: float) -> float:
@@ -381,6 +385,9 @@ def run_job(args) -> list[dict]:
     min_align = float(cfg["bias"]["min_align"])
     spread = float(((cfg.get("shadow") or {}).get("spread") or {}).get(sym, DEFAULT_SPREAD.get(sym, 0.0)))
     hs = spread / 2
+    if "spread" in m1.columns:                      # a bid/ask export: the real spread of every minute (playbook test)
+        hs = (m1["spread"].to_numpy(dtype=float) / 2)
+        spread = float(np.nanmedian(m1["spread"].to_numpy(dtype=float)))
     a = ctx["atr"]
     # 1-minute execution arrays (the position manager and the broker work on 1m bars)
     O1, H1, L1, C1 = (m1[c].to_numpy(dtype=float) for c in ("open", "high", "low", "close"))
