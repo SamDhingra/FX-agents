@@ -30,3 +30,10 @@ def test_trades_follow_the_window_and_management():
     ex = pd.to_datetime(T.exit_time).dt.tz_convert("America/New_York")
     assert ((ex.dt.hour * 60 + ex.dt.minute) <= V.FLAT).all()
     assert T.groupby(loc.dt.date).size().max() <= V.MAX_DAY
+
+
+def test_sweep_only_drops_the_ema_fallback():
+    a = V.prepare(frame(walk(seed=13, n_days=120)))
+    full, only = V.find_trades(a), V.find_trades(a, sweep_only=True)
+    assert only and {e["mode"] for e in only} == {"sweep"}
+    assert {(e["j"], e["side"]) for e in only} == {(e["j"], e["side"]) for e in full if e["mode"] == "sweep"}

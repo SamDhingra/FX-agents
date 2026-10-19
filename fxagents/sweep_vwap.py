@@ -47,6 +47,9 @@ from .gemini_test import MIN, prep
 from .simple_rules import NY, PIP, ema, load, pip_stats, stats, wilder
 
 PASSED_DEV = False
+# Pre-registered follow-up, frozen Oct 19 2026 after the dev report and BEFORE any holdout data was read (Sam's call):
+# "sweep-only" = exactly the rule above, minus the 50-EMA fallback — only days with a 15m sweep trade. Dev showed
+# +0.09R on ~100 sweep trades (found by slicing), so the untouched holdout (2021 → Sep 2024) alone judges it.
 WIN = (480, 690)                  # 08:00–11:30 entries
 FLAT = 990                        # 16:30
 MAX_DAY = 3
@@ -144,7 +147,8 @@ def lows_of(a: dict, sess: int, side: int) -> tuple[list[float], list[float]]:
     return [x for x in sweep if np.isfinite(x)], [x for x in opp if np.isfinite(x)]
 
 
-def bias(a: dict, M: dict, other: dict, sess: int, side: int, i15_last: int, i15_from: int) -> tuple[str | None, float | None]:
+def bias(a: dict, M: dict, other: dict, sess: int, side: int, i15_last: int, i15_from: int,
+         sweep_only: bool = False) -> tuple[str | None, float | None]:
     """→ ('sweep', level) | ('ema', None) | (None, None) for `side` at the close of 15m candle i15_last."""
     def swept(MM, sd):
         lv, _ = lows_of(a, sess, sd)
@@ -164,10 +168,12 @@ def bias(a: dict, M: dict, other: dict, sess: int, side: int, i15_last: int, i15
         return None, None
     if mine is not None:
         return "sweep", mine
+    if sweep_only:
+        return None, None
     return ("ema", None) if M["c15"][i15_last] > M["e50"][i15_last] else (None, None)
 
 
-def find_trades(a: dict, use_bias: bool = True) -> list[dict]:
+def find_trades(a: dict, use_bias: bool = True, sweep_only: bool = False) -> list[dict]:
     """Causal entries: {j (fill minute), side, stop (real price), mode}."""
     b15, b5, b3 = a["b15"], a["b5"], a["b3"]
     E15, E5, E3 = b15.end.to_numpy(), b5.end.to_numpy(), b3.end.to_numpy()
@@ -189,7 +195,7 @@ def find_trades(a: dict, use_bias: bool = True) -> list[dict]:
         for side in (1, -1):
             M, O = MM[side], MM[-side]
             if use_bias:
-                mode, lvl = bias(a, M, O, sd_, side, i15, i15_from)
+                mode, lvl = bias(a, M, O, sd_, side, i15, i15_from, sweep_only)
                 if mode is None:
                     continue
             else:
@@ -312,13 +318,69 @@ def judge(X, days, mid):
     return st
 
 
+def main_sweep_only(data: str, out: Path, seed: int):
+    out.mkdir(parents=True, exist_ok=True)
+    res = {}
+    for ds in data.split(","):
+        m1 = load(Path("data/export") / ds / "XAUUSD_M1.csv.gz")
+        a = prepare(m1)
+        del m1
+        blk = block_mask(a, 15, 15)
+        rng = np.random.default_rng(seed)
+        tr, ctl = execute(a, find_trades(a, True, sweep_only=True), blk, rng)
+        T, C = pd.DataFrame(tr), pd.DataFrame(ctl)
+        T.to_csv(out / f"trades_{ds}.csv.gz", index=False)
+        days = pd.DatetimeIndex(sorted({pd.Timestamp(d) for d in a["date"].values()}))
+        days = days[days.dayofweek < 5].tz_localize(NY)
+        if len(T):
+            et = pd.to_datetime(T.entry_time)
+            mid = et.min() + (et.max() - et.min()) / 2
+            st, cst = judge(T, days, mid), judge(C, days, mid)
+            st["passed"] = bool(st.get("pass") and st["h1"] > 0 and st["h2"] > 0 and st["avg_R"] > cst.get("avg_R", -9))
+        else:
+            st, cst = {"trades": 0}, {"trades": 0}
+        res[ds] = (T, st, cst)
+        print(f"  {ds}: {len(T)} trades", flush=True)
+    md = [f"# Pre-registered: gold sweep + VWAP, sweep-only ({data})", "",
+          "Exactly the sweep + VWAP rule (fxagents/sweep_vwap.py) minus the 50-EMA fallback: only a 15m sweep of the "
+          "Asian / London / previous-day high or low sets the direction. Frozen Oct 19 2026 after the dev report, before "
+          "any holdout data was read. Dev = where the idea came from (shown only); **the holdout alone decides**. Pass = "
+          "≥ 100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves, better "
+          "than the coin flip. Real OANDA bid/ask fills; R for the whole position after spread.", "",
+          "| Data | Role | Verdict | Trades | Win | Avg R | 95% range | 2× costs | 1st half | 2nd half | Coin flip | Total R |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for ds, (T, st, cst) in res.items():
+        hold = ds.startswith("holdout")
+        if not st.get("trades"):
+            md.append(f"| {ds} | {'judged' if hold else 'shown'} | — | 0 |" + " |" * 8)
+            continue
+        v = ("**PASS**" if st["passed"] else "**no pass**") if hold else "(in-sample)"
+        md.append(f"| {ds} | {'judged' if hold else 'shown'} | {v} | {st['trades']} | {st['win']:.0%} | {st['avg_R']:+.3f} | "
+                  f"{st['ci_lo']:+.2f} to {st['ci_hi']:+.2f} | {st['avg_R_2x']:+.3f} | {st['h1']:+.3f} | {st['h2']:+.3f} | "
+                  f"{cst.get('avg_R', float('nan')):+.3f} | {st['total_R']:+.1f} |")
+    md += ["", "| Data | Long avg R (n) | Short avg R (n) | Reached TP1 | Typical stop | Typical spread |", "|---|---|---|---|---|---|"]
+    for ds, (T, st, _) in res.items():
+        if not len(T):
+            continue
+        lo_, sh_ = T[T.side > 0], T[T.side < 0]
+        reach = (T.exit_reason.isin(["runner_stop", "runner_target"]) | (T.R > 0.5)).mean()
+        md.append(f"| {ds} | {lo_.R.mean():+.3f} ({len(lo_)}) | {sh_.R.mean():+.3f} ({len(sh_)}) | {reach:.0%} | "
+                  f"${T.atr.median():.2f} | ${(T.cost_R * T.atr).median():.2f} |")
+    (out / "report.md").write_text("\n".join(md) + "\n")
+    (out / "run.json").write_text(json.dumps({ds: st for ds, (_, st, _) in res.items()}, indent=2, default=str))
+    print("\n".join(md))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="dev_m1")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--frozen", action="store_true")
     ap.add_argument("--seed", type=int, default=37)
+    ap.add_argument("--sweep-only", action="store_true", help="pre-registered sweep-only rule: dev shown, holdout judged")
     a_ = ap.parse_args()
+    if a_.sweep_only:
+        return main_sweep_only(a_.data, a_.out, a_.seed)
     if a_.frozen and not PASSED_DEV:
         raise SystemExit("did not pass on dev data — the holdout stays untouched")
     a_.out.mkdir(parents=True, exist_ok=True)
