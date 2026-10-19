@@ -49,6 +49,12 @@ class Mgmt:
     early_lock_r: float = 0.0         # where early moves put the stop (0 = break-even)
     giveback_after_r: float = 0.0     # once the best price reached this many R, exit if the trade gives back …
     giveback_frac: float = 0.5        # … this share of its best open profit
+    # trade-analyst exits (analyst check, Oct 2026; all off by default = today's live rules). Each closes the whole
+    # position at market, at any stage, when the trade's situation turns against it:
+    an_flip: bool = False             # a closed 15m candle crosses its EMA50 against the trade
+    an_break: bool = False            # a closed 5m candle closes beyond the last confirmed 5m swing low (longs) / high
+    an_stall_min: float = 0.0         # no new best price for this many minutes …
+    an_stall_max_r: float = 0.5       # … while the trade is below this many R → out
 
     @classmethod
     def from_cfg(cls, cfg, rr: float | None = None, bar_minutes: int = 5) -> "Mgmt":

@@ -124,8 +124,38 @@ def own_trades(t: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── live-style execution on 1-minute bars ─────────────────────────────────────
+def analyst_arrays(m1: pd.DataFrame, close1: pd.DatetimeIndex) -> dict:
+    """Per side, boolean arrays on the 1-minute grid (true at the minute a closed candle shows the event):
+    flip = a 15m close crossing the 15m EMA50 against that side; brk = a 5m close beyond the last confirmed 5m swing
+    low (for longs; swing high for shorts), swings being 2-candle fractals known 2 candles later."""
+    out = {1: {}, -1: {}}
+    r15 = m1.resample("15min", label="right", closed="left")
+    c15 = r15["close"].last().dropna()
+    e50 = c15.ewm(span=50, adjust=False, min_periods=50).mean()
+    above = (c15 > e50)
+    below = (c15 < e50)
+    flip = {1: below & above.shift(1, fill_value=False), -1: above & below.shift(1, fill_value=False)}
+    r5 = m1.resample("5min", label="right", closed="left")
+    b5 = pd.DataFrame({"h": r5["high"].max(), "l": r5["low"].min(), "c": r5["close"].last()}).dropna()
+    hh, ll, cc = b5.h.to_numpy(), b5.l.to_numpy(), b5.c.to_numpy()
+    n = len(cc)
+    sl, sh = np.full(n, np.nan), np.full(n, np.nan)
+    for i in range(2, n - 2):
+        if ll[i] < min(ll[i - 2], ll[i - 1], ll[i + 1], ll[i + 2]):
+            sl[i + 2] = ll[i]
+        if hh[i] > max(hh[i - 2], hh[i - 1], hh[i + 1], hh[i + 2]):
+            sh[i + 2] = hh[i]
+    sl_k = pd.Series(sl).ffill().shift(1).to_numpy()            # last swing confirmed BEFORE this candle
+    sh_k = pd.Series(sh).ffill().shift(1).to_numpy()
+    brk = {1: pd.Series(cc < sl_k, index=b5.index), -1: pd.Series(cc > sh_k, index=b5.index)}
+    for sd in (1, -1):
+        out[sd]["flip"] = flip[sd].reindex(close1).fillna(False).to_numpy(bool)
+        out[sd]["brk"] = brk[sd].reindex(close1).fillna(False).to_numpy(bool)
+    return out
+
+
 def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs: float, flat: np.ndarray,
-                  cont: np.ndarray | None, max_hold: float, full_exit: bool) -> dict | None:
+                  cont: np.ndarray | None, max_hold: float, full_exit: bool, an: dict | None = None) -> dict | None:
     """One trade managed the way the live agents and OANDA execute it, on 1-minute MID bars:
       entry at market at the close of 1m bar j0 (ask for longs: mid + half-spread); the resting stop
       triggers when the bid (longs) / ask (shorts) reaches it and fills there, or at the gapped open;
@@ -213,6 +243,14 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
                     return r
         if m.giveback_after_r > 0 and mfe >= m.giveback_after_r and (mkt - px_in) * side / R <= mfe * (1 - m.giveback_frac):
             return done(mkt, "giveback", j)
+        # 2c) trade-analyst exits (analyst check; all off by default)
+        if an is not None:
+            if m.an_flip and an["flip"][j]:
+                return done(mkt, "analyst_trend_flip", j)
+            if m.an_break and an["brk"][j]:
+                return done(mkt, "analyst_structure_break", j)
+        if m.an_stall_min > 0 and tmin[j] - tmin[best_j] >= m.an_stall_min and (mkt - px_in) * side / R < m.an_stall_max_r:
+            return done(mkt, "analyst_stall", j)
         # 3) target steps on the mid high/low
         hi = H[j] if side > 0 else L[j]
         while (hi - lvl(step + 1)) * side >= 0:
@@ -362,6 +400,7 @@ def run_job(args) -> list[dict]:
     ic = {**cfg["instruments"].get(sym, {}), **((load_specs_cached(cfg) or {}).get(sym, {}))}
     equity = float((cfg.get("playbook") or {}).get("equity_usd", 70000))
     profiles = mgmt_profiles(cfg, tf)
+    AN = analyst_arrays(m1, close1) if any(m.an_flip or m.an_break for m in profiles.values()) else None
     rows = []
     for cname in classes:
         cls = {**BUILTIN, **SETUPS}[cname]
@@ -409,7 +448,7 @@ def run_job(args) -> list[dict]:
                     if dist <= 0 or (price - stop) * s.side <= 0 or dist / price > m.max_stop_pct:
                         continue
                     res = simulate_live(O1, H1, L1, C1, tmin, j0, s.side, stop, m, hs, flat1, cont1[s.side],
-                                        max_hold, full_exit=fx)
+                                        max_hold, full_exit=fx, an=AN[s.side] if AN else None)
                     if res is None:
                         continue
                     if not busy:

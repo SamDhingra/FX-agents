@@ -41,16 +41,32 @@ VARIANTS = {
 }
 LABEL = {"A": "today (50% at +1R)", "B": "50% at +0.5R, stop to BE", "C": "stop to BE at +0.5R",
          "D": "give back half after +0.5R → out", "E": "50% at 100 pips, stop to BE"}
+# trade-analyst check (Oct 19 2026, frozen before running): would a live analyst that exits when the trade's
+# situation turns against it have helped? Same entries, today's rules plus one analyst exit each.
+ANALYST = {
+    "A": {},
+    "F": {"an_flip": True},
+    "G": {"an_break": True},
+    "H": {"an_stall_min": 60.0, "an_stall_max_r": 0.5},
+    "X": {"an_flip": True, "an_break": True, "an_stall_min": 60.0, "an_stall_max_r": 0.5},
+}
+ANALYST_LABEL = {"A": "today (no analyst)", "F": "out when the 15m trend flips (close crosses EMA50 against)",
+                 "G": "out when 5m structure breaks (close beyond the last swing low/high)",
+                 "H": "out after 60 min without a new best while under +0.5R", "X": "all three analyst exits"}
+SETS = {"exit": (VARIANTS, LABEL, "Exit study — protection before the first target"),
+        "analyst": (ANALYST, ANALYST_LABEL, "Analyst check — would a live trade analyst's exits have helped?")}
 
 
-def cell_jobs(cfg, cells: list[dict]) -> list[tuple]:
+def cell_jobs(cfg, cells: list[dict], variants: dict | None = None) -> list[tuple]:
+    variants = VARIANTS if variants is None else variants
     jobs = []
     for c in cells:
         cc = copy.deepcopy(cfg)
         r = cc.setdefault("research", {})
         r["only_params"] = {c["setup"]: c.get("params") or {}}
-        vs = copy.deepcopy(VARIANTS)
-        vs["E"]["early_partial_pts"] = 100 * PIP.get(c["sym"], 1.0)
+        vs = copy.deepcopy(variants)
+        if "E" in vs:
+            vs["E"]["early_partial_pts"] = 100 * PIP.get(c["sym"], 1.0)
         r["exit_study"] = vs
         jobs.append((cc, c["sym"], c["tf"], [c["setup"]]))
     return jobs
@@ -74,8 +90,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--workers", type=int, default=2)
-    ap.add_argument("--out", type=Path, default=Path("data/year_test/exit_study"))
+    ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--set", choices=sorted(SETS), default="exit")
     a = ap.parse_args()
+    variants, label, title = SETS[a.set]
+    a.out = a.out or Path("data/year_test/exit_study" if a.set == "exit" else "data/year_test/analyst_check")
     cfg = load_config("config.yaml")
     pb = json.loads(Path("data/playbook.json").read_text())
     cells = [c for c in pb["cells"] if c["sym"] in cfg["instruments"]]
@@ -88,14 +107,14 @@ def main():
     parts = []
     with ProcessPoolExecutor(max_workers=a.workers, mp_context=multiprocessing.get_context("spawn"),
                              max_tasks_per_child=1) as ex:
-        for c, part in zip(cells, ex.map(run_job_frame, cell_jobs(cfg, cells))):
+        for c, part in zip(cells, ex.map(run_job_frame, cell_jobs(cfg, cells, variants))):
             if not len(part):
                 continue
             part = part[(part.tf == c["tf"]) & (part.variant == vkey(c.get("params") or {}))
                         & part.mgmt.str.startswith(c["mgmt"] + "|")]
             part = part.assign(cell=c["id"], var=part.mgmt.str.split("|").str[1])
             parts.append(part)
-            print(f"  {c['id']}: {len(part) // len(VARIANTS)} entries", flush=True)
+            print(f"  {c['id']}: {len(part) // len(variants)} entries", flush=True)
     T = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
     if not len(T):
         raise SystemExit("no trades — is the history cache there?")
@@ -105,7 +124,7 @@ def main():
     span = f"{pd.Timestamp(T.ts.min()):%Y-%m-%d} → {pd.Timestamp(T.ts.max()):%Y-%m-%d}"
     mid = pd.Timestamp(T.ts.min()) + (pd.Timestamp(T.ts.max()) - pd.Timestamp(T.ts.min())) / 2
     gave = A[(A.mfe >= 0.5) & (A.r <= 0)]
-    md = ["# Exit study — protection before the first target", "",
+    md = [f"# {title}", "",
           f"{len(cells)} cells of the current playbook (as of {pb.get('asof')}), {span}, every candidate entry of each "
           "cell replayed on 1-minute bars with real spread under each exit rule. Same entries for every variant — only "
           "the exit changes, so the differences are paired. R per trade after spread.", "",
@@ -116,7 +135,7 @@ def main():
           "| Variant | Rule | Entries | Win | Avg R | vs today (per entry) | 95% range of the difference | 1st half | 2nd half | Big runners (today ≥ +2R) |",
           "|---|---|---|---|---|---|---|---|---|---|"]
     rows = []
-    for v in VARIANTS:
+    for v in variants:
         X = T[T["var"] == v].set_index(key)
         J = X[["r"]].join(A[["r", "day"]], rsuffix="_a", how="inner")
         J["diff_r"] = J.r - J.r_a
@@ -128,22 +147,22 @@ def main():
                      "diff": float(J.diff_r.mean()), "lo": lo, "hi": hi, "h1": float(h1), "h2": float(h2),
                      "big_n": len(big), "big_diff": float(big.diff_r.mean()) if len(big) else float("nan")})
         r = rows[-1]
-        md.append(f"| **{v}** | {LABEL[v]} | {r['n']} | {r['win']:.0%} | {r['avg_r']:+.3f} | "
+        md.append(f"| **{v}** | {label[v]} | {r['n']} | {r['win']:.0%} | {r['avg_r']:+.3f} | "
                   + ("— |  — | — | — | — |" if v == "A" else
                      f"{r['diff']:+.3f} | {r['lo']:+.3f} to {r['hi']:+.3f} | {r['h1']:+.3f} | {r['h2']:+.3f} | "
                      f"{r['big_diff']:+.2f}R on {r['big_n']} |"))
     md += ["", "## By instrument (avg R per entry)", "",
-           "| Instrument | Entries | " + " | ".join(f"{v}" for v in VARIANTS) + " |", "|---|---|" + "---|" * len(VARIANTS)]
+           "| Instrument | Entries | " + " | ".join(f"{v}" for v in variants) + " |", "|---|---|" + "---|" * len(variants)]
     for sym, g in T.groupby("sym"):
         n = int((g["var"] == "A").sum())
-        md.append(f"| {sym} | {n} | " + " | ".join(f"{g[g['var'] == v].r.mean():+.3f}" for v in VARIANTS) + " |")
-    md += ["", "## By cell (avg R per entry)", "", "| Cell | Entries | " + " | ".join(VARIANTS) + " |",
-           "|---|---|" + "---|" * len(VARIANTS)]
+        md.append(f"| {sym} | {n} | " + " | ".join(f"{g[g['var'] == v].r.mean():+.3f}" for v in variants) + " |")
+    md += ["", "## By cell (avg R per entry)", "", "| Cell | Entries | " + " | ".join(variants) + " |",
+           "|---|---|" + "---|" * len(variants)]
     for cell, g in T.groupby("cell"):
         md.append(f"| {cell} | {int((g['var'] == 'A').sum())} | "
-                  + " | ".join(f"{g[g['var'] == v].r.mean():+.3f}" for v in VARIANTS) + " |")
+                  + " | ".join(f"{g[g['var'] == v].r.mean():+.3f}" for v in variants) + " |")
     best = max((r for r in rows if r["var"] != "A"), key=lambda r: r["diff"])
-    verdict = (f"**{best['var']} ({LABEL[best['var']]}) beats today by {best['diff']:+.3f}R per entry, above noise and in "
+    verdict = (f"**{best['var']} ({label[best['var']]}) beats today by {best['diff']:+.3f}R per entry, above noise and in "
                "both halves — worth switching to (after a forward check).**"
                if best["lo"] > 0 and best["h1"] > 0 and best["h2"] > 0 else
                f"**No variant beats today's rules by more than noise in both halves** (best: {best['var']}, "
