@@ -66,3 +66,20 @@ def test_trades_respect_the_frozen_exits():
     for fam, x in T.groupby("family"):                              # one at a time per family
         x = x.sort_values("entry_time")
         assert (pd.to_datetime(x.entry_time).iloc[1:].values >= pd.to_datetime(x.exit_time).iloc[:-1].values).all()
+
+
+def test_prereg_gold_1h_judges_only_the_holdout(tmp_path, monkeypatch):
+    for ds in ("dev_m1", "holdout_m1"):
+        d = tmp_path / "data/export" / ds
+        d.mkdir(parents=True)
+        m = frame(walk(n_days=60, seed=2 if ds == "dev_m1" else 8))
+        m = m[[c for c in m.columns if not c.startswith("m_")]]
+        m.index.name = "time"
+        m.to_csv(d / "XAUUSD_M1.csv.gz")
+    monkeypatch.chdir(tmp_path)
+    PT.main_prereg("gold_1h", "dev_m1,holdout_m1", tmp_path / "out", 29)
+    md = (tmp_path / "out/report.md").read_text()
+    dev = next(l for l in md.splitlines() if l.startswith("| dev_m1"))
+    hold = next(l for l in md.splitlines() if l.startswith("| holdout_m1"))
+    assert "(in-sample)" in dev and "judged" in hold and ("PASS" in hold or "no pass" in hold)
+    assert PT.PREREG["gold_1h"] == ("XAUUSD", 60)

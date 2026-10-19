@@ -28,7 +28,7 @@ for(const [width,scheme] of [[1440,'dark'],[390,'light'],[390,'dark']]){
  await page.evaluate(()=>go('trades'));await page.waitForTimeout(400);await page.locator('#trades [data-i]').first().click();await page.waitForTimeout(900);
  assert((await page.locator('#court').textContent()).includes('Risk'));await page.waitForFunction(()=>RP&&RP.view&&RP.view.candles>50);
  await page.locator('#drawer').screenshot({path:path.join(out,`v3-trade-${tag}.png`)});
- assert(await page.evaluate(()=>RP.ghosts.length)>=3,'ghosts');
+ assert(await page.evaluate(()=>RP.ghosts.length)>=3,'ghosts');await page.locator('#replay .ghbtn').click();await page.waitForTimeout(300);assert(await page.evaluate(()=>RP.view.ghosts)>=3,'ghost dots on');
  await page.locator('#lwPlay').click();await page.waitForTimeout(2500);
  await page.keyboard.press('Escape');await page.waitForTimeout(200);
  await page.locator('#askFab').click();await page.waitForTimeout(200);await page.locator('#askIdeas button').first().click();await page.waitForTimeout(600);

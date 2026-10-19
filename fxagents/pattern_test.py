@@ -50,7 +50,11 @@ from .gemini_test import MIN, Exits, manage, prep
 from .patterns import FLAT, TOL_TOP, _line, atr14, zigzag
 from .simple_rules import NY, PIP, load, pip_stats, stats
 
-PASSED_DEV: set[str] = set()          # filled in after the dev_m1 run; nothing else is scored on holdout data
+PASSED_DEV: set[str] = set()          # no family passed dev_m1 (Oct 19 2026 report); nothing else is scored on holdout
+# One pre-registered follow-up, frozen Oct 19 2026 after the dev report and BEFORE looking at any holdout data (Sam's
+# call): gold on 1h bars, all six families pooled as ONE rule, rules exactly as above. Dev showed +0.04…+0.09R in 5 of
+# 6 families there — found by slicing, so only the untouched holdout (2021 → Sep 2024) can judge it. Same pass bar.
+PREREG = {"gold_1h": ("XAUUSD", 60)}
 SYMBOLS = ("XAUUSD", "NDQ", "US30")
 TFS = (15, 60)
 FAMILIES = ("double", "hs", "triangle", "wedge", "channel", "flag")
@@ -245,12 +249,12 @@ def execute(a: dict, b: pd.DataFrame, sigs: list[dict], tf: int, blocked: np.nda
     return trades, ctl
 
 
-def run_symbol(path: Path, sym: str, rng) -> tuple[list, list, pd.DatetimeIndex]:
+def run_symbol(path: Path, sym: str, rng, tfs=TFS) -> tuple[list, list, pd.DatetimeIndex]:
     m1 = load(path)
     a = prep(m1)
     blk = block_mask(a, 15, 15)
     T, C = [], []
-    for tf in TFS:
+    for tf in tfs:
         b = bars(m1, tf)
         t, c = execute(a, b, signals(b), tf, blk, rng, sym)
         T += t
@@ -272,13 +276,62 @@ def judge(X: pd.DataFrame, Cx: pd.DataFrame, days, mid) -> dict:
     return st
 
 
+def main_prereg(name: str, data: str, out: Path, seed: int):
+    sym, tf = PREREG[name]
+    out.mkdir(parents=True, exist_ok=True)
+    res = {}
+    for ds in data.split(","):
+        f = Path("data/export") / ds / f"{sym}_M1.csv.gz"
+        if not f.exists():
+            raise SystemExit(f"no {f}")
+        t, c, days = run_symbol(f, sym, np.random.default_rng(seed), tfs=(tf,))
+        T, C = pd.DataFrame(t), pd.DataFrame(c)
+        T.to_csv(out / f"trades_{ds}.csv.gz", index=False)
+        et = pd.to_datetime(T.entry_time)
+        res[ds] = (T, C, judge(T, C, days, et.min() + (et.max() - et.min()) / 2))
+        print(f"  {ds}: {len(T)} trades", flush=True)
+    md = [f"# Pre-registered: chart patterns on gold 1h, all families as one rule ({data})", "",
+          "Frozen Oct 19 2026 after the dev report, before any holdout data was read (fxagents/pattern_test.py, PREREG). "
+          "Dev numbers are where the idea came from (in-sample, shown only); **the holdout alone decides**. Pass = ≥ 100 "
+          "trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves, better than "
+          "the coin-flip control. Real OANDA bid/ask fills; R includes the spread.", ""]
+    md += ["| Data | Role | Verdict | Trades | Win | Avg R | 95% range | 2× costs | 1st half | 2nd half | Coin flip | Total R |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for ds, (T, C, st) in res.items():
+        hold = ds.startswith("holdout")
+        if not st.get("trades"):
+            md.append(f"| {ds} | {'judged' if hold else 'shown'} | — | 0 |" + " |" * 8)
+            continue
+        verdict = ("**PASS**" if st["passed"] else "**no pass**") if hold else "(in-sample)"
+        md.append(f"| {ds} | {'judged' if hold else 'shown'} | {verdict} | {st['trades']} | {st['win']:.0%} | "
+                  f"{st['avg_R']:+.3f} | {st['ci_lo']:+.2f} to {st['ci_hi']:+.2f} | {st['avg_R_2x']:+.3f} | "
+                  f"{st['h1']:+.3f} | {st['h2']:+.3f} | {st['ctl_avg_R']:+.3f} | {st['total_R']:+.1f} |")
+    md += ["", "## By family (avg R, trades)", "", "| Family | " + " | ".join(res) + " |", "|---|" + "---|" * len(res)]
+    for fam in FAMILIES:
+        cells = []
+        for ds, (T, _, _) in res.items():
+            x = T[T.family == fam] if len(T) else T
+            cells.append(f"{x.R.mean():+.3f} ({len(x)})" if len(x) else "— (0)")
+        md.append(f"| {TITLE[fam]} | " + " | ".join(cells) + " |")
+    md += ["", "## Long vs short (avg R, trades)", "", "| Data | Long | Short |", "|---|---|---|"]
+    for ds, (T, _, _) in res.items():
+        lo_, sh_ = T[T.side > 0], T[T.side < 0]
+        md.append(f"| {ds} | {lo_.R.mean():+.3f} ({len(lo_)}) | {sh_.R.mean():+.3f} ({len(sh_)}) |")
+    (out / "report.md").write_text("\n".join(md) + "\n")
+    (out / "run.json").write_text(json.dumps({ds: st for ds, (_, _, st) in res.items()}, indent=2, default=str))
+    print("\n".join(md))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="dev_m1")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--frozen", action="store_true", help="holdout: score only PASSED_DEV families")
     ap.add_argument("--seed", type=int, default=29)
+    ap.add_argument("--prereg", choices=sorted(PREREG), help="run one pre-registered rule (dev shown, holdout judged)")
     a_ = ap.parse_args()
+    if a_.prereg:
+        return main_prereg(a_.prereg, a_.data, a_.out, a_.seed)
     rng = np.random.default_rng(a_.seed)
     a_.out.mkdir(parents=True, exist_ok=True)
     src = Path("data/export") / a_.data

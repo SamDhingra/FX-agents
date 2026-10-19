@@ -1092,7 +1092,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.5</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.6</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3577,7 +3577,12 @@ openTrade = function(t){
 
 /* chart patterns overlay (fxagents/patterns.py) — display only */
 const PAT = {on:true, failed:false};
-try{ PAT.on = localStorage.getItem("fx-patterns") !== "off"; }catch(e){}
+PAT.on = false;                                   // off unless the viewer switches it on (charts get crowded)
+try{ PAT.on = localStorage.getItem("fx-patterns2") === "on"; }catch(e){}
+const GHV = {on:false};                           // dots for setups the bot passed on, also off by default
+try{ GHV.on = localStorage.getItem("fx-passed") === "on"; }catch(e){}
+function setGhv(on){ GHV.on = on; try{ localStorage.setItem("fx-passed", on ? "on" : "off"); }catch(e){}
+  $$(".ghbtn").forEach(b => { b.setAttribute("aria-pressed", String(on)); b.textContent = "Passed" + (on ? " ✓" : ""); }); }
 async function fetchPatterns(t, bars, tf){
   if(!PAT.on || !bars || !bars.length) return [];
   try{ const r = await api("api/patterns?symbol=" + encodeURIComponent(t.symbol) + "&start=" + encodeURIComponent(bars[0].ts.toISOString())
@@ -3587,8 +3592,8 @@ function patSummary(list){
   const shown = list.filter(p => p.status !== "failed" || PAT.failed);
   return shown.length ? `<div class="patlist">${shown.map(p => `<span class="b${p.dir}">${esc(p.label)} · ${p.status}</span>`).join("")}</div>` : `<div class="patlist"><span>no patterns in view</span></div>`;
 }
-function setPat(on){ PAT.on = on; try{ localStorage.setItem("fx-patterns", on ? "on" : "off"); }catch(e){}
-  $$(".patbtn").forEach(b => b.setAttribute("aria-pressed", String(on))); }
+function setPat(on){ PAT.on = on; try{ localStorage.setItem("fx-patterns2", on ? "on" : "off"); }catch(e){}
+  $$(".patbtn").forEach(b => { b.setAttribute("aria-pressed", String(on)); b.textContent = "Patterns" + (on ? " ✓" : ""); }); }
 const _drawReplay7 = drawReplay;
 drawReplay = function(){
   const svg = $("#rpSvg"); if(!svg || !RP) return;
@@ -3685,6 +3690,7 @@ function lwBuild(LW, el, o){
     mark(pt.t0, top, pt.label + (pt.status === "confirmed" ? " ✓" : pt.status === "failed" ? " ✗" : " …"), col, "square", "atPriceTop", .5);
     if(pt.target != null && pt.t_break) seg(pt.t_break, pt.target, null, pt.target, col, 1, 1, null); }
   // ghosts (setups the bot passed on)
+  view.ghosts = (o.ghosts || []).length;
   for(const g of (o.ghosts || [])) mark(g.entry_ts || g.ts, g.entry, "", (g.r||0) > 0 ? cssv("--up") : cssv("--down"), "circle", "atPriceMiddle", .5);
   // entry / partials / adds / exit
   mark(t.opened, entry, "E", cssv("--accent"), "circle", "atPriceMiddle", 1.4);
@@ -3715,11 +3721,11 @@ replay = async function(t){
     const range = RP.lw.chart.timeScale().getVisibleLogicalRange();
     RP.t = t; RP.bars = B.bars.map(b => ({ts:new Date(b[0]), o:b[1], h:b[2], l:b[3], c:b[4]}));
     const LW = await ensureLW(); RP.lw.remove();
-    RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:RP.ghosts, patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view;
+    RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:GHV.on ? RP.ghosts : [], patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view;
     if(range) try{ RP.lw.chart.timeScale().setVisibleLogicalRange(range); }catch(e){}
     return;
   }
-  box.innerHTML = `<h3>Chart <span class="mut" style="font-weight:500;font-size:12px" id="lwCount"></span><span class="lwbtns"><button class="btn patbtn" aria-pressed="${PAT.on}">Patterns</button><button class="btn" id="lwPlay">▶ Replay</button><button class="btn" id="lwFullBtn">⤢ Full screen</button></span></h3>
+  box.innerHTML = `<h3>Chart <span class="mut" style="font-weight:500;font-size:12px" id="lwCount"></span><span class="lwbtns"><button class="btn patbtn" aria-pressed="${PAT.on}">Patterns${PAT.on ? " ✓" : ""}</button><button class="btn ghbtn" aria-pressed="${GHV.on}" title="setups the bot passed on (green = would have won)">Passed${GHV.on ? " ✓" : ""}</button><button class="btn" id="lwPlay">▶ Replay</button><button class="btn" id="lwFullBtn" title="full screen">⤢ Full</button></span></h3>
     <div class="rphead"><span class="chip">${esc(sname(stratOf(t)))}${tf>1?` · ${tf>=60?tf/60+"h":tf+"m"}`:""}</span>${t.closed ? "" : `<span class="tag">open</span>`}
     <span class="mut" style="font-size:12px">${drawsOf(t).length ? "the setup's own levels are drawn" : "no setup drawing recorded for this trade (trades before 19 Oct)"}</span>${t.reason ? `<span class="why">${esc(t.reason)}</span>` : ""}</div>
     <div class="lwbox" id="lwSmall"><div class="note" style="padding:12px">Loading candles…</div></div>
@@ -3735,16 +3741,20 @@ replay = async function(t){
   if(RP && RP.lw) RP.lw.remove();
   RP = {t, bars, ghosts, patterns:[], n:Infinity};
   let LW; try{ LW = await ensureLW(); }catch(e){ $("#lwSmall").innerHTML = `<div class="note" style="padding:12px">The chart library didn't load (offline?).</div>`; return; }
-  const draw = () => { if(RP.lw) RP.lw.remove(); RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:RP.ghosts, patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view; };
+  const draw = () => { const r = RP.lw ? RP.lw.chart.timeScale().getVisibleLogicalRange() : null; if(RP.lw) RP.lw.remove();
+    RP.lw = lwBuild(LW, $("#lwSmall"), {t, bars:RP.bars, ghosts:GHV.on ? RP.ghosts : [], patterns:PAT.on ? RP.patterns : []}); RP.view = RP.lw.view;
+    if(r) try{ RP.lw.chart.timeScale().setVisibleLogicalRange(r); }catch(e){} };
   draw();
   $("#lwCount").textContent = `${bars.length} candles · drag, pinch, tap for prices`;
   const roles = [...new Set(drawsOf(t).map(d => d.role))].filter(r => r !== "signal");
   const nice = {leg:"impulse leg", zone:"zone", level:"setup level", invalid:"invalidation", target:"structural target", trend:"trend line", event:"event"};
-  $("#lwLegend").innerHTML = `<span><b style="color:var(--accent)">E</b> entry · <b style="color:var(--up)">P</b> partial · <b>X</b> exit · red dashed = initial stop</span>`
-    + roles.map(r => `<span style="color:${cssv(ROLEC[r] || "--accent-2")}">— ${nice[r] || r}</span>`).join("") + (ghosts.length ? `<span>faint dots = ${ghosts.length} setups passed on</span>` : "");
+  const legend = () => { const L = $("#lwLegend"); if(!L) return; L.innerHTML = `<span><b style="color:var(--accent)">E</b> entry · <b style="color:var(--up)">P</b> partial · <b>X</b> exit · red dashed = initial stop</span>`
+    + roles.map(r => `<span style="color:${cssv(ROLEC[r] || "--accent-2")}">— ${nice[r] || r}</span>`).join("") + (GHV.on && ghosts.length ? `<span>dots = ${ghosts.length} setups passed on (green would have won)</span>` : ""); };
+  legend();
   const pats = async () => { RP.patterns = PAT.on ? await fetchPatterns(t, RP.bars, tf) : []; if(!RP || RP.t.id !== t.id) return; draw();
     box.querySelector(".patwrap").innerHTML = PAT.on ? `<div class="mut" style="font-size:11.5px;margin-top:6px">Chart patterns on ${tf}m candles (green bullish, red bearish; solid = confirmed, dashed = forming)</div>` + patSummary(RP.patterns) : ""; };
   box.querySelector(".patbtn").onclick = () => { setPat(!PAT.on); pats(); };
+  box.querySelector(".ghbtn").onclick = () => { setGhv(!GHV.on); draw(); legend(); };
   $("#lwFullBtn").onclick = () => openLwFull(t, RP.bars, RP.ghosts);
   $("#lwPlay").onclick = () => { if(!RP.lw) return; let k = 1; const n = RP.lw.view.candles, stp = Math.max(1, Math.round(n / 120));
     const step = () => { if(!RP || !RP.lw || RP.t.id !== t.id) return; k += stp; RP.lw.replayTo(k); if(k < n) requestAnimationFrame(step); else RP.lw.restore(); }; requestAnimationFrame(step); };
@@ -3757,11 +3767,12 @@ const LF = {t:null, raw:[], ghosts:[], tf:1, lw:null};
 function openLwFull(t, bars, ghosts){
   let el = $("#lwFull");
   if(!el){ document.body.insertAdjacentHTML("beforeend", `<div class="lwfull" id="lwFull" hidden><div class="cfhead"><button class="btn" id="lfBack">‹ Back</button><h3 id="lfTitle"></h3>
-      <div class="cfctl"><button class="btn patbtn" id="lfPat">Patterns</button><div class="seg" id="lfTf"></div><button class="btn" id="lfFit">Fit</button></div></div>
+      <div class="cfctl"><button class="btn patbtn" id="lfPat">Patterns</button><button class="btn ghbtn" id="lfGh" title="setups the bot passed on">Passed</button><div class="seg" id="lfTf"></div><button class="btn" id="lfFit">Fit</button></div></div>
       <div class="lwbody" id="lfChart"></div><div class="cfnote" id="lfNote"></div></div>`);
     el = $("#lwFull");
     $("#lfBack").onclick = closeLwFull; $("#lfFit").onclick = () => LF.lw && LF.lw.chart.timeScale().fitContent();
     $("#lfPat").onclick = () => { setPat(!PAT.on); setLfTf(LF.tf); };
+    $("#lfGh").onclick = () => { setGhv(!GHV.on); setLfTf(LF.tf); };
     document.addEventListener("keydown", e => { if(e.key === "Escape" && !$("#lwFull").hidden){ e.stopPropagation(); closeLwFull(); } }, true);
     window.addEventListener("popstate", () => { const f = $("#lwFull"); if(f && !f.hidden && !(history.state && history.state.lwFull)) hideLwFull(); }); }
   LF.t = t; LF.raw = bars; LF.ghosts = ghosts || [];
@@ -3774,10 +3785,10 @@ function openLwFull(t, bars, ghosts){
   setLfTf(tf);
 }
 async function setLfTf(m){
-  LF.tf = m; $$("#lfTf button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.m === m))); $("#lfPat").setAttribute("aria-pressed", String(PAT.on));
+  LF.tf = m; $$("#lfTf button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.m === m))); setPat(PAT.on); setGhv(GHV.on);
   const LW = await ensureLW(), bars = aggBars(LF.raw, m), pats = PAT.on ? await fetchPatterns(LF.t, LF.raw, m) : [];
   if(LF.lw) LF.lw.remove();
-  LF.lw = lwBuild(LW, $("#lfChart"), {t:LF.t, bars, ghosts:LF.ghosts, patterns:pats, big:true});
+  LF.lw = lwBuild(LW, $("#lfChart"), {t:LF.t, bars, ghosts:GHV.on ? LF.ghosts : [], patterns:pats, big:true});
   $("#lfNote").innerHTML = "Drag to pan · pinch or scroll to zoom · drag the price scale to stretch it · tap a candle for its prices." + (PAT.on ? patSummary(pats) : "");
 }
 function closeLwFull(){ const el = $("#lwFull"); if(!el || el.hidden) return; if(history.state && history.state.lwFull) history.back(); else hideLwFull(); }

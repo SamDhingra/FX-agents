@@ -29,6 +29,10 @@ for(const [w,h] of [[390,844],[1280,900]]){
  for(const k of ['E','X']) assert(v.markers.includes(k),'marker '+k);
  assert(await page.locator('#lwSmall canvas').count()>0,'canvas chart');
  assert(await page.locator('#replay .chip').count()===1,'strategy chip');
+ if(w>500){ assert((await page.evaluate(()=>RP.view.ghosts))===0,'passed setups off by default');
+  await page.locator('#replay .ghbtn').click();await page.waitForTimeout(300);
+  assert((await page.evaluate(()=>RP.view.ghosts))===(await page.evaluate(()=>RP.ghosts.length)),'passed setups toggle on');
+  await page.locator('#replay .ghbtn').click();await page.waitForTimeout(300); }
  await page.locator('#replay').screenshot({path:path.join(out,`v9-replay-${w}.png`)});
  // the chart pans on drag (native), the drawer still scrolls on phones
  const r0=await page.evaluate(()=>RP.lw.chart.timeScale().getVisibleLogicalRange());
