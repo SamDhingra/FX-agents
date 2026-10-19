@@ -1052,7 +1052,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-15.11</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2525,8 +2525,12 @@ async function courtroom(t){
   const bm = T.bias_mode || en.bias;
   if(bm && bm !== "n/a") lines.push(say("bi", `Higher timeframes are <b>${esc(String(bm).replace(/_/g," "))}</b>${en.bias_score!=null ? ` (score ${en.bias_score>0?"+":""}${fmt(en.bias_score,2)})` : ""}.`, 2));
   else lines.push(say("bi", `This book doesn't use the bias rule.`, 2));
-  const jq = J && J.outputs ? (J.outputs.quality ?? J.outputs.prob ?? J.outputs.follow) : T.jev_quality;
-  const jc = J && J.outputs ? J.outputs.confidence : T.jev_confidence;
+  // the trade's own stored grade first (the one that sized it); Jev's raw answers are {value, confidence} objects
+  const jnum = x => x != null && typeof x === "object" ? x.value : x;
+  const jo = (J && J.outputs) || {}, jraw = jo.quality ?? jo.prob ?? jo.follow;
+  const jq = T.jev_quality != null ? +T.jev_quality : jnum(jraw) != null ? +jnum(jraw) : null;
+  const jc = T.jev_confidence != null ? +T.jev_confidence
+           : (jraw && typeof jraw === "object" ? jraw.confidence : jo.confidence) ?? null;
   if(jq != null){
     const word = jq >= .65 ? "I like it" : jq >= .5 ? "Acceptable" : jq >= .35 ? "Doubtful" : "I'd pass";
     lines.push(say("jv", `${word}: <b class="num">${fmt(jq,2)}</b>${jc!=null?` <span class="mut">(confidence ${fmt(jc,2)})</span>`:""}.${J && J.question ? ` <span class="mut">Asked: “${esc(J.question)}”</span>` : ""}${(J ? J.source==="heuristic" : T.jev_source==="heuristic") ? ` <span class="mut">Jev was offline; a rule-based stand-in answered.</span>` : ""} <span class="mut">Advisory only.</span>`, 3));
@@ -2904,7 +2908,7 @@ async function loadMachine(day){
   TM.events = [
     ...TM.signals.map(s => ({t:+new Date(s.ts), k:s.action === "taken" ? "take" : "pass", sym:s.symbol,
       txt:`${s.action === "taken" ? "Took" : "Passed on"} ${esc(sname(String(s.strategy||"").split(":")[0]))} ${String(s.side).startsWith("L")||s.side>0?"long":"short"}${s.action!=="taken" && s.why ? ` — <span class="mut">${esc(s.why)}</span>` : ""}`})),
-    ...TM.decisions.map(d => ({t:+new Date(d.ts), k:"jev", sym:d.symbol, txt:`Jev ${esc(String(d.kind).replace(/_/g," "))}${d.outputs && (d.outputs.quality ?? d.outputs.prob) != null ? " " + fmt(d.outputs.quality ?? d.outputs.prob, 2) : ""} <span class="mut">(${esc(d.source)})</span>`})),
+    ...TM.decisions.map(d => ({t:+new Date(d.ts), k:"jev", sym:d.symbol, txt:`Jev ${esc(String(d.kind).replace(/_/g," "))}${(() => { const v = d.outputs && (d.outputs.quality ?? d.outputs.prob); const n = v != null && typeof v === "object" ? v.value : v; return n != null ? " " + fmt(n, 2) : ""; })()} <span class="mut">(${esc(d.source)})</span>`})),
     ...TM.trades.flatMap(t => (t.events||[]).map(e => ({t:+new Date(e.ts), k:e.kind === "entry" ? "entry" : /exit|closed/.test(e.kind) ? "exit" : "mgmt", sym:t.symbol,
       txt:`${esc(t.symbol)} ${esc(String(e.kind).replace(/_/g," "))}${e.price!=null?" at "+fpx(e.price):""}${e.stop!=null&&e.kind!=="entry"?" · stop "+fpx(e.stop):""}`}))),
     ...TM.news.map(n => ({t:+new Date(n.ts), k:"news", txt:`📰 ${esc(n.title)} <span class="mut">${esc(n.tier)}</span>`}))].sort((a,b) => a.t - b.t);
