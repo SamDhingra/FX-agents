@@ -15,6 +15,20 @@ from pathlib import Path
 from .api import Strategy
 
 
+PKG = Path(__file__).resolve().parents[1]
+
+
+def code_sha(src: bytes) -> str:
+    """A plugin's code fingerprint. Plugins that run the bot's own setups also cover the bridge and the setup code
+    they call, so editing any of it counts as a different strategy (tries, and the once-only vault)."""
+    h = hashlib.sha256(src)
+    if b"fxagents.bt.botsetups" in src:
+        for f in [PKG / "bt" / "botsetups.py", PKG / "bias.py", PKG / "structure.py", PKG / "indicators.py",
+                  *sorted((PKG / "strategies").glob("*.py"))]:
+            h.update(f.read_bytes())
+    return h.hexdigest()[:12]
+
+
 def load_plugin(path: str | Path) -> tuple[type[Strategy], str]:
     path = Path(path)
     src = path.read_bytes()
@@ -26,7 +40,7 @@ def load_plugin(path: str | Path) -> tuple[type[Strategy], str]:
                and v.__module__ == mod.__name__]
     if len(classes) != 1:
         raise ValueError(f"{path}: expected exactly one Strategy subclass, found {len(classes)}")
-    return classes[0], hashlib.sha256(src).hexdigest()[:12]
+    return classes[0], code_sha(src)
 
 
 def main(argv=None):
@@ -41,11 +55,21 @@ def main(argv=None):
     r.add_argument("--out", type=Path, help="also copy report.md / summary.json / trades.json.gz here")
     r.add_argument("--set", action="append", default=[], help="parameter override k=v (JSON value)")
     r.add_argument("--queue", action="store_true", help="only queue it for the fxbt worker (returns at once)")
+    sub.add_parser("cancel", help="cancel every queued run (and stop the running one)")
     sub.add_parser("worker")
     sub.add_parser("list")
     a = ap.parse_args(argv)
     if a.cmd == "worker":
         return jobs.worker()
+    if a.cmd == "cancel":
+        con = ledger.db()
+        try:
+            n = con.execute("UPDATE runs SET status='cancelled', stage='cancelled' WHERE status='queued'").rowcount
+            k = con.execute("UPDATE runs SET status='cancel' WHERE status='running'").rowcount
+        finally:
+            con.close()
+        print(f"cancelled {n} queued run(s); {k} running run(s) told to stop")
+        return
     if a.cmd == "list":
         for x in ledger.runs(50):
             print(f"{x['id']}  {x['status']:9} {x['role']:5} {x['plugin']:28} {x['symbol']:7} trades {x['trades'] or 0:4}"

@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 
 from .data import ROOT, datasets
+from .run import code_sha
 
 PLUGINS = Path("btplugins")
 SCHEMA = """CREATE TABLE IF NOT EXISTS runs (
@@ -45,7 +46,8 @@ def canon(params: dict) -> str:
 def _class_info(src: str) -> dict | None:
     tree = ast.parse(src)
     for node in tree.body:
-        if isinstance(node, ast.ClassDef) and any(getattr(b, "id", getattr(b, "attr", "")) == "Strategy" for b in node.bases):
+        if isinstance(node, ast.ClassDef) and any(getattr(b, "id", getattr(b, "attr", "")) in ("Strategy", "BotSetup")
+                                                  for b in node.bases):
             info = {"class": node.name, "name": node.name, "symbol": "XAUUSD", "description": "", "params": {},
                     "variants": {}, "doc": ast.get_docstring(tree) or ""}
             for st in node.body:
@@ -72,7 +74,7 @@ def plugins() -> list[dict]:
             out.append({"file": f.name, "error": f"syntax error line {e.lineno}"})
             continue
         if info:
-            out.append({"file": f.name, "code_sha": hashlib.sha256(src).hexdigest()[:12], **info})
+            out.append({"file": f.name, "code_sha": code_sha(src), **info})
     return out
 
 

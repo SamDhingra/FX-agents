@@ -308,9 +308,9 @@ def test_daily_rsi2_adx2_plugin_signal_exits():
 
 def test_bot_setups_bridge_runs_the_bots_own_code_causally():
     from tests.test_gemini_smc import frame, walk
-    cls, _ = load_plugin("btplugins/bot_setups.py")
+    cls, _ = load_plugin("btplugins/dtfx_close_fib.py")
     m = data.from_frame(frame(walk(seed=31, n_days=90)), symbol="BTCUSD")
-    s = cls(setup="dtfx_close_fib")
+    s = cls()
     sig = s.signals(m)
     T = pd.DataFrame(engine.simulate(s, m, sig, controls=False)["trades"])
     assert len(T) > 5 and set(T.exit_reason) <= {"stop", "partial_stop", "step_stop", "adjust_stop", "stop_same_bar",
@@ -349,3 +349,31 @@ def test_random_timing_control_exposes_timing_and_market_drift():
     m2 = data.from_frame(gold(400, 4))
     o2 = stats.summarize(engine.simulate(s, m2), m2)
     assert o2["timing"]["ci_lo"] < 0 < o2["timing"]["ci_hi"]
+
+
+def test_one_plugin_per_bot_setup_listed_with_its_own_fingerprint(tmp_path, monkeypatch):
+    import shutil
+    from fxagents.bt import ledger
+    from fxagents.strategies import ALL
+    files = [f for f in sorted(__import__("pathlib").Path("btplugins").glob("*.py")) if "fxagents.bt.botsetups" in f.read_text()]
+    assert len(files) == 20
+    (tmp_path / "btplugins").mkdir()
+    for f in files:
+        shutil.copy(f, tmp_path / "btplugins" / f.name)
+    monkeypatch.chdir(tmp_path)
+    ps = {p["file"]: p for p in ledger.plugins()}
+    assert len(ps) == 20 and all(p["params"]["setup"] in ALL and p["name"] == p["params"]["setup"] for p in ps.values())
+    assert ps["ict_amd.py"]["symbol"] == "BTCUSD" and len({p["code_sha"] for p in ps.values()}) == 20
+    from fxagents.bt.run import code_sha
+    src = (tmp_path / "btplugins/ict_amd.py").read_bytes()
+    assert code_sha(src) != __import__("hashlib").sha256(src).hexdigest()[:12]     # covers the bridge + setup code
+
+
+def test_cancel_command_clears_the_queue(tmp_path, monkeypatch, capsys):
+    from fxagents.bt import ledger
+    _seen_export(tmp_path, 25)
+    monkeypatch.chdir(tmp_path)
+    ids = [ledger.enqueue("vb.py", "seen") for _ in range(3)]
+    main(["cancel"])
+    assert "cancelled 3 queued" in capsys.readouterr().out
+    assert {ledger.get(i)["status"] for i in ids} == {"cancelled"}

@@ -1,12 +1,5 @@
-"""bot_setups — the trading bot's OWN setup code (fxagents/strategies: ICT, SMC, DTFX, Stoic SBS …) run through the
-backtest engine on any instrument, with the bot's live rules as closely as the engine allows.
-
-Pick the setup with the `setup` parameter and the entry timeframe with `tf` ("5min", "15min" …). Setups:
-  ICT   ict_2022  ict_silver_bullet  ict_turtle_soup  ict_amd  ict_fvg_sweep  ict_ote
-  SMC   smc_order_block  smc_breaker  smc_ifvg  smc_liquidity_sweep  smc_displacement  smc_bos_retest  smc_choch  smc_mss
-  DTFX  dtfx_zone  dtfx_close_fib  dtfx_wick_fib  dtfx_close_fib_brk  dtfx_close_origin
-  Stoic stoic_sbs
-(smt_divergence needs a correlated second instrument and isn't available here.)
+"""The bridge behind the per-setup plugins in btplugins/ (ict_amd.py, dtfx_close_fib.py, …): runs the trading bot's OWN
+setup code (fxagents/strategies) through the backtest engine with the bot's live rules, as closely as the engine allows.
 
 Live rules applied (config.yaml as of 2026-10-20):
   entries only in the windows 02:00–05:00, 08:30–11:30, 13:30–15:30, 20:00–23:59 NY, never against the 1H/4H/daily
@@ -15,19 +8,20 @@ Live rules applied (config.yaml as of 2026-10-20):
   first target 1R: bank 50%, stop to +0.1R; every further +1R the stop steps up 1R; after the first target, 45 min
   without a new best price tightens the stop to best − 0.5R; out after 4 hours or at 15:50 NY.
 Not modelled: adds (off in live anyway), Jev's quality gate, the portfolio caps across instruments.
+A plugin's recorded code fingerprint covers this file and the bot's setup code too (fxagents/bt/run.code_sha).
 """
 import numpy as np
 import pandas as pd
 
-from fxagents.bt import Exits, Signal, Strategy
+from .api import Exits, Signal, Strategy
 
 LIVE_WINDOWS = [(120, 300), (510, 690), (810, 930), (1200, 1440)]
 
 
-class BotSetups(Strategy):
-    name = "bot_setups"
+class BotSetup(Strategy):
+    name = "bot_setup"
     symbol = "BTCUSD"
-    description = "The bot's own ICT / SMC / DTFX / Stoic setup code with its live rules. Choose `setup` and `tf`."
+    description = "The bot's own setup code with its live rules."
     params = {"setup": "ict_silver_bullet", "tf": "5min", "setup_params": {}, "use_bias": True, "min_align": 0.25,
               "min_stop_atr": 0.5, "max_stop_pct": 0.10, "stall_min": 45, "stall_gap_r": 0.5}
     exits = Exits(partials=[(1.0, 0.5, 0.1)] + [(float(k), 0.0, k - 0.9) for k in range(2, 9)],
