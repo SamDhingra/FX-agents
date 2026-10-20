@@ -21,7 +21,8 @@ case "${1:-help}" in
   status)    $DC ps; echo; curl -fsS localhost:8088/healthz && echo " ← app healthy" || echo "app not answering on :8088" ;;
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              if [[ -d .git ]]; then git pull --ff-only || { echo; echo "git pull failed — nothing rebuilt (fix the above first)"; exit 1; }; fi
-             $DC build fxagents && $DC up -d fxagents fxbt ;;
+             $DC build fxagents && mkdir -p candles_key && { [[ -f "$HOME/.ssh/fx_results" ]] && install -m 600 "$HOME/.ssh/fx_results" candles_key/key || echo "note: candles won't be pushed until you run ./fx.sh publish-setup once"; }
+             $DC up -d fxagents fxbt fxcandles ;;
   localize)  # one-time: turn a full, hand-edited config into config.local.yaml (only your differences)
              #   ./fx.sh localize /tmp/server-config.yaml
              [[ -f "${2:-}" ]] || { echo "usage: ./fx.sh localize <copy of your full config.yaml>"; exit 1; }
@@ -256,6 +257,8 @@ case "${1:-help}" in
              for tf_ in $tfs_; do for st_ in $sts_; do
                $DC exec -T fxbt python -m fxagents.bt run "btplugins/$st_.py" --queue --symbol "$sym_" --set "tf=\"$tf_\"" </dev/null
              done; done ;;
+  candles)   # candles for ChatGPT & co: refresh and push once now (the fxcandles container does it every 5 minutes)
+             $DC exec -T fxcandles python -m fxagents.candles_publish --once ;;
   btcancel)  # cancel every queued backtest (and stop the one running)
              $DC exec -T fxbt python -m fxagents.bt cancel </dev/null ;;
   instcheck) # READ-ONLY: can this OANDA account trade an instrument; size, margin, financing, live + historical spread
@@ -359,7 +362,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

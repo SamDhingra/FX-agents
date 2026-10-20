@@ -212,6 +212,9 @@ dashboard:
   ask_model: claude-sonnet-5-5 # Ask the bot: Claude model (needs ANTHROPIC_API_KEY in .env; without it, raw facts)
   ask_per_hour: 30             # cap on Claude calls per hour
 
+candles:                       # fresh MID candles pushed to the PUBLIC 'candles' branch every 5 min (fxcandles container)
+  enabled: true                # false = stop publishing (data is OANDA practice prices, no account data)
+
 tradingview:
   webhook_secret: ""           # set TV_WEBHOOK_SECRET; alerts post to /webhook/tradingview
 

@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 config.local.yaml
 docs/ui-review/
+candles_key/

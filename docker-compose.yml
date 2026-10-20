@@ -62,6 +62,22 @@ services:
       disable: true
     logging: *logs
 
+  fxcandles:                                         # keeps fresh candles on the public 'candles' branch (read-only OANDA GETs)
+    image: fx-agents:latest                          # for ChatGPT & co: https://raw.githubusercontent.com/<repo>/candles/README.md
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 300m
+    env_file: .env
+    environment:
+      FX_MODE: paper
+      CANDLES_REPO: ${CANDLES_REPO:-SamDhingra/FX-agents}
+    command: ["python", "-m", "fxagents.candles_publish", "--loop", "300"]
+    volumes:
+      - ./candles_key:/key:ro                        # the deploy key from `./fx.sh publish-setup`, copied here by `./fx.sh update`
+    healthcheck:
+      disable: true
+    logging: *logs
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
