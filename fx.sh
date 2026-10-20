@@ -246,7 +246,7 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/bt-build.log 2>&1 || { echo "build failed — see logs/bt-build.log"; exit 1; }
              n_=$(basename "$2" .py)
              $DC run --rm --no-deps -T fxbt nice -n 10 python -m fxagents.bt run "$2" --data "${3:-seen}" \
-               ${4:+--symbol "$4"} --out "data/year_test/bt_${n_}_${3:-seen}" </dev/null
+               ${4:+--symbol "$4"} --out "data/year_test/bt_${n_}_${3:-seen}${4:+_$4}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
