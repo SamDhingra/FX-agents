@@ -1125,7 +1125,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.4</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.5</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3903,7 +3903,11 @@ async function btSubmit(){
 function btRenderRuns(){
   const R = BXC.runs || [];
   const stuck = R.some(r => r.status === "queued" && Date.now() / 1000 - r.created > 90) && !R.some(r => r.status === "running");
-  $("#bxRunsNote").innerHTML = stuck ? `<span style="color:var(--warn)">waiting over 90 s — is the worker running? <code>docker compose up -d fxbt</code></span>` : R.length ? `${R.length} recorded` : "";
+  const nq = R.filter(r => ["queued","running"].includes(r.status)).length;
+  $("#bxRunsNote").innerHTML = (stuck ? `<span style="color:var(--warn)">waiting over 90 s — is the worker running? <code>docker compose up -d fxbt</code></span> ` : R.length ? `${R.length} recorded ` : "")
+    + (nq > 1 ? `<button class="btn" id="bxCancelAll" type="button" style="min-height:28px;padding:4px 10px;margin-left:8px">Cancel all queued (${nq})</button>` : "");
+  const ca = $("#bxCancelAll"); if(ca) ca.onclick = async () => { if(!confirm(`Cancel ${nq} queued / running backtests?`)) return;
+    const j = await labPost("api/bt/cancel_all", {}); if(j){ toast(`Cancelled ${j.queued} queued${j.running ? ", stopping the running one" : ""}.`); loadBt(); } };
   if(!R.length){ $("#bxRuns").innerHTML = `<div class="empty">No runs yet. Pick a plugin and run it on seen data.</div>`; return; }
   $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${R.map(r => {
     const st = r.status === "running" ? `<div class="btbar" title="${esc(r.stage)}"><i style="width:${r.pct||0}%"></i></div><small class="mut">${esc(r.stage||"")}</small>`
@@ -3915,7 +3919,7 @@ function btRenderRuns(){
 }
 function btDiff(r){                    // the parameters this run changed from the plugin's defaults, shortest form
   const p = (BXC.plugins || []).find(x => x.file === r.plugin); let P = {}; try{ P = JSON.parse(r.params || "{}"); }catch(e){}
-  if(!p || !p.params) return "";
+  if(!p || !p.params) return [P.setup, P.tf].filter(Boolean).join(" · ");     // plugin since removed: show what we can
   return Object.entries(P).filter(([k, v]) => k === "setup" || k === "tf" || JSON.stringify(v) !== JSON.stringify(p.params[k]))
     .map(([k, v]) => typeof v === "string" ? v : `${k}=${JSON.stringify(v)}`).join(" · ");
 }

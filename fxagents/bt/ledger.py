@@ -210,3 +210,14 @@ def catalog() -> dict:
             "SELECT * FROM runs ORDER BY created DESC LIMIT 100")]}
     finally:
         con.close()
+
+
+def cancel_all() -> tuple[int, int]:
+    """Cancel every queued run; tell the running one to stop (the worker kills it within a second or two)."""
+    con = db()
+    try:
+        n = con.execute("UPDATE runs SET status='cancelled', stage='cancelled' WHERE status='queued'").rowcount
+        k = con.execute("UPDATE runs SET status='cancel' WHERE status='running'").rowcount
+        return n, k
+    finally:
+        con.close()

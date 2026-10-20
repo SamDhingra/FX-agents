@@ -667,6 +667,13 @@ def build_app(ctx) -> FastAPI:
             raise HTTPException(400, str(e))
         return {"id": rid}
 
+    @app.post("/api/bt/cancel_all")
+    async def api_bt_cancel_all(request: Request):
+        need(request, always=True)
+        from ..bt import ledger
+        n, k = await asyncio.to_thread(ledger.cancel_all)
+        return {"queued": n, "running": k}
+
     @app.post("/api/bt/run/{rid}/cancel")
     async def api_bt_cancel(rid: str, request: Request):
         need(request, always=True)

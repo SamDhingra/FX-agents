@@ -62,12 +62,7 @@ def main(argv=None):
     if a.cmd == "worker":
         return jobs.worker()
     if a.cmd == "cancel":
-        con = ledger.db()
-        try:
-            n = con.execute("UPDATE runs SET status='cancelled', stage='cancelled' WHERE status='queued'").rowcount
-            k = con.execute("UPDATE runs SET status='cancel' WHERE status='running'").rowcount
-        finally:
-            con.close()
+        n, k = ledger.cancel_all()
         print(f"cancelled {n} queued run(s); {k} running run(s) told to stop")
         return
     if a.cmd == "list":

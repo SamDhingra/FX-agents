@@ -87,12 +87,40 @@ def execute(rid: str, audit: int = 10) -> dict:
         raise
 
 
+def _child(rid: str):
+    try:
+        execute(rid)
+    except Exception:  # noqa: BLE001 — execute() already recorded it in the ledger
+        pass
+
+
+def run_job(rid: str, poll: float = 1.0) -> str:
+    """Run one job in its own process, so a cancel stops it at once (not at its next progress step) and everything it
+    loaded is freed when it ends. Returns the final status."""
+    import multiprocessing as mp
+    p = mp.get_context("fork").Process(target=_child, args=(rid,), daemon=True)
+    p.start()
+    while p.is_alive():
+        p.join(poll)
+        r = ledger.get(rid)
+        if r and r["status"] == "cancel" and p.is_alive():
+            p.terminate()
+            p.join(10)
+            ledger.update(rid, status="cancelled", stage="cancelled", finished=time.time())
+    r = ledger.get(rid) or {}
+    if r.get("status") in ("running", "cancel"):              # the process died without recording an outcome
+        ledger.update(rid, status="cancelled" if r["status"] == "cancel" else "error", stage="error",
+                      finished=time.time(), error=f"job process ended unexpectedly (exit {p.exitcode}; out of memory?)")
+    return (ledger.get(rid) or {}).get("status", "?")
+
+
 def worker(poll: float = 3.0, once: bool = False):
-    # a run left "running" by a crash/restart can't still be running (one worker): mark it so it can be re-queued
+    # a run left running by a crash/restart can't still be running (one worker): record what happened to it
     con = ledger.db()
     try:
+        con.execute("UPDATE runs SET status='cancelled', stage='cancelled' WHERE status='cancel'")
         con.execute("UPDATE runs SET status='error', stage='error', error='worker restarted mid-run' "
-                    "WHERE status IN ('running','cancel')")
+                    "WHERE status='running'")
     finally:
         con.close()
     print("bt worker: waiting for jobs", flush=True)
@@ -100,11 +128,7 @@ def worker(poll: float = 3.0, once: bool = False):
         r = ledger.claim()
         if r:
             print(f"bt worker: {r['id']} {r['plugin']} {r['symbol']} {r['dataset']}", flush=True)
-            try:
-                execute(r["id"])
-                print(f"bt worker: {r['id']} done", flush=True)
-            except Exception as e:  # noqa: BLE001
-                print(f"bt worker: {r['id']} {type(e).__name__}: {e}", flush=True)
+            print(f"bt worker: {r['id']} {run_job(r['id'])}", flush=True)
         elif once:
             return
         else:

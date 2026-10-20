@@ -377,3 +377,19 @@ def test_cancel_command_clears_the_queue(tmp_path, monkeypatch, capsys):
     main(["cancel"])
     assert "cancelled 3 queued" in capsys.readouterr().out
     assert {ledger.get(i)["status"] for i in ids} == {"cancelled"}
+
+
+def test_cancel_stops_a_running_job_at_once(tmp_path, monkeypatch):
+    import threading
+    import time as _t
+    from fxagents.bt import jobs, ledger
+    _seen_export(tmp_path, 25)
+    (tmp_path / "btplugins/slow.py").write_text(
+        "import time\nfrom fxagents.bt import Strategy\n\nclass Slow(Strategy):\n    name = 'slow'\n"
+        "    def signals(self, m):\n        time.sleep(60)\n        return []\n")
+    monkeypatch.chdir(tmp_path)
+    rid = ledger.enqueue("slow.py", "seen")
+    ledger.update(rid, status="running")
+    threading.Timer(4.0, lambda: ledger.cancel_all()).start()
+    t0 = _t.time()
+    assert jobs.run_job(rid, poll=0.5) == "cancelled" and _t.time() - t0 < 20
