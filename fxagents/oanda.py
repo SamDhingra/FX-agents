@@ -157,8 +157,10 @@ class OandaFeed:
         by = {i["name"]: i for i in res.get("instruments", [])}
         for sym, name in list(self.syms.items()):
             i = by.get(name)
-            if i is None and self.cfg["instruments"][sym].get("trade", True) is False:
-                log.warning("%s: %s isn't offered on this OANDA account — dropped (it was watch-only)", sym, name)
+            ic0 = self.cfg["instruments"][sym]
+            if i is None and (ic0.get("trade", True) is False or ic0.get("optional")):
+                log.warning("%s: %s isn't offered on this OANDA account — dropped (%s)", sym, name,
+                            "it was watch-only" if ic0.get("trade", True) is False else "optional instrument")
                 self.cfg["instruments"].pop(sym, None)
                 self.syms.pop(sym, None)
                 continue

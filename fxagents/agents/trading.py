@@ -594,7 +594,7 @@ class PositionManagerAgent(Agent):
         mins = now.hour * 60 + now.minute
         held = (now - pos.opened_ts).total_seconds() / 60
         max_hold = float(pos.meta.get("max_hold", s["max_hold_minutes"]))
-        if (_hm(s["flatten_at"]) <= mins < 17 * 60) or held >= max_hold:
+        if not pos.meta.get("hold_overnight") and ((_hm(s["flatten_at"]) <= mins < 17 * 60) or held >= max_hold):
             return await self.close(pos, bar.close, "session_flat" if held < max_hold else "max_hold")
         if pos.meta.get("external_mgmt"):
             return              # its own trader manages stops (e.g. the h1_vol_trend book); time exits still apply

@@ -341,3 +341,16 @@ def test_watch_only_instrument_missing_at_the_broker_is_dropped_not_fatal():
         assert "AUDUSD" not in cfg["instruments"] and "AUDUSD" not in feed.syms
     finally:
         SPECS["AUD_USD"] = saved
+
+
+def test_optional_instrument_missing_at_the_broker_is_dropped_not_fatal():
+    cfg, fake, c, st, bus, feed, b = setup(watch_fx=True)
+    from tests.fake_oanda import SPECS
+    saved = SPECS.pop("AUD_USD")
+    try:
+        cfg["instruments"]["AUDUSD"]["trade"] = True
+        cfg["instruments"]["AUDUSD"]["optional"] = True          # e.g. BTCUSD on an account without crypto
+        run(feed.qualify())
+        assert "AUDUSD" not in cfg["instruments"] and "XAUUSD" in cfg["instruments"]
+    finally:
+        SPECS["AUD_USD"] = saved

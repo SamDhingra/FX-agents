@@ -282,7 +282,8 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "h1_vol_trend", "ema21_rsi55", "gold_breakout")
+MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "h1_vol_trend", "ema21_rsi55", "gold_breakout",
+         "daily_rsi2_adx2")
 
 
 def shadow_db_path(main_path: str, mode: str | None = None) -> str:
@@ -339,6 +340,9 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     elif mode == "ema21_rsi55":
         from .ema_rsi_trader import EmaRsiTrader
         trader = EmaRsiTrader(sctx)
+    elif mode == "daily_rsi2_adx2":
+        from .daily_rule_trader import DailyRuleTrader
+        trader = DailyRuleTrader(sctx)
     elif mode == "gold_breakout":
         from .breakout_trader import BreakoutTrader
         trader = BreakoutTrader(sctx)

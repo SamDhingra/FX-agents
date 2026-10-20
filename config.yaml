@@ -63,7 +63,7 @@ instruments:
 timeframes:
   entry: [5min, 15min]    # every strategy runs on both; the 5m and 15m versions compete each hour
   history_days: 12        # 1-minute history pulled at start-up (entries + evaluation)
-  h1_history_days: 45     # 1-hour history for Daily / 4H / 1H structure (bias)
+  h1_history_days: 120    # 1-hour history for Daily / 4H / 1H structure (bias) and the daily book's SMA(50)
 
 # ── Higher-timeframe bias: HARD RULE for every strategy, with safeguards for when it is wrong ──
 bias:
@@ -248,7 +248,12 @@ shadow:
     range_end_hour: 7           # range 00:00–07:00 broker time
     close_hour: 20              # flat 20:00 broker time; no target
     broker_utc_offset: 3        # the author's fixed GMT+3 clock
-  modes: [playbook, playbook_regime, h1_vol_trend, ema21_rsi55, gold_breakout]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py) (overrides `mode`); several run side by side, each with its own journal.
+  daily_rsi2_adx2:              # Sam's daily RSI(2)/ADX(2) trend rule on paper, rules frozen (agents/daily_rule_trader.py);
+                                # 2021–Sep 2026: small positive, not significant → forward record only (Oct 20 2026)
+    symbols: [XAUUSD, BTCUSD]   # BTCUSD joins once it's in `instruments`
+    risk_pct: 0.001             # 0.10% of the book's equity at the 3-ATR protective stop
+    stop_atr: 3.0
+  modes: [playbook, playbook_regime, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py) (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)

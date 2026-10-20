@@ -258,6 +258,10 @@ case "${1:-help}" in
              done; done ;;
   btcancel)  # cancel every queued backtest (and stop the one running)
              $DC exec -T fxbt python -m fxagents.bt cancel </dev/null ;;
+  instcheck) # READ-ONLY: can this OANDA account trade an instrument; size, margin, financing, live + historical spread
+             #   ./fx.sh instcheck BTC_USD
+             need_env
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.instrument_check "${@:2}" </dev/null ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
              for k in FOREXCOM_USERNAME FOREXCOM_PASSWORD FOREXCOM_APPKEY; do grep -q "^$k=." .env || { echo "add $k=... to .env"; exit 1; }; done
