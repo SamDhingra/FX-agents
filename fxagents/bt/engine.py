@@ -89,7 +89,7 @@ class _Trail:
 
 
 def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exits, costs: Costs, t_sig: int,
-           target_m: float | None = None, adjust=None) -> dict:
+           target_m: float | None = None, adjust=None, exit_ns: int | None = None) -> dict:
     """One trade from fill minute j, in mirrored prices (e = entry, st0 = initial stop). Returns the outcome."""
     ns, mod, dow, day = m.ns, m.mod, m.dow, m.day
     R = e - st0
@@ -111,6 +111,7 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
             f = (pd.Timestamp(loc.date()) + pd.Timedelta(days=1, minutes=int(ex.flat_at))).tz_localize(NY)
         t_flat = f.value
     k_time = int(np.searchsorted(ns, ns[j] + ex.time_stop[0] * MIN)) if ex.time_stop else -1
+    k_exit = int(np.searchsorted(ns, exit_ns)) if exit_ns is not None else len(ns) + 1   # the strategy's own exit
     gap = costs.gap_exit_min if not ex.hold_overnight else max(costs.gap_exit_min, 180.0)
     shield = costs.rollover_shield
     close_after = (ex.trail or {}).get("after_close_r")
@@ -137,6 +138,8 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
             return out(k, M["ex_o"][k], "friday_flat")
         if k > j and ex.max_hold_min is not None and ns[k] - ns[j] >= ex.max_hold_min * MIN:
             return out(k, M["ex_o"][k], "max_hold")
+        if k > j and k >= k_exit:
+            return out(k, M["ex_o"][k], "signal_exit")
         if k == k_time and (M["ex_o"][k] - e) < ex.time_stop[1] * R:
             return out(k, M["ex_o"][k], "time_stop")
         # 1) the stop first
@@ -284,7 +287,7 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
             continue
         adj = (lambda k, s=s, side=side: strat.adjust({"side": side, "entry": side * e, "stop0": s.stop,
                                                        "signal": s}, m, k)) if adjust_defined else None
-        o = manage(m, M, side, j, e, st_m, ex, costs, s.t, tgt_m, adj)
+        o = manage(m, M, side, j, e, st_m, ex, costs, s.t, tgt_m, adj, s.exit_t)
         fin = o["rollovers"] * costs.financing_bps / 1e4 * abs(e)
         r1, r2 = _r(o["pts"], R, fin, spread, costs.cad)
         trades.append({
@@ -305,7 +308,8 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
             for cs in (1, -1):
                 C = MS[cs]
                 ce = float(C["in_o"][j])
-                co = manage(m, C, cs, j, ce, ce - R, ex, costs, s.t, None if dist is None else ce + dist)
+                co = manage(m, C, cs, j, ce, ce - R, ex, costs, s.t, None if dist is None else ce + dist,
+                            exit_ns=s.exit_t)
                 cfin = co["rollovers"] * costs.financing_bps / 1e4 * abs(ce)
                 a, b = _r(co["pts"], R, cfin, spread, costs.cad)
                 rr.append(a)

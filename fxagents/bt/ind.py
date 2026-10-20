@@ -25,6 +25,24 @@ def atr(b: pd.DataFrame, n: int = 14) -> np.ndarray:
     return wilder(tr.to_numpy(), n)
 
 
+def adx(b: pd.DataFrame, n: int = 14) -> np.ndarray:
+    """Wilder ADX of a candle frame (columns h l c)."""
+    h, l, c = (b[k].to_numpy(float) for k in "hlc")
+    up, dn = np.diff(h, prepend=np.nan), -np.diff(l, prepend=np.nan)
+    pdm = np.where((up > dn) & (up > 0), up, 0.0)
+    mdm = np.where((dn > up) & (dn > 0), dn, 0.0)
+    pc = np.r_[np.nan, c[:-1]]
+    tr = np.nanmax(np.c_[h - l, np.abs(h - pc), np.abs(l - pc)], axis=1)
+    pdm[0] = mdm[0] = np.nan
+    atr_ = wilder(tr[1:], n)
+    pdi = 100 * wilder(pdm[1:], n) / atr_
+    mdi = 100 * wilder(mdm[1:], n) / atr_
+    s = pdi + mdi
+    dx = 100 * np.abs(pdi - mdi) / np.where(s == 0, np.nan, s)
+    dx = pd.Series(dx).fillna(0.0).where(pd.Series(s).notna()).to_numpy()
+    return np.r_[np.nan, wilder(dx, n)]
+
+
 def rsi(c, n: int = 14) -> np.ndarray:
     d = np.diff(np.asarray(c, float), prepend=np.nan)
     up, dn = wilder(np.clip(d, 0, None), n), wilder(np.clip(-d, 0, None), n)

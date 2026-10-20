@@ -41,6 +41,8 @@ class Signal:
     expire_min: float = 0.0             # pending order life (minutes); market: max wait for the next minute (0 → 5)
     cancel: float | None = None         # cancel the pending order if the mid price touches this level first
     target: float | None = None         # full-exit target (real price) — overrides exits.target_r
+    exit_t: int | None = None           # ns: the strategy's own exit decision (e.g. a daily close where its exit rule
+                                        # fired) — out at the first minute at/after it, if still open
     risk_min: float | None = None       # skip unless the risk at fill (price) is within [risk_min, risk_max]
     risk_max: float | None = None
     tag: str = ""                       # free label (shown on the chart and in the trade list)

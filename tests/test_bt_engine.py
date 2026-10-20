@@ -278,3 +278,29 @@ def test_crypto_pays_financing_every_day_with_no_wednesday_triple():
         t = run(m, lambda m: Signal(t=int(m.ns[1]), side=1, stop=90.0),
                 Exits(max_hold_min=6 * 1440 - 10, hold_overnight=True), costs=Costs(**{**RAW.__dict__, "financing_bps": 1.0}))
         assert t["trades"][0]["rollovers"] == want, sym
+
+
+def test_adx_tracks_trend_strength():
+    from fxagents.bt import ind
+    n = 120
+    up = pd.DataFrame({"h": np.arange(n) + 1.0, "l": np.arange(n) - 1.0, "c": np.arange(n) + 0.5})
+    rng = np.random.default_rng(1)
+    x = 100 + rng.normal(0, 1, n)
+    chop = pd.DataFrame({"h": x + 1, "l": x - 1, "c": x})
+    assert ind.adx(up, 14)[-1] > 90 and ind.adx(chop, 14)[-1] < 40
+
+
+def test_daily_rsi2_adx2_plugin_signal_exits():
+    from tests.test_h4_donchian import gold
+    cls, _ = load_plugin("btplugins/daily_rsi2_adx2.py")
+    s = cls()
+    m = data.from_frame(gold(400, 4))
+    res = engine.simulate(s, m)
+    T = pd.DataFrame(res["trades"])
+    assert len(T) > 10 and (T.side == 1).all() and len(res["coin"]) == len(T)
+    assert (T.exit_reason == "signal_exit").mean() > 0.8 and set(T.exit_reason) <= {"signal_exit", "stop", "end"}
+    assert T.overnight.any() and (T.fin_R > 0).any()
+    loc = pd.to_datetime(T.exit_time).dt.tz_convert("America/New_York")
+    assert ((loc.dt.hour == 18) & (loc.dt.minute == 0)).mean() > 0.8        # out at the next daily open
+    a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=200)
+    assert a["checked"] == 5 and a["failed"] == 0
