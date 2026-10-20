@@ -638,6 +638,116 @@ def build_app(ctx) -> FastAPI:
             raise HTTPException(404, "no report yet")
         return JSONResponse(json.loads(p.read_text()))
 
+    # ── backtest app (fxagents/bt): plugins in btplugins/, jobs run by the fxbt worker, results in data/bt ──
+    import re as _re
+
+    def _rid(rid: str) -> str:
+        if not _re.fullmatch(r"[0-9]{8}-[0-9]{6}-[0-9a-f]{4}", rid):
+            raise HTTPException(400, "bad run id")
+        return rid
+
+    @app.get("/api/bt")
+    async def api_bt(request: Request):
+        need(request)
+        from ..bt import ledger
+        return JSONResponse(await asyncio.to_thread(ledger.catalog))
+
+    @app.post("/api/bt/run")
+    async def api_bt_run(request: Request):
+        need(request, always=True)
+        from ..bt import ledger
+        b = await request.json()
+        params = b.get("params") or {}
+        if not isinstance(params, dict):
+            raise HTTPException(400, "params must be an object")
+        try:
+            rid = await asyncio.to_thread(ledger.enqueue, str(b.get("plugin", "")), str(b.get("dataset", "seen")),
+                                          b.get("symbol") or None, params, "app", str(b.get("note") or ""))
+        except (ValueError, PermissionError, FileNotFoundError) as e:
+            raise HTTPException(400, str(e))
+        return {"id": rid}
+
+    @app.post("/api/bt/run/{rid}/cancel")
+    async def api_bt_cancel(rid: str, request: Request):
+        need(request, always=True)
+        from ..bt import ledger
+        r = ledger.get(_rid(rid))
+        if not r:
+            raise HTTPException(404, "no such run")
+        if r["status"] == "queued":
+            ledger.update(rid, status="cancelled", stage="cancelled")
+        elif r["status"] == "running":
+            ledger.update(rid, status="cancel")
+        return {"ok": True}
+
+    @app.get("/api/bt/run/{rid}")
+    async def api_bt_get(rid: str, request: Request):
+        need(request)
+        import gzip
+        from ..bt import ledger
+        r = ledger.get(_rid(rid))
+        if not r:
+            raise HTTPException(404, "no such run")
+        d = ledger.run_dir(rid)
+        out = {"run": r, "summary": None, "trades": []}
+        if (d / "summary.json").exists():
+            out["summary"] = json.loads((d / "summary.json").read_text())
+        if (d / "trades.json.gz").exists():
+            with gzip.open(d / "trades.json.gz", "rt") as fh:
+                out["trades"] = json.load(fh)
+        return JSONResponse(out)
+
+    @app.get("/api/bt/run/{rid}/{what}")
+    async def api_bt_file(rid: str, what: str, request: Request):
+        need(request)
+        from ..bt import ledger
+        f = {"report": "report.md", "code": "code.py"}.get(what)
+        p = ledger.run_dir(_rid(rid)) / (f or "-")
+        if not f or not p.exists():
+            raise HTTPException(404, "not found")
+        return PlainTextResponse(p.read_text())
+
+    @app.get("/api/bt/bars")
+    async def api_bt_bars(request: Request, run: str, t0: str, t1: str, tf: str = "auto"):
+        """Mid candles + bid/ask closes of a run's dataset between t0 and t1 (ISO times) — the trade chart."""
+        need(request)
+        from ..bt import data as btdata, ledger
+        r = ledger.get(_rid(run))
+        if not r:
+            raise HTTPException(404, "no such run")
+        try:
+            a, b = pd.Timestamp(t0), pd.Timestamp(t1)
+            a = a.tz_localize("UTC") if a.tzinfo is None else a
+            b = b.tz_localize("UTC") if b.tzinfo is None else b
+        except ValueError:
+            raise HTTPException(400, "bad time")
+        span = (b - a).total_seconds() / 60
+        if span <= 0 or span > 60 * 24 * 120:
+            raise HTTPException(400, "range must be 0–120 days")
+        if tf == "auto":
+            tf = next((x for x in (1, 5, 15, 60, 240) if span / x <= 1500), 1440)
+        if str(tf) not in ("1", "5", "15", "60", "240", "1440"):
+            raise HTTPException(400, "tf: 1, 5, 15, 60, 240, 1440 or auto")
+        tf = int(tf)
+
+        def build():
+            m = btdata.window(r["dataset"], r["symbol"], a.value, b.value)
+            if not len(m):
+                return {"tf": tf, "bars": []}
+            key = {60: "1h", 240: "4h", 1440: "1d"}.get(tf, tf)
+            bb = m.bars(key)
+            sp = pd.Series(m.spread, index=m.idx).resample(f"{tf}min").mean() if tf < 240 else None
+            rows = []
+            for i in range(len(bb)):
+                st = int(bb.start.iloc[i] // 1_000_000_000)
+                row = [st] + [round(float(bb[k].iloc[i]), 5) for k in "ohlc"]
+                if sp is not None:
+                    v = sp.get(pd.Timestamp(st, unit="s", tz="UTC"))
+                    row.append(None if v is None or pd.isna(v) else round(float(v), 5))
+                rows.append(row)
+            return {"tf": tf, "bars": rows}
+        return JSONResponse(await asyncio.to_thread(build))
+
     # ── strategy lab: candidates are tested before they reach the playbook ──
     lab_proc: dict = {}
 

@@ -173,21 +173,88 @@ def test_stats_gates():
     assert "PASS" in out["gates"] and len(out["by_year"]) == 1
 
 
-def test_cli_runs_a_plugin_and_refuses_the_vault(tmp_path, monkeypatch, capsys):
+def _seen_export(tmp_path, days=40):
     from tests.test_gemini_smc import frame, walk
-    df = frame(walk(seed=31, n_days=40))
+    df = frame(walk(seed=31, n_days=days))
     exp = tmp_path / "data/export/holdout_m1"
     exp.mkdir(parents=True)
     out = df[[c for c in df.columns if c[:3] in ("bid", "ask")]].copy()
     out.insert(0, "time", out.index.strftime("%Y-%m-%dT%H:%M:%SZ"))
     out.to_csv(exp / "XAUUSD_M1.csv.gz", index=False)
-    plug = tmp_path / "p.py"
-    plug.write_text(open("btplugins/vol_breakout_v1.py").read())
+    (tmp_path / "btplugins").mkdir()
+    (tmp_path / "btplugins/vb.py").write_text(open("btplugins/vol_breakout_v1.py").read())
+    return df
+
+
+def test_cli_runs_through_the_ledger(tmp_path, monkeypatch, capsys):
+    from fxagents.bt import ledger
+    _seen_export(tmp_path)
     monkeypatch.chdir(tmp_path)
-    main(["run", str(plug), "--data", "seen", "--audit", "3", "--out", "res"])
+    main(["run", "btplugins/vb.py", "--data", "seen", "--audit", "3", "--out", "res"])
     txt = capsys.readouterr().out
-    assert "vol_breakout_v1" in txt and "Look-ahead audit" in txt or "No trades" in txt
-    assert json.loads((tmp_path / "res/summary.json").read_text())["funnel"]["signals"] >= 0
-    assert (tmp_path / "data/bt/cache/seen_XAUUSD.npz").exists()
-    with pytest.raises(SystemExit):
-        main(["run", str(plug), "--data", "vault"])
+    assert "vol_breakout_v1" in txt
+    assert json.loads((tmp_path / "res/summary.json").read_text())["run"]["role"] == "seen"
+    assert (tmp_path / "data/bt/cache/seen_XAUUSD/ns.npy").exists()
+    (r,) = ledger.runs()
+    assert r["status"] == "done" and r["source"] == "cli" and r["passed"] == 0
+    with pytest.raises(SystemExit, match="vault refused"):
+        main(["run", "btplugins/vb.py", "--data", "vault"])
+    w = data.window("seen", "XAUUSD", int(data.load("seen", "XAUUSD").ns[100]), int(data.load("seen", "XAUUSD").ns[160]))
+    assert len(w) == 60
+
+
+def test_vault_opens_once_and_only_for_the_identical_passer(tmp_path, monkeypatch):
+    from fxagents.bt import jobs, ledger
+    _seen_export(tmp_path, 25)
+    monkeypatch.chdir(tmp_path)
+    cat = ledger.catalog()
+    (p,) = cat["plugins"]
+    assert p["name"] == "vol_breakout_v1" and p["params"]["box_bars"] == 12 and not p["vault"]["eligible"]
+    with pytest.raises(ValueError, match="unknown parameter"):
+        ledger.enqueue("vb.py", "seen", overrides={"nope": 1})
+    rid = ledger.enqueue("vb.py", "seen")
+    assert ledger.claim()["id"] == rid
+    jobs.execute(rid, audit=0)
+    ledger.update(rid, passed=1)                                         # pretend it passed every gate
+    with pytest.raises(PermissionError):
+        ledger.enqueue("vb.py", "vault", overrides={"box_bars": 10})     # different params → not the same strategy
+    v = ledger.enqueue("vb.py", "vault")
+    with pytest.raises(PermissionError, match="already opened"):
+        ledger.enqueue("vb.py", "vault")
+    assert ledger.get(v)["role"] == "vault"
+    (tmp_path / "btplugins/vb.py").write_text((tmp_path / "btplugins/vb.py").read_text() + "\n# edit\n")
+    with pytest.raises(PermissionError):
+        ledger.enqueue("vb.py", "vault")                                 # changed code → must pass seen again
+    assert ledger.catalog()["plugins"][0]["tries"] == {"seen": 1}
+
+
+def test_dashboard_api_queue_worker_results_and_chart_bars(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from fxagents.bt import jobs
+    from fxagents.dashboard.server import build_app
+    from tests.test_dashboard_insights import make_ctx
+    ctx = make_ctx(tmp_path)
+    ctx.cfg["dashboard"]["token"] = "tok"
+    _seen_export(tmp_path, 25)
+    monkeypatch.chdir(tmp_path)
+    c = TestClient(build_app(ctx))
+    H = {"x-token": "tok"}
+    cat = c.get("/api/bt", headers=H).json()
+    assert cat["plugins"][0]["file"] == "vb.py" and {d["name"] for d in cat["datasets"]} >= {"seen", "vault"}
+    assert c.post("/api/bt/run", json={"plugin": "vb.py", "dataset": "seen"}).status_code == 401
+    bad = c.post("/api/bt/run", headers=H, json={"plugin": "vb.py", "dataset": "vault"})
+    assert bad.status_code == 400 and "vault refused" in bad.json()["detail"]
+    rid = c.post("/api/bt/run", headers=H, json={"plugin": "vb.py", "dataset": "seen", "params": {"use_bias": False}}).json()["id"]
+    jobs.worker(once=True)
+    g = c.get(f"/api/bt/run/{rid}", headers=H).json()
+    assert g["run"]["status"] == "done" and "gates" in g["summary"] and json.loads(g["run"]["params"])["use_bias"] is False
+    assert "class VolBreakoutV1" in c.get(f"/api/bt/run/{rid}/code", headers=H).text
+    b = c.get("/api/bt/bars", headers=H, params={"run": rid, "t0": "2024-11-05T13:00:00Z", "t1": "2024-11-05T15:00:00Z"}).json()
+    assert b["tf"] == 1 and len(b["bars"]) == 120 and len(b["bars"][0]) == 6
+    b = c.get("/api/bt/bars", headers=H, params={"run": rid, "t0": "2024-11-05", "t1": "2024-11-12"}).json()
+    assert b["tf"] == 15
+    assert c.get("/api/bt/run/../../x", headers=H).status_code in (400, 404)
+    rid2 = c.post("/api/bt/run", headers=H, json={"plugin": "vb.py", "dataset": "seen"}).json()["id"]
+    c.post(f"/api/bt/run/{rid2}/cancel", headers=H)
+    assert c.get(f"/api/bt/run/{rid2}", headers=H).json()["run"]["status"] == "cancelled"

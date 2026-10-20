@@ -21,7 +21,7 @@ case "${1:-help}" in
   status)    $DC ps; echo; curl -fsS localhost:8088/healthz && echo " ← app healthy" || echo "app not answering on :8088" ;;
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              if [[ -d .git ]]; then git pull --ff-only || { echo; echo "git pull failed — nothing rebuilt (fix the above first)"; exit 1; }; fi
-             $DC build fxagents && $DC up -d fxagents ;;
+             $DC build fxagents && $DC up -d fxagents fxbt ;;
   localize)  # one-time: turn a full, hand-edited config into config.local.yaml (only your differences)
              #   ./fx.sh localize /tmp/server-config.yaml
              [[ -f "${2:-}" ]] || { echo "usage: ./fx.sh localize <copy of your full config.yaml>"; exit 1; }
@@ -245,8 +245,8 @@ case "${1:-help}" in
              [[ -f "${2:-}" ]] || { echo "usage: ./fx.sh bt btplugins/<file>.py [dataset] [SYMBOL]"; ls btplugins/*.py 2>/dev/null; exit 1; }
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/bt-build.log 2>&1 || { echo "build failed — see logs/bt-build.log"; exit 1; }
              n_=$(basename "$2" .py)
-             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.bt run "$2" --data "${3:-seen}" \
-               ${4:+--symbol "$4"} --out "data/year_test/bt_${n_}" </dev/null
+             $DC run --rm --no-deps -T fxbt nice -n 10 python -m fxagents.bt run "$2" --data "${3:-seen}" \
+               ${4:+--symbol "$4"} --out "data/year_test/bt_${n_}_${3:-seen}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs

@@ -1,4 +1,4 @@
-"""Backtest data: OANDA 1-minute bid/ask exports → one Market per (dataset, symbol), cached as .npz for fast reloads.
+"""Backtest data: OANDA 1-minute bid/ask exports → one Market per (dataset, symbol), cached as .npy files (memory-mappable) for fast reloads.
 
 Datasets (data/bt/datasets.json overrides the defaults) name which export folders they combine and their ROLE:
   seen   data any test may use (2021 → Sep 2026: holdout_m1 + dev_m1)
@@ -139,23 +139,47 @@ def from_frame(d: pd.DataFrame, symbol: str = "XAUUSD", ds: str = "") -> Market:
     return Market(symbol, d.index.as_unit("ns").asi8, *arr, vol, dataset=ds)
 
 
-def load(ds: str, symbol: str, cache: bool = True) -> Market:
+KEYS = ("ns", "bid_o", "bid_h", "bid_l", "bid_c", "ask_o", "ask_h", "ask_l", "ask_c", "vol")
+
+
+def _cache_dir(ds: str, symbol: str) -> Path:
+    return ROOT / "cache" / f"{ds}_{symbol}"
+
+
+def _sig(files: list[Path]) -> str:
+    return "|".join(f"{f}:{f.stat().st_mtime_ns}:{f.stat().st_size}" for f in files)
+
+
+def build_cache(ds: str, symbol: str) -> Path:
+    """Write (or refresh) the uncompressed .npy cache of one dataset/symbol; returns its folder."""
     files = export_files(ds, symbol)
     if not files:
         raise FileNotFoundError(f"no {symbol} data in dataset {ds!r} ({', '.join(datasets()[ds]['sets'])})")
-    sig = "|".join(f"{f}:{f.stat().st_mtime_ns}:{f.stat().st_size}" for f in files)
-    cp = ROOT / "cache" / f"{ds}_{symbol}.npz"
-    if cache and cp.exists():
-        z = np.load(cp, allow_pickle=False)
-        if str(z["sig"]) == sig:
-            return Market(symbol, *(z[k] for k in ("ns", "bid_o", "bid_h", "bid_l", "bid_c", "ask_o", "ask_h", "ask_l",
-                                                   "ask_c", "vol")), dataset=ds)
+    sig, cd = _sig(files), _cache_dir(ds, symbol)
+    if (cd / "sig.txt").exists() and (cd / "sig.txt").read_text() == sig and all((cd / f"{k}.npy").exists() for k in KEYS):
+        return cd
     d = _read_exports(files)
     arr = {k: d[k].to_numpy(float) for k in ("bid_o", "bid_h", "bid_l", "bid_c", "ask_o", "ask_h", "ask_l", "ask_c")}
     arr["vol"] = d["volume"].to_numpy(float) if "volume" in d else np.ones(len(d))
     arr["ns"] = d.index.as_unit("ns").asi8
-    if cache:
-        cp.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(cp, sig=np.array(sig), **arr)
-    return Market(symbol, arr["ns"], arr["bid_o"], arr["bid_h"], arr["bid_l"], arr["bid_c"], arr["ask_o"],
-                  arr["ask_h"], arr["ask_l"], arr["ask_c"], arr["vol"], dataset=ds)
+    cd.mkdir(parents=True, exist_ok=True)
+    for k, v in arr.items():
+        np.save(cd / f"{k}.npy", v)
+    (cd / "sig.txt").write_text(sig)
+    return cd
+
+
+def load(ds: str, symbol: str) -> Market:
+    cd = build_cache(ds, symbol)
+    return Market(symbol, *(np.load(cd / f"{k}.npy") for k in KEYS), dataset=ds)
+
+
+def window(ds: str, symbol: str, t0_ns: int, t1_ns: int, max_minutes: int = 200_000) -> Market:
+    """A small slice [t0, t1) read through memory maps (no full load) — for the dashboard's trade charts."""
+    cd = _cache_dir(ds, symbol)
+    if not (cd / "ns.npy").exists():
+        cd = build_cache(ds, symbol)
+    ns = np.load(cd / "ns.npy", mmap_mode="r")
+    i0, i1 = (int(x) for x in np.searchsorted(ns, [t0_ns, t1_ns]))
+    i1 = min(i1, i0 + max_minutes)
+    return Market(symbol, *(np.array(np.load(cd / f"{k}.npy", mmap_mode="r")[i0:i1]) for k in KEYS), dataset=ds)

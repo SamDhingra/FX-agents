@@ -73,6 +73,16 @@ def gates(out: dict) -> dict:
     return g
 
 
+def add_variant_gate(out: dict):
+    """The rule must also beat each of its own variants (e.g. the same trigger without the trend filter)."""
+    v = out.get("variants") or {}
+    if v:
+        s = out["stats"]
+        out["gates"]["beats its variants"] = bool(s.get("trades") and all(
+            s["avg_R"] > x.get("avg_R", -9) for x in v.values()))
+        out["gates"]["PASS"] = all(val for k, val in out["gates"].items() if k != "PASS")
+
+
 def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
     s, c = out["stats"], out["coin"]
     L = [f"# {name} on {ds}", ""]
@@ -88,6 +98,8 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
          [f"| {r['key']} | {r['trades']} | {r['avg_R']:+.3f} |" for r in out["by_year"]] + [""]
     L += ["| exit | trades | avg R |", "|---|---|---|"] + \
          [f"| {r['key']} | {r['trades']} | {r['avg_R']:+.3f} |" for r in out["by_exit"]] + [""]
+    for k, v in (out.get("variants") or {}).items():
+        L.append(f"Variant {k}: {v.get('trades', 0)} trades" + (f", avg {v['avg_R']:+.3f}R" if v.get("trades") else ""))
     if audit:
         L += [f"Look-ahead audit: {audit['checked']} signals re-run on truncated data, {audit['failed']} changed"
               + (f" (e.g. {', '.join(audit['examples'])})" if audit["failed"] else "") + "."]

@@ -213,7 +213,8 @@ def _r(pts: float, R: float, fin: float, spread: float, cad: bool) -> tuple[floa
     return conv((pts - fin) / R), conv((pts - fin - spread - fin) / R)
 
 
-def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, controls: bool = True) -> dict:
+def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, controls: bool = True,
+             progress=None) -> dict:
     """Run one strategy on one Market. Returns {"trades": [...], "coin": [...], "funnel": {...}}."""
     costs, n = strat.costs, len(m)
     sigs = sorted(strat.signals(m) if signals is None else signals, key=lambda s: s.t)
@@ -225,7 +226,9 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
     trades, coin = [], []
     busy, per_day = -1, {}
     adjust_defined = type(strat).adjust is not Strategy.adjust
-    for s in sigs:
+    for i_s, s in enumerate(sigs):
+        if progress is not None and i_s % 50 == 0:
+            progress(i_s, len(sigs))
         side = int(s.side)
         M = MS[side]
         j0 = int(np.searchsorted(m.ns, s.t))

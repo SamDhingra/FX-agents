@@ -47,6 +47,21 @@ services:
     networks: [fxnet]
     logging: *logs
 
+  fxbt:                                              # backtest worker: runs the Backtest page's jobs one at a time
+    image: fx-agents:latest                          # (same image as the app; built by ./fx.sh update)
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: ${FX_BT_MEM:-2000m}                   # its own cap — a big backtest can never starve the live bot
+    command: ["nice", "-n", "15", "python", "-m", "fxagents.bt", "worker"]
+    environment:
+      FX_MODE: sim
+    volumes:
+      - ./data:/app/data
+    network_mode: none                               # needs no network at all
+    healthcheck:
+      disable: true
+    logging: *logs
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
