@@ -2,7 +2,8 @@
 
 Backtest (btplugins/daily_rsi2_adx2.py, 2021 → Sep 2026, real bid/ask): BTC +0.027R, gold +0.059R, NDQ +0.019R,
 US30 −0.023R per trade; random-timing edge +0.012 … +0.057R on the first three, every 95% range including zero.
-Not a pass — this book builds the FORWARD record on gold and BTC, unchanged, to be judged on new data.
+Not a pass — this book builds the FORWARD record on gold, unchanged, to be judged on new data (BTC was planned too,
+but the OANDA account can't trade it; the code handles any symbol in `instruments`).
 
 Rules (identical to the plugin; same indicator code, fxagents/bt/ind.py):
   • daily mid candles closing 17:00 New York (built from the bot's hourly history on the NY wall clock)
@@ -14,7 +15,7 @@ Rules (identical to the plugin; same indicator code, fxagents/bt/ind.py):
   • virtual fills pay the configured spread; overnight financing isn't booked by the virtual broker, so each trade
     records its rollovers (meta, events) for the evaluation to subtract (gold ×3 on Wednesdays, BTC every day).
   • restart-safe: open trades are re-adopted from this book's journal when the bot starts.
-Config (shadow.daily_rsi2_adx2): symbols [XAUUSD, BTCUSD], risk_pct 0.001, stop_atr 3.0.
+Config (shadow.daily_rsi2_adx2): symbols [XAUUSD], risk_pct 0.001, stop_atr 3.0.
 """
 from __future__ import annotations
 
@@ -62,7 +63,7 @@ class DailyRuleTrader(Agent):
     def start(self):
         super().start()
         c = (self.cfg.get("shadow") or {}).get(STRATEGY) or {}
-        self.symbols = [s for s in (c.get("symbols") or ["XAUUSD", "BTCUSD"]) if s in self.cfg["instruments"]]
+        self.symbols = [s for s in (c.get("symbols") or ["XAUUSD"]) if s in self.cfg["instruments"]]
         self.risk_pct = float(c.get("risk_pct", 0.001))
         self.stop_atr = float(c.get("stop_atr", 3.0))
         self.min_days = 60
