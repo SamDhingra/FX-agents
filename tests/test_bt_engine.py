@@ -322,3 +322,30 @@ def test_bot_setups_bridge_runs_the_bots_own_code_causally():
     assert engine.lookahead_audit(s, m, sig, 4, warm_days=40)["failed"] == 0
     with pytest.raises(ValueError):
         cls(setup="smt_divergence").signals(m)
+
+
+class _Seer(Strategy):
+    """Cheats on purpose (enters where the next hour rises) — random timing must expose a big timing edge."""
+    news_block = None
+    exits = Exits(max_hold_min=60)
+
+    def signals(self, m):
+        return [Signal(t=int(m.ns[i]) + MIN, side=1, stop=float(m.c[i]) - 3.0) for i in range(0, len(m) - 70, 211)
+                if m.c[i + 61] > m.c[i] + 0.5]
+
+
+def test_random_timing_control_exposes_timing_and_market_drift():
+    from tests.test_gemini_smc import frame, walk
+    m = data.from_frame(frame(walk(seed=5, n_days=60)))
+    seer = _Seer()
+    seer.costs = RAW
+    out = stats.summarize(engine.simulate(seer, m), m)
+    assert out["timing"]["trades"] == out["stats"]["trades"] > 30
+    assert out["timing"]["avg_R"] > 0.1 and out["timing"]["ci_lo"] > 0 and out["gates"]["beats random timing"]
+    # the daily rule on a drifting random walk: whatever it makes, random long entries make about the same
+    from tests.test_h4_donchian import gold
+    cls, _ = load_plugin("btplugins/daily_rsi2_adx2.py")
+    s = cls()
+    m2 = data.from_frame(gold(400, 4))
+    o2 = stats.summarize(engine.simulate(s, m2), m2)
+    assert o2["timing"]["ci_lo"] < 0 < o2["timing"]["ci_hi"]

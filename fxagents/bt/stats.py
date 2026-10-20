@@ -44,6 +44,10 @@ def summarize(res: dict, m) -> dict:
     s = base_stats(t, days) if len(t) else {"trades": 0}
     sc = base_stats(c, days) if len(c) else {"trades": 0}
     out = {"stats": s, "coin": sc, "funnel": res["funnel"]}
+    rd = frame(res.get("rand") or [])
+    if len(rd):
+        out["random"] = base_stats(rd, days)
+        out["timing"] = base_stats(rd.assign(R=rd.edge, R_2x=rd.edge), days)      # real − random twins, per trade
     if len(t):
         loc = t.entry_time.dt.tz_convert(NY)
         half = len(t) // 2
@@ -69,6 +73,8 @@ def gates(out: dict) -> dict:
         "positive in both halves": n > 1 and all(x > 0 for x in out.get("halves", [-1])),
         "beats the coin flip": n > 0 and c.get("trades", 0) > 0 and s["avg_R"] > c["avg_R"],
     }
+    if out.get("timing"):
+        g["beats random timing"] = bool(out["timing"].get("avg_R", -1) > 0)
     g["PASS"] = all(g.values())
     return g
 
@@ -92,6 +98,11 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
     L += [f"Trades {s['trades']}, win {s['win']:.0%}, avg {s['avg_R']:+.3f}R (95% {s['ci_lo']:+.3f} … {s['ci_hi']:+.3f}),"
           f" 2× costs {s['avg_R_2x']:+.3f}R, halves {out['halves'][0]:+.3f} / {out['halves'][1]:+.3f},"
           f" exact coin flip {c.get('avg_R', float('nan')):+.3f}R, max drawdown {out['equity']['max_dd_R']:.1f}R", ""]
+    if out.get("timing"):
+        tm, rd = out["timing"], out["random"]
+        L += [f"Random timing (same side, same time of day, random other days, same stop % and hold): "
+              f"{rd['avg_R']:+.3f}R. Timing edge (real − random) {tm['avg_R']:+.3f}R "
+              f"(95% {tm['ci_lo']:+.3f} … {tm['ci_hi']:+.3f}).", ""]
     L += ["| gate | |", "|---|---|"] + [f"| {k} | {'yes' if v else 'no'} |" for k, v in out["gates"].items()] + [""]
     L += ["Funnel: " + " → ".join(f"{k} {v}" for k, v in out["funnel"].items()), ""]
     L += ["| year | trades | avg R |", "|---|---|---|"] + \

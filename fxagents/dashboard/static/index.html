@@ -1125,7 +1125,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.3</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.4</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3939,6 +3939,7 @@ async function btOpen(id){
   const kp = (l, v, c2 = "") => `<div class="btkpi"><small>${l}</small><b class="${c2}">${v}</b></div>`;
   const kpis = s.trades ? kp("Trades", s.trades) + kp("Win rate", btPct(s.win)) + kp("Avg R", sR(s.avg_R, 3), cls(s.avg_R)) + kp("95% range", `${sR(s.ci_lo, 2)} … ${sR(s.ci_hi, 2)}`)
     + kp("At 2× costs", sR(s.avg_R_2x, 3), cls(s.avg_R_2x)) + kp("Halves", (S.halves || []).map(x => sR(x, 2)).join(" / ")) + kp("Coin flip", sR(c.avg_R, 3), cls(c.avg_R))
+    + (S.timing ? kp("Random timing", sR(S.random.avg_R, 3), cls(S.random.avg_R)) + kp("Timing edge", `${sR(S.timing.avg_R, 3)}<small style="display:inline;font-size:11px;font-weight:500"> (${sR(S.timing.ci_lo, 2)} … ${sR(S.timing.ci_hi, 2)})</small>`, cls(S.timing.avg_R)) : "")
     + kp("Total", sR(s.total_R, 1), cls(s.total_R)) + kp("Max drawdown", sR(-(S.equity || {}).max_dd_R, 1), "down") + kp("Median hold", fmt(s.hold_min_median, 0) + " min") : "";
   const tb = (rows, label) => rows && rows.length ? `<table class="bttab" style="cursor:default"><thead><tr><th>${label}</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">Total</th></tr></thead><tbody>${rows.map(x => `<tr style="cursor:default"><td>${esc(x.key)}</td><td class="num">${x.trades}</td><td class="num ${cls(x.avg_R)}">${sR(x.avg_R, 3)}</td><td class="num ${cls(x.total_R)}">${sR(x.total_R, 1)}</td></tr>`).join("")}</tbody></table>` : "";
   const fun = Object.entries(S.funnel || {}).map(([k, v]) => `${esc(k)} <b>${v}</b>`).join(" → ");

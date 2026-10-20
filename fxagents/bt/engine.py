@@ -220,10 +220,11 @@ def _r(pts: float, R: float, fin: float, spread: float, cad: bool) -> tuple[floa
 
 
 def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, controls: bool = True,
-             progress=None) -> dict:
+             progress=None, n_draw: int = 10) -> dict:
     """Run one strategy on one Market. Returns {"trades": [...], "coin": [...], "funnel": {...}}."""
     costs, n = costs_for(strat.costs, m.symbol), len(m)
     sigs = sorted(strat.signals(m) if signals is None else signals, key=lambda s: s.t)
+    sigs_by_t = {(int(x.t), int(x.side)): x for x in sigs}
     blocked = news_mask(m, *strat.news_block, ten_am=strat.news_10am) if strat.news_block else \
         (news_mask(m, 0, 0, ten_am=True) if strat.news_10am else np.zeros(n, bool))
     MS = sides(m)
@@ -320,7 +321,53 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
             coin.append({"entry_time": m.idx[j], "exit_time": m.idx[o["jx"]], "side": 0, "R": float(np.mean(rr)),
                          "R_2x": float(np.mean(rr2)), "cost_R": spread / R, "hold_min": trades[-1]["hold_min"],
                          "overnight": False, "points": 0.0, "atr": R, "exit_reason": "exact_coin"})
-    return {"trades": trades, "coin": coin, "funnel": f}
+    rand = random_timing(m, MS, trades, sigs_by_t, strat, costs, n_draw) if controls and n_draw else []
+    return {"trades": trades, "coin": coin, "rand": rand, "funnel": f}
+
+
+def random_timing(m: Market, MS: dict, trades: list[dict], sigs_by_t: dict, strat: Strategy, costs: Costs,
+                  n_draw: int = 10, seed: int = 11) -> list[dict]:
+    """The timing control: each real trade is repeated on `n_draw` randomly chosen OTHER days at the same NY time
+    of day and on the same side, with the same stop distance as a share of price, the same exits and the same holding
+    time. If the rule's entries can't beat these, its timing adds nothing beyond being long (or short) at that hour —
+    e.g. a long-only rule in a rising market. Returns one row per real trade: the average of its random twins."""
+    rng = np.random.default_rng(seed)
+    starts = np.r_[0, np.flatnonzero(np.diff(m.day)) + 1]
+    ends = np.r_[starts[1:], len(m)]
+    out = []
+    for t in trades:
+        j, jx, side = t["j"], t["jx"], t["side"]
+        s = sigs_by_t[(t["signal_time"].value, side)]
+        M = MS[side]
+        e, R = side * t["entry"], t["risk"]
+        frac, hold = R / abs(e), int(m.ns[jx] - m.ns[j])
+        tgt = None if s.target is None else (side * s.target - e) / abs(e)
+        ex = strat.exits_for(s)
+        mod_j, day_j = int(m.mod[j]), int(m.day[j])
+        rr, rr2 = [], []
+        for d in rng.permutation(len(starts)):
+            if len(rr) >= n_draw:
+                break
+            a, b = starts[d], ends[d]
+            if m.day[a] == day_j:
+                continue
+            k = a + int(np.searchsorted(m.mod[a:b], mod_j))
+            if k >= b or m.mod[k] - mod_j > 5 or k + 1 >= len(m):
+                continue
+            ce = float(M["in_o"][k])
+            cR = frac * abs(ce)
+            co = manage(m, M, side, k, ce, ce - cR, ex, costs, int(m.ns[k]), None if tgt is None else ce + tgt * abs(ce),
+                        exit_ns=int(m.ns[k]) + hold)
+            fin = co["rollovers"] * costs.financing_bps / 1e4 * abs(ce)
+            r1, r2 = _r(co["pts"], cR, fin, float(m.spread[k]), costs.cad)
+            rr.append(r1)
+            rr2.append(r2)
+        if rr:
+            out.append({"entry_time": t["entry_time"], "exit_time": t["exit_time"], "side": side,
+                        "R": float(np.mean(rr)), "R_2x": float(np.mean(rr2)), "edge": t["R"] - float(np.mean(rr)),
+                        "cost_R": t["cost_R"], "hold_min": t["hold_min"], "overnight": t["overnight"],
+                        "exit_reason": "random_timing", "n": len(rr)})
+    return out
 
 
 def lookahead_audit(strat: Strategy, m: Market, sigs: list[Signal], n_check: int = 10, warm_days: int = 90) -> dict:

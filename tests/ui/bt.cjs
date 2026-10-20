@@ -34,7 +34,7 @@ await page.locator('#bxParams').fill((await page.locator('#bxParams').inputValue
 await page.click('#bxRun');await page.waitForTimeout(900);
 assert.deepEqual(posted.at(-1),{plugin:'vol_breakout_v1.py',dataset:'seen',symbol:'XAUUSD',params:{box_bars:10}});
 const res=await page.locator('#bxResult').textContent();
-assert(res.includes('no pass')&&res.includes('≥ 100 trades')&&res.includes('Look-ahead audit')&&res.includes('Funnel'),'result: '+res.slice(0,400));
+assert(res.includes('Timing edge')&&res.includes('Random timing')&&res.includes('no pass')&&res.includes('≥ 100 trades')&&res.includes('Look-ahead audit')&&res.includes('Funnel'),'result: '+res.slice(0,400));
 assert(await page.locator('#bxEq canvas').count()>0,'equity chart');
 assert(await page.locator('#bxHist rect').count()===36,'histogram');
 await page.locator('#bxTrades tbody tr').first().click();await page.waitForTimeout(1200);
