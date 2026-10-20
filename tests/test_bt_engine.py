@@ -304,3 +304,21 @@ def test_daily_rsi2_adx2_plugin_signal_exits():
     assert ((loc.dt.hour == 18) & (loc.dt.minute == 0)).mean() > 0.8        # out at the next daily open
     a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=200)
     assert a["checked"] == 5 and a["failed"] == 0
+
+
+def test_bot_setups_bridge_runs_the_bots_own_code_causally():
+    from tests.test_gemini_smc import frame, walk
+    cls, _ = load_plugin("btplugins/bot_setups.py")
+    m = data.from_frame(frame(walk(seed=31, n_days=90)), symbol="BTCUSD")
+    s = cls(setup="dtfx_close_fib")
+    sig = s.signals(m)
+    T = pd.DataFrame(engine.simulate(s, m, sig, controls=False)["trades"])
+    assert len(T) > 5 and set(T.exit_reason) <= {"stop", "partial_stop", "step_stop", "adjust_stop", "stop_same_bar",
+                                                 "flat", "max_hold", "data_gap", "end"}
+    assert (T.hold_min <= 241).all()
+    loc = pd.to_datetime(T.entry_time).dt.tz_convert("America/New_York")
+    mins = loc.dt.hour * 60 + loc.dt.minute
+    assert mins.map(lambda x: any(a <= x < b for a, b in [(120, 300), (510, 690), (810, 930), (1200, 1440)])).all()
+    assert engine.lookahead_audit(s, m, sig, 4, warm_days=40)["failed"] == 0
+    with pytest.raises(ValueError):
+        cls(setup="smt_divergence").signals(m)

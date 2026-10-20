@@ -248,6 +248,18 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T fxbt nice -n 10 python -m fxagents.bt run "$2" --data "${3:-seen}" \
                ${4:+--symbol "$4"} --out "data/year_test/bt_${n_}_${3:-seen}${4:+_$4}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  btsetups)  # queue the bot's own ICT/SMC/DTFX/Stoic setups (btplugins/bot_setups.py) on one instrument, 5m and 15m,
+             # for the fxbt worker: ./fx.sh btsetups BTCUSD  — results appear on the Backtester page as they finish
+             sym_="${2:?usage: ./fx.sh btsetups SYMBOL [tfs, default \"5min 15min\"]}"
+             $DC up -d fxbt >/dev/null 2>&1
+             for tf_ in ${3:-5min 15min}; do
+               for st_ in ict_2022 ict_silver_bullet ict_turtle_soup ict_amd ict_fvg_sweep ict_ote \
+                          smc_order_block smc_breaker smc_ifvg smc_liquidity_sweep smc_displacement smc_bos_retest smc_choch smc_mss \
+                          dtfx_zone dtfx_close_fib dtfx_wick_fib dtfx_close_fib_brk dtfx_close_origin stoic_sbs; do
+                 $DC exec -T fxbt python -m fxagents.bt run btplugins/bot_setups.py --queue --symbol "$sym_" \
+                   --set "setup=\"$st_\"" --set "tf=\"$tf_\"" </dev/null
+               done
+             done ;;
   fxcprobe)  # READ-ONLY FOREX.com spread probe (fxagents/forexcom_probe.py), no orders: ./fx.sh fxcprobe [days]
              need_env; mkdir -p logs
              for k in FOREXCOM_USERNAME FOREXCOM_PASSWORD FOREXCOM_APPKEY; do grep -q "^$k=." .env || { echo "add $k=... to .env"; exit 1; }; done
@@ -345,7 +357,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

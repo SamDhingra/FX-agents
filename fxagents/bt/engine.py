@@ -166,9 +166,12 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
                     banked += take * (px - e)
                     frac -= take
                     done_parts[i] = True
-                    events.append({"k": int(k), "kind": "partial", "px": float(side * px), "r": r, "frac": take})
+                    if take > 0:
+                        events.append({"k": int(k), "kind": "partial", "px": float(side * px), "r": r, "frac": take})
                     if nsr is not None and e + nsr * R > stop:
-                        stop, moved, mover = e + nsr * R, True, "partial"
+                        stop, moved, mover = e + nsr * R, True, "partial" if take > 0 else "step"
+                        if take <= 0:
+                            events.append({"k": int(k), "kind": "stop_moved", "px": float(side * stop)})
             if frac <= 1e-12:
                 return out(k, e, "partials_done")
             if hi >= tgt:
@@ -285,8 +288,8 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
         tgt_m = None if s.target is None else side * float(s.target)
         if tgt_m is not None and tgt_m <= e:
             continue
-        adj = (lambda k, s=s, side=side: strat.adjust({"side": side, "entry": side * e, "stop0": s.stop,
-                                                       "signal": s}, m, k)) if adjust_defined else None
+        tstate = {"side": side, "entry": side * e, "stop0": s.stop, "risk": R, "j": j, "signal": s}   # kept per trade
+        adj = (lambda k, d=tstate: strat.adjust(d, m, k)) if adjust_defined else None
         o = manage(m, M, side, j, e, st_m, ex, costs, s.t, tgt_m, adj, s.exit_t)
         fin = o["rollovers"] * costs.financing_bps / 1e4 * abs(e)
         r1, r2 = _r(o["pts"], R, fin, spread, costs.cad)

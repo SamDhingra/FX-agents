@@ -114,7 +114,8 @@ class Strategy:
 
     def adjust(self, trade: dict, m, k: int) -> float | None:
         """Optional: called at every minute k while a trade is open; return a new stop (real price) to ratchet it
-        (only moves that reduce risk are applied)."""
+        (only moves that reduce risk are applied). `trade` (side, entry, stop0, risk, j = fill minute, signal) is the
+        same dict for the whole trade, so a plugin can keep its own state in it."""
         return None
 
     def with_params(self, **overrides) -> "Strategy":

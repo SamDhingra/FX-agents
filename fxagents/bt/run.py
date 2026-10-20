@@ -40,6 +40,7 @@ def main(argv=None):
     r.add_argument("--audit", type=int, default=10)
     r.add_argument("--out", type=Path, help="also copy report.md / summary.json / trades.json.gz here")
     r.add_argument("--set", action="append", default=[], help="parameter override k=v (JSON value)")
+    r.add_argument("--queue", action="store_true", help="only queue it for the fxbt worker (returns at once)")
     sub.add_parser("worker")
     sub.add_parser("list")
     a = ap.parse_args(argv)
@@ -52,9 +53,13 @@ def main(argv=None):
         return
     ov = {k: json.loads(v) for k, v in (x.split("=", 1) for x in a.set)}
     try:
-        rid = ledger.enqueue(Path(a.plugin).name, a.data, a.symbol, ov, source="cli", status="running")
+        rid = ledger.enqueue(Path(a.plugin).name, a.data, a.symbol, ov, source="cli",
+                             status="queued" if a.queue else "running")
     except (PermissionError, ValueError) as e:
         raise SystemExit(str(e))
+    if a.queue:
+        print(f"queued {rid}  {Path(a.plugin).name} {a.symbol or ''} {json.dumps(ov)}")
+        return
     jobs.execute(rid, a.audit)
     d = ledger.run_dir(rid)
     print((d / "report.md").read_text())
