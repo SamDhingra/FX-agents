@@ -1125,7 +1125,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.1</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.2</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3869,7 +3869,7 @@ async function loadBt(){
   btPick(!$("#bxParams").value);
   btRenderRuns();
   clearTimeout(bxTimer);
-  if(page === "bt" && BXC.runs.some(r => ["queued","running","cancel"].includes(r.status))) bxTimer = setTimeout(btRefresh, 4000);
+  if(page === "bt" && BXC.runs.some(r => ["queued","running","cancel"].includes(r.status))) bxTimer = setTimeout(btRefresh, 10000);
 }
 async function btRefresh(){
   await loadBt();
@@ -3902,7 +3902,8 @@ async function btSubmit(){
 }
 function btRenderRuns(){
   const R = BXC.runs || [];
-  $("#bxRunsNote").textContent = R.length ? `${R.length} recorded` : "";
+  const stuck = R.some(r => r.status === "queued" && Date.now() / 1000 - r.created > 90) && !R.some(r => r.status === "running");
+  $("#bxRunsNote").innerHTML = stuck ? `<span style="color:var(--warn)">waiting over 90 s — is the worker running? <code>docker compose up -d fxbt</code></span>` : R.length ? `${R.length} recorded` : "";
   if(!R.length){ $("#bxRuns").innerHTML = `<div class="empty">No runs yet. Pick a plugin and run it on seen data.</div>`; return; }
   $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${R.map(r => {
     const st = r.status === "running" ? `<div class="btbar" title="${esc(r.stage)}"><i style="width:${r.pct||0}%"></i></div><small class="mut">${esc(r.stage||"")}</small>`
