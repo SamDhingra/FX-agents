@@ -184,7 +184,7 @@ def main():
           "spread; 2× costs pays one more spread. The playbook was picked on Oct 2025 → Oct 2026, so that piece is "
           "in-sample and only shown.", "",
           f"**Step 1 (2021 → Sep 2026):** ≥ 100 trades, avg R > 0, 95% day-block range above 0, avg R > 0 at 2× costs, "
-          "positive in both halves, and positive in each clean piece. {len(cells)} cells at once → about "
+          f"positive in both halves, and positive in each clean piece. {len(cells)} cells at once → about "
           f"{max(1, round(len(cells) * 0.05))} could pass by luck. "
           "**Step 2:** passers only, once, on untouched 2016–2020.", "",
           "## Step 1 — 2021 → Sep 2026", "",
