@@ -268,3 +268,13 @@ def test_4h_candles_stay_on_the_new_york_grid_through_dst():
     for key, want in (("4h", {60, 300, 540, 780, 1020, 1260}), ("1d", {1020})):
         e = pd.to_datetime(m.bars(key).end, utc=True).dt.tz_convert("America/New_York")
         assert set(e.dt.hour * 60 + e.dt.minute) == want
+
+
+def test_crypto_pays_financing_every_day_with_no_wednesday_triple():
+    n = 6 * 1440                                                         # Tue 09:00 NY → Mon 09:00, 24/7
+    for sym, want in (("BTCUSD", 6), ("XAUUSD", 8)):                     # Wed..Sun 17:00 crossings = 6; gold: Wed ×3
+        m = mk(flat(n, 100.0), start="2025-03-04 14:00")
+        m.symbol = sym
+        t = run(m, lambda m: Signal(t=int(m.ns[1]), side=1, stop=90.0),
+                Exits(max_hold_min=6 * 1440 - 10, hold_overnight=True), costs=Costs(**{**RAW.__dict__, "financing_bps": 1.0}))
+        assert t["trades"][0]["rollovers"] == want, sym

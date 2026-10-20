@@ -19,9 +19,9 @@ EXPORT = Path("data/export")
 ROOT = Path("data/bt")
 
 DEFAULT_DATASETS = {
-    "seen": {"role": "seen", "label": "2021 → Sep 2026", "sets": ["holdout_m1", "dev_m1"]},
+    "seen": {"role": "seen", "label": "2021 → Sep 2026", "sets": ["holdout_m1", "dev_m1", "seen_m1_crypto"]},
     "vault": {"role": "vault", "label": "2016 → 2020 (untouched)",
-              "sets": ["old_m1", "old_m1_idx_NDQ", "old_m1_idx_US30", "old_m1_idx_XAUUSD"]},
+              "sets": ["old_m1", "old_m1_idx_NDQ", "old_m1_idx_US30", "old_m1_idx_XAUUSD", "old_m1_crypto"]},
 }
 
 

@@ -27,6 +27,7 @@ from .config import apply_broker, load_config
 from .oanda import OandaFeed, oanda_from_cfg
 
 COLS = ["bid_o", "bid_h", "bid_l", "bid_c", "ask_o", "ask_h", "ask_l", "ask_c", "volume"]
+ALIASES = {"BTCUSD": "BTC_USD", "ETHUSD": "ETH_USD"}          # file name → OANDA instrument (not in config.yaml)
 STEP = {"M1": pd.Timedelta("1min"), "M5": pd.Timedelta("5min"), "H1": pd.Timedelta("1h"), "D": pd.Timedelta("1D")}
 
 
@@ -72,15 +73,17 @@ def main():
     ap.add_argument("--from", dest="start", required=True)
     ap.add_argument("--until", required=True, help="last day included (YYYY-MM-DD)")
     ap.add_argument("--symbols", nargs="*", help="default: every configured instrument; anything not configured is "
-                    "taken as an OANDA instrument name as is (e.g. WTICO_USD, XAG_USD, DE30_EUR)")
+                    "taken as an OANDA instrument name as is (e.g. WTICO_USD, XAG_USD, DE30_EUR); NAME=OANDA_NAME names the "
+                    "file yourself; BTCUSD and ETHUSD map to BTC_USD / ETH_USD")
     a = ap.parse_args()
     cfg = load_config()
     c2 = {**cfg, "mode": "paper", "broker": "oanda", "instruments": {k: dict(v) for k, v in cfg["instruments"].items()}}
     apply_broker(c2)
     client = oanda_from_cfg(c2)
     names = OandaFeed(c2, None, None, client).syms
-    syms = a.symbols or list(names)
-    names = {s: names.get(s, s) for s in syms}
+    pairs = [x.split("=", 1) for x in (a.symbols or list(names))]          # SYMBOL or SYMBOL=OANDA_NAME
+    syms = [p[0] for p in pairs]
+    names = {p[0]: (p[1] if len(p) > 1 else names.get(p[0], ALIASES.get(p[0], p[0]))) for p in pairs}
     start = pd.Timestamp(a.start, tz="UTC")
     end = pd.Timestamp(a.until, tz="UTC") + pd.Timedelta("1D")
     out = Path("data/export") / a.name

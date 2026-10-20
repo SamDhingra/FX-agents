@@ -16,7 +16,7 @@ import pandas as pd
 
 from ..usd_calendar import events
 from . import ind
-from .api import Costs, Exits, Signal, Strategy
+from .api import Costs, Exits, Signal, Strategy, costs_for
 from .data import MIN, NY, Market
 
 INF = float("inf")
@@ -216,7 +216,7 @@ def _r(pts: float, R: float, fin: float, spread: float, cad: bool) -> tuple[floa
 def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, controls: bool = True,
              progress=None) -> dict:
     """Run one strategy on one Market. Returns {"trades": [...], "coin": [...], "funnel": {...}}."""
-    costs, n = strat.costs, len(m)
+    costs, n = costs_for(strat.costs, m.symbol), len(m)
     sigs = sorted(strat.signals(m) if signals is None else signals, key=lambda s: s.t)
     blocked = news_mask(m, *strat.news_block, ten_am=strat.news_10am) if strat.news_block else \
         (news_mask(m, 0, 0, ten_am=True) if strat.news_10am else np.zeros(n, bool))

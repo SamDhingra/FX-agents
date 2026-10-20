@@ -71,11 +71,18 @@ class Costs:
     stop_slip_frac: float = 0.15        # intrabar stop fills pay this share of the spread (stops are market orders)
     cad: bool = True                    # OANDA Canada 1% conversion: wins × 0.99, losses × 1.01
     financing_bps: float = 1.8          # per 17:00 NY rollover, of the entry price (≈ 6.5% a year)
-    triple_dow: int = 2                 # weekday charged 3× (2 = Wednesday)
+    triple_dow: int | None = 2          # weekday charged 3× (2 = Wednesday); None for crypto (charged every day)
     rollover_shield: tuple = (1015, 1085)   # 16:55–18:05 NY: stops trigger on the MID only (spread spikes)
     same_bar_check: bool = True         # after a partial / stop move, the same minute's low can still stop the rest
     gap_exit_min: float = 60.0          # a data gap longer than this exits at the last price before it
     max_spread_frac: float | None = None    # skip a fill if the spread exceeds this share of the risk
+
+
+CRYPTO = ("BTCUSD", "ETHUSD")                # trade every day: financing is charged daily, weekends too (no triple)
+
+
+def costs_for(costs: Costs, symbol: str) -> Costs:
+    return replace(costs, triple_dow=None) if symbol in CRYPTO and costs.triple_dow is not None else costs
 
 
 class Strategy:
