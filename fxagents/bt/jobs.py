@@ -59,7 +59,7 @@ def execute(rid: str, audit: int = 10) -> dict:
         res = engine.simulate(strat, m, sigs, progress=lambda i, n: stage(f"simulating {i}/{n}", 30 + 45 * i / max(n, 1)))
         out = stats.summarize(res, m)
         stage("look-ahead audit", 78)
-        out["audit"] = engine.lookahead_audit(strat, m, sigs, audit) if audit else None
+        out["audit"] = engine.lookahead_audit(strat, m, sigs, audit, warm_days=strat.warmup_days) if audit else None
         out["variants"] = {}
         for i, (name, ov) in enumerate(strat.variants.items()):
             stage(f"control: {name}", 85 + 10 * i / max(len(strat.variants), 1))

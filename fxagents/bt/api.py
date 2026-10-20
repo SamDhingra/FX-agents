@@ -91,6 +91,7 @@ class Strategy:
     one_at_a_time: bool = True
     news_block: tuple | None = (15, 15) # minutes before/after FOMC/CPI/NFP/PPI with no fills; None = off
     news_10am: bool = False             # also block ±5 min around 10:00 NY every weekday (ISM, JOLTS …)
+    warmup_days: int = 90               # history the look-ahead audit gives each re-run (longer for slow indicators)
     variants: dict[str, dict] = {}      # extra controls: name → params override (e.g. {"no_bias": {"use_bias": False}})
 
     def __init__(self, **overrides):

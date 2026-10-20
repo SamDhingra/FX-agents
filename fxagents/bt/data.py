@@ -83,18 +83,25 @@ class Market:
 
     # ── candles ──
     def bars(self, tf) -> pd.DataFrame:
-        """Mid candles: tf = minutes (int) or "1h", "4h" (NY 01/05/09/13/17/21 closes), "1d" (NY 17:00 close).
+        """Mid candles: tf = minutes (int) or "1h", "4h" (NY 01/05/09/13/17/21 closes), "1d" (NY 17:00 close) — both on the New York wall clock all year.
         Columns o h l c v start end (ns). Cached."""
         key = str(tf)
         if key in self._bars:
             return self._bars[key]
         m = pd.DataFrame({"o": self.o, "h": self.h, "l": self.l, "c": self.c, "v": self.vol}, index=self.idx)
-        if key == "4h":
-            r = m.tz_convert(NY).resample("4h", offset="1h", label="left", closed="left")
-            step = pd.Timedelta(hours=4)
-        elif key == "1d":
-            r = m.tz_convert(NY).resample("1D", offset="17h", label="left", closed="left")
-            step = pd.Timedelta(days=1)
+        if key in ("4h", "1d"):
+            # New York WALL-CLOCK grid (closes 01/05/09/13/17/21 or 17:00 all year). Resampling the tz-aware index
+            # in fixed steps is elapsed time and drifts an hour for the half of the year on the other side of DST.
+            from ..bias import _localize
+            rule, off = ("4h", "1h") if key == "4h" else ("24h", "17h")
+            wall = m.set_axis(self.idx.tz_convert(NY).tz_localize(None))
+            b = wall.resample(rule, offset=off, label="left", closed="left").agg(
+                {"o": "first", "h": "max", "l": "min", "c": "last", "v": "sum"}).dropna()
+            b["start"] = _localize(b.index, NY).tz_convert("UTC").as_unit("ns").asi8
+            b["end"] = _localize(b.index + pd.Timedelta(rule), NY).tz_convert("UTC").as_unit("ns").asi8
+            b.index = _localize(b.index, NY)
+            self._bars[key] = b
+            return b
         else:
             mins = 60 if key == "1h" else int(tf)
             r = m.resample(f"{mins}min", label="left", closed="left")

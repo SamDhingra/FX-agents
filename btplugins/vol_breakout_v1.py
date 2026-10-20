@@ -14,6 +14,7 @@ class VolBreakoutV1(Strategy):
               "use_bias": True}
     exits = Exits(target_r=2.5, be_at_r=1.2, be_lock_r=0.10, flat_at=990)
     max_per_day = 1
+    entry_windows = [(480, 690)]          # the fill minute (the old module's "mod[j] < 11:30" check)
     news_block = (15, 15)
     variants = {"no_bias": {"use_bias": False}}
 
@@ -31,9 +32,6 @@ class VolBreakoutV1(Strategy):
         for k in range(max(20, nb + 1), len(b5)):
             j_end = int(np.searchsorted(m.ns, E5[k])) - 1
             if j_end < 0 or not (P["win"][0] <= m.mod[j_end] + 1 <= P["win"][1]):
-                continue
-            j = int(np.searchsorted(m.ns, E5[k]))
-            if j >= len(m) or m.mod[j] >= P["win"][1]:
                 continue
             i15 = int(np.searchsorted(E15, E5[k], side="right")) - 1
             i1 = int(np.searchsorted(E1, E5[k], side="right")) - 1

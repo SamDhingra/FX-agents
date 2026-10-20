@@ -6,9 +6,9 @@ import fxagents.h4_donchian as H
 from fxagents.gemini_smc import block_mask
 
 
-def gold(n_days=400, seed=4, sigma=1.1):
+def gold(n_days=400, seed=4, sigma=1.1, start="2022-01-02 18:00"):
     """Synthetic 1-minute gold with OANDA's hours: daily 17:00–18:00 NY break, closed Fri 17:00 → Sun 18:00."""
-    idx = pd.date_range("2022-01-02 18:00", periods=n_days * 1440, freq="1min", tz="America/New_York")
+    idx = pd.date_range(start, periods=n_days * 1440, freq="1min", tz="America/New_York")
     m = idx.hour * 60 + idx.minute
     keep = ~((m >= 1020) & (m < 1080)) & ~(idx.dayofweek == 5) & ~((idx.dayofweek == 4) & (m >= 1020)) \
         & ~((idx.dayofweek == 6) & (m < 1080))

@@ -14,6 +14,7 @@ class H4DonchianTrendV1(Strategy):
     exits = Exits(trail={"kind": "chandelier", "tf": "4h", "atr": 14, "k": 2.2, "src": "close"},
                   max_hold_min=7200, friday_flat_at=990, hold_overnight=True)
     news_block = (15, 15)
+    warmup_days = 400                     # EMA200 on 4H candles needs a long history to settle
     variants = {"no_bias": {"use_bias": False}}
 
     def signals(self, m):

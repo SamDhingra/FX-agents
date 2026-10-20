@@ -290,7 +290,7 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
         trades.append({
             "entry_time": m.idx[j], "exit_time": m.idx[o["jx"]], "side": side, "entry": side * e, "stop": s.stop,
             "target": s.target if s.target is not None else (side * (e + ex.target_r * R) if ex.target_r else None),
-            "exit": side * o["exit_px"], "risk": R, "atr": R, "points": o["pts"] - fin, "R": r1, "R_2x": r2,
+            "exit": side * o["exit_px"], "stop_final": side * o["stop_final"], "spread": spread, "risk": R, "atr": R, "points": o["pts"] - fin, "R": r1, "R_2x": r2,
             "cost_R": (spread + fin) / R, "fin_R": fin / R, "exit_reason": o["why"],
             "hold_min": (m.ns[o["jx"]] - m.ns[j]) / 60e9, "overnight": o["rollovers"] > 0,
             "rollovers": o["rollovers"], "mfe_r": o["mfe_r"], "mae_r": o["mae_r"], "tag": s.tag, "draw": s.draw,

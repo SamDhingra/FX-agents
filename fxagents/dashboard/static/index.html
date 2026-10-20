@@ -846,6 +846,12 @@ button,input,select,textarea{font-family:inherit}
 .anl{margin:6px 0 2px;padding:5px 8px;border-radius:8px;font-size:12px;background:var(--bg-2,rgba(127,127,127,.08));border-left:3px solid var(--muted)}
 .anl.v-hold{border-left-color:var(--up)} .anl.v-tighten{border-left-color:var(--warn)} .anl.v-exit{border-left-color:var(--down)}
 .anl-t{font-weight:600} .anl-t.v-exit{color:var(--down)} .anl-t.v-tighten{color:var(--warn)} .anl-t.v-hold{color:var(--up)}
+.bttab{width:100%;border-collapse:collapse;font-size:12.5px}.bttab th,.bttab td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.bttab .num{text-align:right;font-variant-numeric:tabular-nums}.bttab tbody tr{cursor:pointer}.bttab tbody tr:hover,.bttab tbody tr.on{background:var(--card-2)}
+.btbar{height:5px;border-radius:3px;background:var(--line);overflow:hidden;min-width:60px}.btbar i{display:block;height:100%;background:var(--accent)}
+.btgates{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}.btgate{font-size:11.5px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);color:var(--text-2)}.btgate.ok{border-color:var(--up);color:var(--up)}.btgate.no{border-color:var(--down);color:var(--down)}.btgate.pass{font-weight:700}
+.btkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-bottom:16px}.btkpi{background:var(--card-2);border-radius:9px;padding:10px 12px}.btkpi small{display:block;color:var(--muted);font-size:11px}.btkpi b{font-size:17px;font-variant-numeric:tabular-nums}
+.btcols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.btcols>div{min-width:0}.btchart{height:240px}.bttrade{height:380px;margin-top:10px}.btrole{font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid var(--line);margin-left:4px}.btrole.vault{border-color:var(--warn);color:var(--warn)}
+@media (max-width:760px){.btcols{grid-template-columns:1fr}.bttrade{height:320px}}
 .anltab{width:100%;border-collapse:collapse;font-size:13px} .anltab th,.anltab td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
 .anltab td.num{text-align:right} .anltab th.num{text-align:right} .anltab{min-width:440px} .anltab td,.anltab th{white-space:nowrap} .anltab td:first-child{white-space:normal}
 </style>
@@ -882,6 +888,7 @@ button,input,select,textarea{font-family:inherit}
     <button class="nav" data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
     <button class="nav" data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
     <button class="nav" data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
+    <button class="nav" data-p="bt"><svg><use href="#i-play"/></svg>Backtester</button>
     <div class="nav-label">MONITORING</div>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
     <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
@@ -1047,6 +1054,23 @@ button,input,select,textarea{font-family:inherit}
       </div>
     </section>
 
+    <!-- BACKTESTER -->
+    <section class="page" id="p-bt">
+      <div class="grid">
+        <div class="card c5"><h3>Run a test</h3>
+          <div class="labform" style="grid-template-columns:1fr">
+            <label>Strategy plugin<select id="bxPlugin"></select><small class="mut" id="bxPlugInfo"></small></label>
+            <div class="labform" style="margin:0;grid-template-columns:1fr 1fr"><label>Data<select id="bxData"></select></label><label>Instrument<select id="bxSym"></select></label></div>
+            <small class="mut" id="bxVault"></small>
+            <label>Parameters (JSON)<textarea id="bxParams" rows="5" spellcheck="false"></textarea></label>
+            <div class="labbtns"><button class="btn" id="bxRun" type="button">Run backtest</button><button class="btn" id="bxReset" type="button">Reset parameters</button></div>
+          </div>
+          <div class="mut" style="font-size:12px;margin-top:12px;line-height:1.55">Plugins are Python files in <code>btplugins/</code>, added through git (then <code>./fx.sh update</code>) — never uploaded here. Every run is recorded with its exact code. Seen data (2021 → Sep 2026) is for trying ideas; the untouched 2016–2020 vault opens only once, for the identical code and parameters that passed every gate on seen data.</div></div>
+        <div class="card c7"><h3>Runs <span class="sp"></span><span class="mut heading-note" id="bxRunsNote"></span></h3><div class="tbl" id="bxRuns"><div class="empty">Loading…</div></div></div>
+        <div class="card c12" id="bxResult" hidden></div>
+      </div>
+    </section>
+
     <!-- TIME MACHINE -->
     <section class="page" id="p-machine">
       <div class="card" style="margin-bottom:16px"><h3>Rewind a day <span class="sp"></span><label class="mut" style="font-weight:500;font-size:12.5px">Day <input type="date" id="tmDay" style="margin-left:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text)"></label></h3>
@@ -1094,13 +1118,14 @@ button,input,select,textarea{font-family:inherit}
   <button data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
   <button data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
+  <button data-p="bt"><svg><use href="#i-play"/></svg>Backtester</button>
   <button data-p="news"><svg><use href="#i-news"/></svg>News</button>
   <button data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
   <button data-p="machine"><svg><use href="#i-play"/></svg>Time machine</button>
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-19.7</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -1143,9 +1168,9 @@ let S = null, page = "home", eqRange = "1W", theme = null, BOOK = "live", WS = n
 const q = path => BOOK !== "live" ? path + (path.includes("?") ? "&" : "?") + "book=" + encodeURIComponent(BOOK) : path;
 
 /* ── navigation ── */
-const titles = {machine:"Time machine",home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
-const pageDescriptions = {machine:"Scrub through any day minute by minute: prices, positions, equity and every decision.",home:"Your account, positions and market context at a glance.",calendar:"Review daily results and explore the trades behind them.",trades:"Find a trade. Understand the entry, management and exit.",compare:"Compare account and virtual-book results over the same period.",playbook:"Review the setups and trading windows in your playbook.",backtests:"Test candidates, inspect replays and review promotion criteria.",strategies:"Explore strategy performance by instrument, timeframe and hour.",news:"Upcoming events and the entry restrictions around them.",agents:"Monitor agent health, Jev decisions and trading activity."};
-const MORE = ["playbook","strategies","backtests","news","agents","machine"];
+const titles = {machine:"Time machine",home:"Overview",calendar:"P&L calendar",trades:"Trades",compare:"Live vs Shadow",playbook:"Playbook",backtests:"Backtests",bt:"Backtester",strategies:"Strategies",news:"News",agents:"Agents & Jev"};
+const pageDescriptions = {machine:"Scrub through any day minute by minute: prices, positions, equity and every decision.",home:"Your account, positions and market context at a glance.",calendar:"Review daily results and explore the trades behind them.",trades:"Find a trade. Understand the entry, management and exit.",compare:"Compare account and virtual-book results over the same period.",playbook:"Review the setups and trading windows in your playbook.",backtests:"Test candidates, inspect replays and review promotion criteria.",bt:"Run a strategy plugin on years of real bid/ask minutes and inspect every trade on the chart.",strategies:"Explore strategy performance by instrument, timeframe and hour.",news:"Upcoming events and the entry restrictions around them.",agents:"Monitor agent health, Jev decisions and trading activity."};
+const MORE = ["playbook","strategies","backtests","bt","news","agents","machine"];
 const shortTitles = {calendar:"Calendar", agents:"Agents", compare:"Compare", strategies:"Strategy", backtests:"Backtest"};
 function go(p){
   const sh = $("#moreSheet");
@@ -1155,7 +1180,7 @@ function go(p){
   if(!titles[p]) return;
   page = p;
   $("#pageDescription").textContent = pageDescriptions[p];
-  $("#pageGroup").textContent = (["strategies","playbook","backtests"].includes(p)?"RESEARCH":["news","agents","machine"].includes(p)?"MONITORING":"WORKSPACE") + " / " + titles[p].toUpperCase();
+  $("#pageGroup").textContent = (["strategies","playbook","backtests","bt"].includes(p)?"RESEARCH":["news","agents","machine"].includes(p)?"MONITORING":"WORKSPACE") + " / " + titles[p].toUpperCase();
   $$("[data-p]").forEach(el => { if(el.dataset.p===p) el.setAttribute("aria-current","page"); else el.removeAttribute("aria-current"); });
   try{history.replaceState(null,"","#"+p)}catch(e){}
 
@@ -1168,6 +1193,7 @@ function go(p){
   if(p === "compare") loadCompare();
   if(p === "strategies"){ loadSetupMap(); loadLearner(); }
   if(p === "backtests") loadBacktests();
+  if(p === "bt") loadBt();
   if(p === "playbook") loadResearch();
   if(S) render(S);
   window.scrollTo({top:0});
@@ -3826,6 +3852,150 @@ async function loadAnalyst(){
     + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest verdicts</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
 }
 setInterval(() => { if(page === "agents") loadAnalyst(); }, 60000);
+/* ══ Backtester: plugins in btplugins/, jobs on the fxbt worker, every trade on the chart ══ */
+let BXC = null, BXR = null, bxTimer = null, bxLW = null, bxEq = null, bxSort = "time";
+const btPct = x => x==null||isNaN(x) ? "—" : Math.round(x*100) + "%";
+const btWhen = sec => sec ? new Date(sec*1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", hour12:false}) : "";
+async function loadBt(){
+  try{ BXC = await api("api/bt"); }catch(e){ $("#bxRuns").innerHTML = `<div class="empty">Couldn't load the backtester (${esc(e.message)}).</div>`; return; }
+  const sel = $("#bxPlugin"), cur = sel.value;
+  sel.innerHTML = BXC.plugins.length ? BXC.plugins.map(p => `<option value="${esc(p.file)}">${esc(p.name || p.file)}${p.error ? " (error)" : ""}</option>`).join("")
+    : `<option value="">no plugins in btplugins/</option>`;
+  if(cur && BXC.plugins.some(p => p.file === cur)) sel.value = cur;
+  const ds = $("#bxData"), dcur = ds.value;
+  ds.innerHTML = BXC.datasets.map(d => `<option value="${esc(d.name)}">${esc(d.label)}${d.role==="vault"?" · vault":""}</option>`).join("");
+  if(dcur) ds.value = dcur;
+  if(!sel.dataset.wired){ sel.dataset.wired = 1; sel.onchange = () => btPick(true); ds.onchange = () => btPick(false); $("#bxReset").onclick = () => btPick(true); $("#bxRun").onclick = btSubmit; }
+  btPick(!$("#bxParams").value);
+  btRenderRuns();
+  clearTimeout(bxTimer);
+  if(page === "bt" && BXC.runs.some(r => ["queued","running","cancel"].includes(r.status))) bxTimer = setTimeout(btRefresh, 4000);
+}
+async function btRefresh(){
+  await loadBt();
+  if(BXR && BXR.run && ["queued","running","cancel"].includes(BXR.run.status)){ const r = BXC.runs.find(x => x.id === BXR.run.id); if(r && r.status === "done") btOpen(r.id); }
+}
+function btPick(resetParams){
+  const p = (BXC.plugins || []).find(x => x.file === $("#bxPlugin").value), d = BXC.datasets.find(x => x.name === $("#bxData").value);
+  if(!p){ $("#bxPlugInfo").textContent = ""; return; }
+  if(p.error){ $("#bxPlugInfo").textContent = p.error; return; }
+  const t = p.tries || {};
+  $("#bxPlugInfo").innerHTML = `${esc(p.description || p.doc.split("\n")[0] || "")}<br>code ${esc(p.code_sha)} · runs on seen data: ${t.seen || 0} · vault: ${t.vault || 0}`;
+  const syms = (d && d.symbols.length) ? d.symbols : [p.symbol], sc = $("#bxSym").value;
+  $("#bxSym").innerHTML = syms.map(s => `<option${s===p.symbol?" selected":""}>${esc(s)}</option>`).join("");
+  if(!resetParams && syms.includes(sc)) $("#bxSym").value = sc;
+  if(resetParams) $("#bxParams").value = JSON.stringify(p.params || {}, null, 1);
+  const vault = d && d.role === "vault";
+  $("#bxVault").innerHTML = vault ? `<b style="color:var(${p.vault.eligible ? "--up" : "--down"})">${p.vault.eligible ? "Vault: " : "Vault closed: "}</b>${esc(p.vault.why)} <span class="mut">(default parameters and symbol)</span>` : "";
+  $("#bxRun").textContent = vault ? "Open the vault (once)" : "Run backtest";
+}
+async function btSubmit(){
+  let params; try{ params = JSON.parse($("#bxParams").value || "{}"); }catch(e){ toast("Parameters aren't valid JSON."); return; }
+  const p = BXC.plugins.find(x => x.file === $("#bxPlugin").value); if(!p) return;
+  const ov = {}; for(const [k, v] of Object.entries(params)) if(JSON.stringify(v) !== JSON.stringify(p.params[k])) ov[k] = v;
+  const d = BXC.datasets.find(x => x.name === $("#bxData").value);
+  if(d.role === "vault" && !confirm("The vault opens only once for this exact strategy. Open it now?")) return;
+  $("#bxRun").disabled = true;
+  const j = await labPost("api/bt/run", {plugin:p.file, dataset:d.name, symbol:$("#bxSym").value, params:ov});
+  $("#bxRun").disabled = false;
+  if(j){ toast("Queued — the worker picks it up in a few seconds."); await loadBt(); btOpen(j.id); }
+}
+function btRenderRuns(){
+  const R = BXC.runs || [];
+  $("#bxRunsNote").textContent = R.length ? `${R.length} recorded` : "";
+  if(!R.length){ $("#bxRuns").innerHTML = `<div class="empty">No runs yet. Pick a plugin and run it on seen data.</div>`; return; }
+  $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${R.map(r => {
+    const st = r.status === "running" ? `<div class="btbar" title="${esc(r.stage)}"><i style="width:${r.pct||0}%"></i></div><small class="mut">${esc(r.stage||"")}</small>`
+      : r.status === "error" ? `<span style="color:var(--down)">error</span>` : esc(r.status);
+    return `<tr data-id="${esc(r.id)}" class="${BXR && BXR.run && BXR.run.id === r.id ? "on" : ""}"><td>${btWhen(r.created)}</td><td>${esc(r.name)} <span class="mut">${esc(r.symbol)}</span><span class="btrole ${r.role==="vault"?"vault":""}">${esc(r.role)}</span></td>
+      <td>${st}</td><td class="num">${r.trades ?? ""}</td><td class="num ${cls(r.avg_r)}">${r.avg_r==null ? "" : sR(r.avg_r, 3)}</td><td class="num ${cls(r.ci_lo)}">${r.ci_lo==null ? "" : sR(r.ci_lo, 3)}</td>
+      <td>${r.status === "done" ? (r.passed ? `<span class="btgate ok pass">PASS</span>` : `<span class="btgate no">no pass</span>`) : ""}</td></tr>`; }).join("")}</tbody></table>`;
+  $$("#bxRuns tbody tr").forEach(tr => tr.onclick = () => btOpen(tr.dataset.id));
+}
+async function btOpen(id){
+  const box = $("#bxResult"); box.hidden = false;
+  let d; try{ d = await api("api/bt/run/" + id); }catch(e){ box.innerHTML = `<div class="empty">Couldn't load the run.</div>`; return; }
+  BXR = d; btRenderRuns();
+  const r = d.run, S = d.summary;
+  const head = `<h3>${esc(r.name)} <span class="mut" style="font-weight:500">${esc(r.symbol)} · ${esc(r.dataset)} · code ${esc(r.code_sha)} · run ${esc(r.id)}</span><span class="sp"></span>
+    ${["queued","running"].includes(r.status) ? `<button class="btn" id="bxCancel" type="button">Cancel</button>` : ""}
+    <a class="btn" href="api/bt/run/${esc(r.id)}/report" target="_blank" rel="noopener">Report</a><a class="btn" href="api/bt/run/${esc(r.id)}/code" target="_blank" rel="noopener">Code</a></h3>`;
+  if(!S){
+    box.innerHTML = head + (r.status === "error" ? `<pre class="mut" style="white-space:pre-wrap;font-size:11.5px">${esc(r.error)}</pre>` : `<div class="empty">${esc(r.status)} — ${esc(r.stage || "")} ${r.pct ? Math.round(r.pct) + "%" : ""}</div>`);
+    const c = $("#bxCancel"); if(c) c.onclick = async () => { await labPost(`api/bt/run/${r.id}/cancel`, {}); loadBt(); };
+    return;
+  }
+  const s = S.stats, c = S.coin || {}, G = S.gates || {};
+  const ov = JSON.parse(r.params || "{}");
+  const gates = Object.entries(G).filter(([k]) => k !== "PASS").map(([k, v]) => `<span class="btgate ${v ? "ok" : "no"}">${v ? "✓" : "✗"} ${esc(k)}</span>`).join("")
+    + `<span class="btgate pass ${G.PASS ? "ok" : "no"}">${G.PASS ? "PASS" : "no pass"}</span>`;
+  const kp = (l, v, c2 = "") => `<div class="btkpi"><small>${l}</small><b class="${c2}">${v}</b></div>`;
+  const kpis = s.trades ? kp("Trades", s.trades) + kp("Win rate", btPct(s.win)) + kp("Avg R", sR(s.avg_R, 3), cls(s.avg_R)) + kp("95% range", `${sR(s.ci_lo, 2)} … ${sR(s.ci_hi, 2)}`)
+    + kp("At 2× costs", sR(s.avg_R_2x, 3), cls(s.avg_R_2x)) + kp("Halves", (S.halves || []).map(x => sR(x, 2)).join(" / ")) + kp("Coin flip", sR(c.avg_R, 3), cls(c.avg_R))
+    + kp("Total", sR(s.total_R, 1), cls(s.total_R)) + kp("Max drawdown", sR(-(S.equity || {}).max_dd_R, 1), "down") + kp("Median hold", fmt(s.hold_min_median, 0) + " min") : "";
+  const tb = (rows, label) => rows && rows.length ? `<table class="bttab" style="cursor:default"><thead><tr><th>${label}</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">Total</th></tr></thead><tbody>${rows.map(x => `<tr style="cursor:default"><td>${esc(x.key)}</td><td class="num">${x.trades}</td><td class="num ${cls(x.avg_R)}">${sR(x.avg_R, 3)}</td><td class="num ${cls(x.total_R)}">${sR(x.total_R, 1)}</td></tr>`).join("")}</tbody></table>` : "";
+  const fun = Object.entries(S.funnel || {}).map(([k, v]) => `${esc(k)} <b>${v}</b>`).join(" → ");
+  const au = S.audit ? `Look-ahead audit: ${S.audit.checked} signals re-run on data that stops at their own time — ${S.audit.failed ? `<b style="color:var(--down)">${S.audit.failed} changed</b> (${esc(S.audit.examples.join(", "))})` : "none changed"}.` : "";
+  const va = Object.entries(S.variants || {}).map(([k, v]) => `${esc(k)}: ${v.trades || 0} trades${v.trades ? ", " + sR(v.avg_R, 3) : ""}`).join(" · ");
+  box.innerHTML = head + `<div class="btgates">${gates}</div>${Object.keys(ov).length ? `<div class="mut" style="font-size:12px;margin:-6px 0 12px">Parameters: <code>${esc(JSON.stringify(ov))}</code></div>` : ""}
+    <div class="btkpis">${kpis}</div>
+    ${s.trades ? `<div class="btcols"><div><h3 style="font-size:13px">Equity (R, after costs)</h3><div class="btchart" id="bxEq"></div></div><div><h3 style="font-size:13px">R per trade</h3><div id="bxHist"></div></div></div>
+    <div class="btcols" style="margin-top:12px"><div class="tbl">${tb(S.by_year, "Year")}</div><div class="tbl">${tb(S.by_exit, "Exit")}${tb(S.by_side, "Side")}</div></div>` : `<div class="empty">No trades.</div>`}
+    <div class="mut" style="font-size:12px;margin:12px 0;line-height:1.6">Funnel: ${fun}<br>${au}${va ? "<br>Variants (must do worse): " + va : ""}</div>
+    ${d.trades.length ? `<h3 style="font-size:13.5px">Trades <span class="sp"></span><span class="seg" id="bxSortSeg"><button data-s="time" class="${bxSort==="time"?"on":""}">Time</button><button data-s="best" class="${bxSort==="best"?"on":""}">Best</button><button data-s="worst" class="${bxSort==="worst"?"on":""}">Worst</button></span></h3>
+    <div class="bttrade" id="bxTradeChart"><div class="empty">Tap a trade to see it on the chart.</div></div><div class="mut" id="bxTradeNote" style="font-size:12px;margin:6px 0 10px"></div>
+    <div class="tbl" id="bxTrades" style="max-height:420px;overflow:auto"></div>` : ""}`;
+  const cb = $("#bxCancel"); if(cb) cb.onclick = async () => { await labPost(`api/bt/run/${r.id}/cancel`, {}); loadBt(); };
+  if(s.trades){ btEquity(S.equity); btHist(S.hist); }
+  if(d.trades.length){ $$("#bxSortSeg button").forEach(b => b.onclick = () => { bxSort = b.dataset.s; $$("#bxSortSeg button").forEach(x => x.classList.toggle("on", x === b)); btTradeList(); }); btTradeList(); }
+}
+function btTradeList(){
+  const T = BXR.trades.map((t, i) => ({...t, i}));
+  if(bxSort === "best") T.sort((a, b) => b.R - a.R); else if(bxSort === "worst") T.sort((a, b) => a.R - b.R);
+  const row = t => `<tr data-i="${t.i}"><td>${md(t.entry_time)} ${nyHM(t.entry_time)}</td><td><span class="side ${t.side > 0 ? "L" : "S"}">${t.side > 0 ? "LONG" : "SHORT"}</span></td><td class="num">${fpx(t.entry)}</td>
+    <td class="num">${fpx(t.stop)}</td><td>${esc(t.exit_reason)}</td><td class="num">${fmt(t.hold_min, 0)}m</td><td class="num"><b class="${cls(t.R)}">${sR(t.R, 2)}</b></td></tr>`;
+  $("#bxTrades").innerHTML = `<table class="bttab"><thead><tr><th>Entry (NY)</th><th>Side</th><th class="num">Entry</th><th class="num">Stop</th><th>Exit</th><th class="num">Hold</th><th class="num">R</th></tr></thead><tbody>${T.slice(0, 500).map(row).join("")}</tbody></table>`
+    + (T.length > 500 ? `<div class="empty">First 500 of ${T.length} shown.</div>` : "");
+  $$("#bxTrades tbody tr").forEach(tr => tr.onclick = () => { $$("#bxTrades tr.on").forEach(x => x.classList.remove("on")); tr.classList.add("on"); btShowTrade(+tr.dataset.i); });
+}
+async function btShowTrade(i){
+  const t = BXR.trades[i], el = $("#bxTradeChart");
+  const a = new Date(t.entry_time), b = new Date(t.exit_time), hold = Math.max(1, (b - a) / 60000);
+  const t0 = new Date(+a - Math.max(90, hold * .4) * 60000), t1 = new Date(+b + Math.max(45, hold * .25) * 60000);
+  el.innerHTML = `<div class="empty">Loading the chart…</div>`;
+  let B, LW;
+  try{ [B, LW] = await Promise.all([api(`api/bt/bars?run=${BXR.run.id}&t0=${encodeURIComponent(t0.toISOString())}&t1=${encodeURIComponent(t1.toISOString())}`), ensureLW()]); }
+  catch(e){ el.innerHTML = `<div class="empty">Couldn't load the chart (${esc(e.message)}).</div>`; return; }
+  if(!B.bars.length){ el.innerHTML = `<div class="empty">No candles for this period.</div>`; return; }
+  const tt = {id:"bt" + i, symbol:BXR.run.symbol, opened:t.entry_time, closed:t.exit_time, entry:t.entry, initial_stop:t.stop, final_stop:t.stop_final,
+    exit_price:t.exit, r_multiple:t.R, events:(t.events || []).filter(e => e.kind === "partial").map(e => ({kind:"partial", ts:e.ts, price:e.px})),
+    draw:(t.draw || []).map(d => ({...d, t0:d.t0 != null ? d.t0 / 1e6 : null, t1:d.t1 != null ? d.t1 / 1e6 : null}))};
+  if(bxLW) bxLW.remove();
+  bxLW = lwBuild(LW, el, {t:tt, bars:B.bars.map(x => ({ts:new Date(x[0] * 1000), o:x[1], h:x[2], l:x[3], c:x[4]}))});
+  if(t.target != null) bxLW.candles.createPriceLine({price:t.target, color:cssv("--up"), lineWidth:1, lineStyle:2, axisLabelVisible:true, title:"target"});
+  const sp = B.bars.find(x => x[0] * 1000 >= +a);
+  $("#bxTradeNote").innerHTML = `${t.side > 0 ? "Long" : "Short"} ${fpx(t.entry)} → ${fpx(t.exit)} (${esc(t.exit_reason)}), stop ${fpx(t.stop)}${t.stop_final !== t.stop ? " → " + fpx(t.stop_final) : ""}, risk ${fpx(t.risk)}, spread ${fpx(t.spread)} (${btPct(t.cost_R)} of risk)${t.fin_R ? `, financing ${sR(-t.fin_R, 2)}` : ""}. Best ${sR(t.mfe_r, 2)}, worst ${sR(t.mae_r, 2)}. <b class="${cls(t.R)}">${sR(t.R, 2)}</b> · ${B.tf}-minute candles (mid) · ${esc(t.tag || "")}`;
+}
+async function btEquity(E){
+  const el = $("#bxEq"); if(!el) return;
+  const LW = await ensureLW(); if(bxEq) try{ bxEq.remove(); }catch(e){}
+  bxEq = LW.createChart(el, {autoSize:true, layout:{background:{type:"solid", color:cssv("--card")}, textColor:cssv("--text-2"), fontSize:11, attributionLogo:true},
+    grid:{vertLines:{visible:false}, horzLines:{color:cssv("--line")}}, rightPriceScale:{borderColor:cssv("--line")}, timeScale:{borderColor:cssv("--line"), tickMarkFormatter:tm => nyMD(tm * 1000)},
+    handleScroll:false, handleScale:false, localization:{priceFormatter:p => fmt(p, 1) + "R", timeFormatter:nyFull}});
+  const ln = bxEq.addSeries(LW.LineSeries, {color:cssv("--accent"), lineWidth:2, priceLineVisible:false});
+  const pts = new Map(); E.t.forEach((x, k) => pts.set(Math.floor(+new Date(x) / 1000), E.R[k]));
+  ln.setData([...pts].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({time, value})));
+  ln.createPriceLine({price:0, color:cssv("--muted"), lineWidth:1, lineStyle:2, axisLabelVisible:false});
+  bxEq.timeScale().fitContent();
+}
+function btHist(H){
+  const el = $("#bxHist"); if(!el || !H) return;
+  const mx = Math.max(1, ...H), W = 100 / H.length;
+  el.innerHTML = `<svg viewBox="0 0 100 60" preserveAspectRatio="none" style="width:100%;height:220px;display:block" role="img" aria-label="Distribution of R per trade">${H.map((v, k) => {
+    const lo = -3 + k * .25, h = v / mx * 54; return `<rect x="${k * W + .1}" y="${56 - h}" width="${W - .2}" height="${h}" fill="var(${lo < 0 ? "--down" : "--up"})" opacity=".8"><title>${lo.toFixed(2)} to ${(lo + .25).toFixed(2)}R: ${v}</title></rect>`; }).join("")}
+    <line x1="${12 * W}" x2="${12 * W}" y1="0" y2="56" stroke="var(--muted)" stroke-width=".3"/></svg>
+    <div class="mut" style="display:flex;justify-content:space-between;font-size:11px"><span>≤ −3R</span><span>0</span><span>+3R</span><span>≥ +6R</span></div>`;
+}
 </script>
 </body>
 </html>
