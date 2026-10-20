@@ -282,6 +282,14 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.failed_breakout \
                --known holdout_m1,dev_m1 --judge old_m1 --out data/year_test/failed_breakout_v1 </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  ndqorb)    # author's ndq_orb_vwap_v1 (fxagents/ndq_orb.py): NAS100 09:30–09:45 ORB + cash VWAP. Step 1 on holdout_m1 + dev_m1;
+             # only a pass opens untouched 2016–2020 NAS100 (old_m1_idx_NDQ, exported by ./fx.sh pbmacd) and judges it once
+             need_env; mkdir -p logs
+             for s_ in dev_m1 holdout_m1; do [[ -f "data/export/$s_/NDQ_M1.csv.gz" ]] || { echo "no data/export/$s_/NDQ_M1.csv.gz"; exit 1; }; done
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/ndqorb-build.log 2>&1 || { echo "build failed — see logs/ndqorb-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.ndq_orb \
+               --known holdout_m1,dev_m1 --judge old_m1_idx_NDQ --out data/year_test/ndq_orb_vwap_v1 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -329,7 +337,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
