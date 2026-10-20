@@ -157,17 +157,73 @@ def fmt_row(cid: str, st: dict, pieces: bool) -> str:
     return base
 
 
+def judge_only(cfg, cells: list[dict], pb: dict, a) -> None:
+    """A pre-registered follow-up: these cells, frozen, judged ONCE on the untouched set (no step 1 rerun)."""
+    frozen = json.dumps(cells, sort_keys=True)
+    sha = hashlib.sha256(frozen.encode()).hexdigest()[:12]
+    (a.out / "cells_frozen.json").write_text(frozen)
+    need = {c["sym"] for c in cells}
+    judge_sets = [a.judge, OLD_IDX]
+    for sym in sorted(need):
+        if not export_file(judge_sets + [f"{OLD_IDX}_{sym}"], sym):
+            print(f"exporting {sym} 2016–2020 bid/ask (one-time) …", flush=True)
+            subprocess.run([sys.executable, "-m", "fxagents.export_history", "--name", f"{OLD_IDX}_{sym}", "--gran", "M1",
+                            "--from", "2016-01-01", "--until", "2020-12-31", "--symbols", sym], check=False)
+        judge_sets.append(f"{OLD_IDX}_{sym}")
+    hist = Path("data/history_x/old_2016_2020")
+    have = build_history(cfg, judge_sets, need, hist)
+    res = run_cells(cfg, [c for c in cells if c["sym"] in have], hist, a.workers)
+    md = [f"# Pre-registered follow-up — judged once on untouched 2016 → 2020 (frozen {sha})", "",
+          f"Cells: {', '.join(c['id'] for c in cells)} — taken unchanged from {pb.get('asof')}. Chosen after the playbook "
+          "test (Oct 20 2026) as the only setup positive in every 2021–2026 piece; it failed step 1 narrowly (95% range "
+          "touching zero, negative at 2× costs), so this run is a stricter-than-usual check, not a rescue: same engine, "
+          "same live filters and position manager, real per-minute bid/ask spread, same gates (≥ 100 trades, avg R > 0, "
+          "95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves).", "",
+          "| Cell | Verdict | Trades | Win | Avg R | 95% range | 2× costs | 1st half | 2nd half | Spread / risk |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
+    rows = {}
+    for c in cells:
+        t = res.get(c["id"], pd.DataFrame())
+        st = judge(t, False) if len(t) else {"n": 0, "pass": False}
+        rows[c["id"]] = st
+        md.append(fmt_row(c["id"], st, False))
+        if len(t):
+            t.to_csv(a.out / f"trades_old_{c['id'].replace(':', '_').replace('@', '_')}.csv.gz", index=False)
+            yr = pd.to_datetime(t.ts).dt.year
+            md += ["", "By year: " + " · ".join(f"{y} {g.r.mean():+.3f} ({len(g)})" for y, g in t.groupby(yr))]
+    missing = [c["id"] for c in cells if c["sym"] not in have]
+    if missing:
+        md += ["", "No 2016–2020 data for: " + ", ".join(missing)]
+    (a.out / "report.md").write_text("\n".join(md) + "\n")
+    (a.out / "run.json").write_text(json.dumps({"frozen": sha, "rows": rows}, indent=2, default=str))
+    print("\n".join(md))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seen", default="holdout_m1,dev_m1")
     ap.add_argument("--judge", default="old_m1")
     ap.add_argument("--out", type=Path, default=Path("data/year_test/playbook_test"))
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--cells-file", type=Path, default=None, help="use this frozen cell list instead of the playbook")
+    ap.add_argument("--only", default="", help="comma-separated cell ids to run")
+    ap.add_argument("--judge-only", action="store_true",
+                    help="pre-registered follow-up: skip step 1 and judge the chosen cells once on --judge")
     a = ap.parse_args()
     cfg = load_config("config.yaml")
     a.out.mkdir(parents=True, exist_ok=True)
-    pb = json.loads(Path("data/playbook.json").read_text())
+    if a.cells_file:
+        pb = {"asof": f"frozen file {a.cells_file}", "cells": json.loads(a.cells_file.read_text())}
+    else:
+        pb = json.loads(Path("data/playbook.json").read_text())
     cells = [c for c in pb["cells"] if c["sym"] in cfg["instruments"]]
+    if a.only:
+        want = set(a.only.split(","))
+        cells = [c for c in cells if c["id"] in want]
+        if not cells:
+            raise SystemExit(f"no such cell: {a.only}")
+    if a.judge_only:
+        return judge_only(cfg, cells, pb, a)
     frozen = json.dumps(cells, sort_keys=True)
     (a.out / "cells_frozen.json").write_text(frozen)
     sha = hashlib.sha256(frozen.encode()).hexdigest()[:12]

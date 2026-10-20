@@ -265,6 +265,23 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.playbook_test \
                --seen holdout_m1,dev_m1 --judge old_m1 --out data/year_test/playbook_test --workers "${2:-2}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  pbmacd)    # pre-registered follow-up: the playbook's macd_cross 5m NAS100 cell (frozen in last night's pbtest), judged ONCE
+             # on untouched 2016–2020 NAS100 bid/ask (exported on demand)
+             need_env; mkdir -p logs
+             f=data/year_test/playbook_test/cells_frozen.json
+             [[ -f "$f" ]] || { echo "no $f — run ./fx.sh pbtest first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/pbmacd-build.log 2>&1 || { echo "build failed — see logs/pbmacd-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.playbook_test --cells-file "$f" \
+               --only "macd_cross:5m@pb-ndq-d" --judge-only --judge old_m1 --out data/year_test/macd_ndq_2016_2020 --workers 1 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  fbr)       # author's failed-breakout reversal v1.0 (fxagents/failed_breakout.py): step 1 on holdout_m1 + dev_m1; only a pass
+             # opens the untouched 2016–2020 export (old_m1) and judges it once
+             need_env; mkdir -p logs
+             for s_ in dev_m1 holdout_m1; do [[ -d "data/export/$s_" ]] || { echo "no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/fbr-build.log 2>&1 || { echo "build failed — see logs/fbr-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.failed_breakout \
+               --known holdout_m1,dev_m1 --judge old_m1 --out data/year_test/failed_breakout_v1 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   lab)       # strategy lab (same as the dashboard's Backtests → Strategy lab):
              #   ./fx.sh lab add trend_pullback --params '{"ema": 50}' --symbols XAUUSD NDQ --tfs 15min 30min --note "…"
              #   ./fx.sh lab run <id> [--days 365] · ./fx.sh lab list · ./fx.sh lab promote <id> · ./fx.sh lab reject <id>
@@ -312,7 +329,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

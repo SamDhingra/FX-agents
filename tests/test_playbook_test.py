@@ -53,3 +53,20 @@ def test_old_data_only_opened_for_passers(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.argv", ["x", "--out", "o2", "--workers", "1"])
     P.main()
     assert opened[-1][0] == "old_m1" and "untouched 2016 → 2020" in Path("o2/report.md").read_text()
+
+
+def test_judge_only_runs_the_frozen_cell_once_on_old_data(tmp_path, monkeypatch):
+    _export(tmp_path, "old_m1", 4)
+    shutil.copy("config.yaml", tmp_path / "config.yaml")
+    cells = [{"id": "smc_bos_retest:5m@t", "sym": "XAUUSD", "tf": "5min", "setup": "smc_bos_retest", "variant": "default",
+              "params": {}, "mgmt": "std"},
+             {"id": "other", "sym": "XAUUSD", "tf": "5min", "setup": "smc_bos_retest", "variant": "default", "params": {},
+              "mgmt": "std"}]
+    (tmp_path / "frozen.json").write_text(json.dumps(cells))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(P.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no export expected")))
+    monkeypatch.setattr("sys.argv", ["x", "--cells-file", "frozen.json", "--only", "smc_bos_retest:5m@t", "--judge-only",
+                                     "--out", "o", "--workers", "1"])
+    P.main()
+    md = Path("o/report.md").read_text()
+    assert "judged once on untouched 2016 → 2020" in md and "smc_bos_retest:5m@t" in md and "| other |" not in md
