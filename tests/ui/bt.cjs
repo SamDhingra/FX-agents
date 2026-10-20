@@ -24,7 +24,7 @@ if(errors.length)console.error(errors.join('\n'));const opts=await page.locator(
 assert(opts.includes('vol_breakout_v1')&&opts.includes('h4_donchian_trend_v1'),'plugins: '+opts);
 await page.selectOption('#bxPlugin','vol_breakout_v1.py');await page.waitForTimeout(100);
 assert((await page.locator('#bxParams').inputValue()).includes('"box_bars": 12'),'params prefilled');
-assert((await page.locator('#bxRuns').textContent()).includes('queued'),'queued run listed');
+{const rt=await page.locator('#bxRuns').textContent();assert(rt.includes('queued')&&rt.includes('use_bias=false'),'runs list: '+rt.slice(0,300));}
 // vault selection shows why it is closed
 await page.selectOption('#bxData','vault');await page.waitForTimeout(100);
 assert((await page.locator('#bxVault').textContent()).includes('Vault closed'),'vault note');

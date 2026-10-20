@@ -1125,7 +1125,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.2</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.3</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3908,10 +3908,16 @@ function btRenderRuns(){
   $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${R.map(r => {
     const st = r.status === "running" ? `<div class="btbar" title="${esc(r.stage)}"><i style="width:${r.pct||0}%"></i></div><small class="mut">${esc(r.stage||"")}</small>`
       : r.status === "error" ? `<span style="color:var(--down)">error</span>` : esc(r.status);
-    return `<tr data-id="${esc(r.id)}" class="${BXR && BXR.run && BXR.run.id === r.id ? "on" : ""}"><td>${btWhen(r.created)}</td><td>${esc(r.name)} <span class="mut">${esc(r.symbol)}</span><span class="btrole ${r.role==="vault"?"vault":""}">${esc(r.role)}</span></td>
+    return `<tr data-id="${esc(r.id)}" class="${BXR && BXR.run && BXR.run.id === r.id ? "on" : ""}"><td>${btWhen(r.created)}</td><td>${esc(r.name)} <span class="mut">${esc(r.symbol)}</span>${btDiff(r) ? `<br><small class="mut">${esc(btDiff(r))}</small>` : ""}<span class="btrole ${r.role==="vault"?"vault":""}">${esc(r.role)}</span></td>
       <td>${st}</td><td class="num">${r.trades ?? ""}</td><td class="num ${cls(r.avg_r)}">${r.avg_r==null ? "" : sR(r.avg_r, 3)}</td><td class="num ${cls(r.ci_lo)}">${r.ci_lo==null ? "" : sR(r.ci_lo, 3)}</td>
       <td>${r.status === "done" ? (r.passed ? `<span class="btgate ok pass">PASS</span>` : `<span class="btgate no">no pass</span>`) : ""}</td></tr>`; }).join("")}</tbody></table>`;
   $$("#bxRuns tbody tr").forEach(tr => tr.onclick = () => btOpen(tr.dataset.id));
+}
+function btDiff(r){                    // the parameters this run changed from the plugin's defaults, shortest form
+  const p = (BXC.plugins || []).find(x => x.file === r.plugin); let P = {}; try{ P = JSON.parse(r.params || "{}"); }catch(e){}
+  if(!p || !p.params) return "";
+  return Object.entries(P).filter(([k, v]) => k === "setup" || k === "tf" || JSON.stringify(v) !== JSON.stringify(p.params[k]))
+    .map(([k, v]) => typeof v === "string" ? v : `${k}=${JSON.stringify(v)}`).join(" · ");
 }
 async function btOpen(id){
   const box = $("#bxResult"); box.hidden = false;
