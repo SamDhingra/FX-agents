@@ -7,12 +7,13 @@ For every closed intraday trade in the journals (the practice account and each p
 the same entry minute, side and initial stop, replayed on OANDA's real 1-minute bid/ask candles with the backtest
 engine (fxagents/bt/engine.py — the same fills, slippage and same-minute rules as the Backtester), once per rule:
 
-  actual_exit   out at the minute the trade really closed — a FIDELITY check: how close the replay gets to the journal
+  actual_exit   full size held to the minute the trade really closed (no partial) — shows what partials cost or saved
   stop_only     the initial stop only; out at 15:50 New York or after 4 hours (the bot's limits)
   target_1r / target_2r / target_3r     a fixed full target
   be1           stop to entry + 0.1R once +1R is reached
   part1_2r      half off at +1R, stop to +0.1R, rest to 2R
-  bot_approx    half off at +1R, stop to +0.1R, then trail 1R behind from +2R (close to the bot's live rule)
+  bot_approx    half off at +1R, stop to +0.1R, then trail 1R behind from +2R — close to the bot's live rule, so on
+                the practice account it is the FIDELITY check (Oct 21 2026: +6.48R replayed vs +6.49R recorded)
   trail1        no target; once +1R, trail the stop 1R behind the best price
   cut15 / cut30 out if the trade isn't above 0R after 15 / 30 minutes (2R target otherwise)
 Every rule also stops at 15:50 or 4 hours. Results in R per trade, before the 1% CAD conversion (as the journal).
@@ -48,7 +49,7 @@ RULES = {
     "cut15": dict(BASE, time_stop=(15, 0.0), target_r=2.0),
     "cut30": dict(BASE, time_stop=(30, 0.0), target_r=2.0),
 }
-LABEL = {"actual_exit": "replay with the real exit time (fidelity check)", "stop_only": "stop only, hold to 15:50 / 4h",
+LABEL = {"actual_exit": "full size to the real exit time", "stop_only": "stop only, hold to 15:50 / 4h",
          "target_1r": "fixed 1R target", "target_2r": "fixed 2R target", "target_3r": "fixed 3R target",
          "be1": "breakeven (+0.1R) at +1R", "part1_2r": "half at 1R, stop +0.1R, rest 2R",
          "bot_approx": "half at 1R, stop +0.1R, trail 1R from +2R (≈ bot)", "trail1": "trail 1R behind from +1R, no target",
@@ -152,11 +153,12 @@ def report(rows: list[dict], days: int, skipped: list[str]) -> str:
          "", "Read with care: one week is a small sample — a rule that wins here can lose next week. Use it to see *how* "
          "each rule changes outcomes (which trades it saves, which it cuts), then test the winner over years in the Backtester.",
          "", "## All books", "", table(tot), ""]
-    fid = tot["rules"].get("actual_exit")
+    live = [r for r in rows if r["book"] == "live"]
+    fid = summarize(live)["rules"].get("bot_approx") if live else None
     if fid:
-        L += [f"Fidelity: replaying each trade with its real exit time gives {fid['total']:+.2f}R vs {tot['actual_total']:+.2f}R "
-              f"recorded ({fid['vs_actual']:+.2f}R apart). The gap is the replay's fill model (minute opens, slippage) vs the "
-              "real fills — compare the rules with each other and with this line, not to the decimal with the journal.", ""]
+        L += [f"Fidelity: on the practice account (which runs the bot's own management), the ≈ bot rule replays to "
+              f"{fid['total']:+.2f}R vs {summarize(live)['actual_total']:+.2f}R recorded. Paper books with their own exit rules "
+              "(EMA cross, playbook profiles) won't match it — compare rules with each other there.", ""]
     for b in books:
         s = summarize([r for r in rows if r["book"] == b])
         L += [f"## {b}", "", table(s), ""]

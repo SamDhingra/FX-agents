@@ -8,6 +8,10 @@ Live rules applied (config.yaml as of 2026-10-20):
   first target 1R: bank 50%, stop to +0.1R; every further +1R the stop steps up 1R; after the first target, 45 min
   without a new best price tightens the stop to best − 0.5R; out after 4 hours or at 15:50 NY.
 Not modelled: adds (off in live anyway), Jev's quality gate, the portfolio caps across instruments.
+
+`mgmt` (Oct 21 2026) swaps the trade management, everything else unchanged — to test on years what the replay of the
+bot's real trades (./fx.sh mgmtreplay) suggested:  live (default, the rules above) · stop_only · target_2r · target_3r ·
+cut15 / cut30 (out if not above 0R after 15 / 30 min, else 2R) · cut15_3r. All keep the 4-hour / 15:50 exits.
 A plugin's recorded code fingerprint covers this file and the bot's setup code too (fxagents/bt/run.code_sha).
 """
 import numpy as np
@@ -16,6 +20,13 @@ import pandas as pd
 from .api import Exits, Signal, Strategy
 
 LIVE_WINDOWS = [(120, 300), (510, 690), (810, 930), (1200, 1440)]
+MGMT = {"live": None,                                         # the class's own exits + the stall rule in adjust()
+        "stop_only": {"partials": [], "target_r": None},
+        "target_2r": {"partials": [], "target_r": 2.0},
+        "target_3r": {"partials": [], "target_r": 3.0},
+        "cut15": {"partials": [], "target_r": 2.0, "time_stop": (15, 0.0)},
+        "cut30": {"partials": [], "target_r": 2.0, "time_stop": (30, 0.0)},
+        "cut15_3r": {"partials": [], "target_r": 3.0, "time_stop": (15, 0.0)}}
 
 
 class BotSetup(Strategy):
@@ -23,7 +34,7 @@ class BotSetup(Strategy):
     symbol = "BTCUSD"
     description = "The bot's own setup code with its live rules."
     params = {"setup": "ict_silver_bullet", "tf": "5min", "setup_params": {}, "use_bias": True, "min_align": 0.25,
-              "min_stop_atr": 0.5, "max_stop_pct": 0.10, "stall_min": 45, "stall_gap_r": 0.5}
+              "min_stop_atr": 0.5, "max_stop_pct": 0.10, "stall_min": 45, "stall_gap_r": 0.5, "mgmt": "live"}
     exits = Exits(partials=[(1.0, 0.5, 0.1)] + [(float(k), 0.0, k - 0.9) for k in range(2, 9)],
                   max_hold_min=240, flat_at=950)
     entry_windows = LIVE_WINDOWS
@@ -78,12 +89,14 @@ class BotSetup(Strategy):
             draw = [{**d, **{k: int(pd.Timestamp(d[k]).value) for k in ("t0", "t1") if d.get(k)}}
                     for d in (s.features.get("draw") or [])]
             out.append(Signal(t=int(end[i]), side=int(s.side), stop=stop, tag=P["setup"],
-                              draw=draw, info={"reason": s.reason}))
+                              draw=draw, info={"reason": s.reason}, exits=MGMT[P.get("mgmt", "live")]))
         return out
 
     def adjust(self, trade, m, k):
         """The live runner rule: after the first target, 45 min without a new best → stop to best − 0.5R."""
         P, side, e, R = self.params, trade["side"], trade["entry"], trade["risk"]
+        if P.get("mgmt", "live") != "live":
+            return None
         px = m.h[k] if side > 0 else m.l[k]
         if "best" not in trade or side * px > side * trade["best"]:
             trade["best"], trade["best_k"] = px, k

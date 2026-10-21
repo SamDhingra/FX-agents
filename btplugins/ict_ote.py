@@ -19,4 +19,5 @@ class IctOte(BotSetup):
               'min_stop_atr': 0.5,
               'max_stop_pct': 0.1,
               'stall_min': 45,
-              'stall_gap_r': 0.5}
+              'stall_gap_r': 0.5,
+              'mgmt': 'live'}
