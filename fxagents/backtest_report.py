@@ -174,9 +174,11 @@ def _bucket(row: dict, jc: dict) -> str:
         return "blocked: counter to bias"
     if why.startswith("bias neutral"):
         return "blocked: bias neutral"
+    if why.startswith("Jev unavailable"):
+        return "blocked: Jev unavailable"
     if why.startswith("Jev") and row["quality"] is not None:
         q_ok = row["quality"] >= jc["min_signal_quality"]
-        c_ok = (row["confidence"] or 0) >= jc["min_signal_confidence"] * 0.8
+        c_ok = (row["confidence"] or 0) >= jc["min_signal_confidence"]
         return ("blocked: Jev confidence" if q_ok and not c_ok else
                 "blocked: Jev quality" if c_ok and not q_ok else "blocked: Jev quality + confidence")
     if why.startswith("instrument off"):

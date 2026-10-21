@@ -323,20 +323,29 @@ class TraderAgent(Agent):
 # ─────────────────────────────────────────────────────────────────────────────
 def jev_gate(g: dict, jc: dict) -> bool:
     """True = the signal may go on to Risk. 'enforce': quality and confidence gates block.
-    'advisory': Jev's grade never blocks (except below advisory_floor) — it sets the size instead."""
+    'advisory': Jev's grade never blocks (except below advisory_floor) — it sets the size instead.
+    A grade that is only the local heuristic because Jev was down or timed out (g['fallback']) never passes an
+    'enforce' gate (Oct 2026 audit): the heuristic is a stand-in, not a judgement, and the thresholds are Jev's.
+    The thresholds are used exactly as configured (a hidden ×0.8 on the confidence used to lower the bar)."""
     if jc.get("signal_gate", "enforce") == "advisory":
         q, c = float(g.get("quality", 0)), float(g.get("confidence", 0))
         lo, hi = jc.get("size_from_quality", [0.3, 0.7])
         g["size_mult"] = round(0.5 + 0.5 * min(1.0, max(0.0, (q - lo) / (hi - lo))), 3)   # 0.5× … 1.0×, never above normal risk
+        if g.get("fallback"):
+            g["size_mult"] = 0.5
         return q >= jc.get("advisory_floor", 0.0)
-    return g["quality"] >= jc["min_signal_quality"] and g["confidence"] >= jc["min_signal_confidence"] * 0.8
+    if g.get("fallback") and jc.get("fallback_blocks", True):
+        return False
+    return g["quality"] >= jc["min_signal_quality"] and g["confidence"] >= jc["min_signal_confidence"]
 
 
 def jev_gate_why(g: dict, jc: dict) -> str:
     """Say which part of the Jev gate failed — quality, confidence or both."""
     if jc.get("signal_gate", "enforce") == "advisory":
         return f"Jev quality {g['quality']:.2f} below advisory floor {jc.get('advisory_floor', 0.0):.2f}"
-    q_min, c_min = jc["min_signal_quality"], jc["min_signal_confidence"] * 0.8
+    if g.get("fallback") and jc.get("fallback_blocks", True):
+        return "Jev unavailable (timeout/error) — a heuristic grade does not pass the gate"
+    q_min, c_min = jc["min_signal_quality"], jc["min_signal_confidence"]
     parts = []
     if g["quality"] < q_min:
         parts.append(f"quality {g['quality']:.2f} < {q_min:.2f}")
@@ -389,7 +398,10 @@ class RiskAgent(Agent):
             return self._reject(rec, "max open positions")
         if sum(p.symbol == sig.symbol for p in open_pos) >= int(pb.get("max_per_symbol", r["max_positions_per_symbol"])):
             return self._reject(rec, "already positioned in symbol")
-        grp = pb.get("group") or {}
+        # NDQ / US30 move together: one index position at a time for EVERY book, not just playbook entries
+        # (Oct 2026 audit F7 — the cap used to depend on the playbook passing its `group` metadata)
+        grp = pb.get("group") or {"members": list(r.get("index_group", ["NDQ", "US30"])),
+                                  "max": int(r.get("index_group_max", 1))}
         if sig.symbol in grp.get("members", []) and \
                 sum(p.symbol in grp["members"] for p in open_pos) >= int(grp.get("max", 99)):
             return self._reject(rec, "index group full (one index position at a time)")
@@ -404,6 +416,9 @@ class RiskAgent(Agent):
             return self._reject(rec, gate["reject"])
         risk_mult = gate["risk_mult"] * (self.ctx.news.risk_mult(now) if self.ctx.news else 1.0)
         risk_mult *= float((req.get("grade") or {}).get("size_mult", 1.0))   # Jev advisory mode: grade → size
+        st_ = self.ctx.book.get(sig.strategy) if self.ctx.book is not None else None
+        if st_ is not None and (getattr(st_, "meta", None) or {}).get("probation"):   # losing, kept only so the account trades
+            risk_mult *= float((self.cfg.get("learner") or {}).get("probation_risk_mult", 0.5))
 
         ic = self.cfg["instruments"][sig.symbol]
         mult, tick = float(ic["multiplier"]), float(ic["tick_size"])
@@ -423,6 +438,14 @@ class RiskAgent(Agent):
         dist = abs(price - stop)
         if dist / price > r["max_stop_pct_of_trade_value"]:
             return self._reject(rec, f"stop {dist/price:.2%} of trade value > {r['max_stop_pct_of_trade_value']:.0%}")
+        # spread as a fraction of the risk (Oct 2026 audit F6): one full spread is the round-trip friction. Logged on
+        # every entry; with risk.cost_cap_enforce it also blocks entries above risk.cost_cap_r.
+        spread = (q[1] - q[0]) if q else 2 * half_spread(self.cfg, sig.symbol)
+        cost_r = spread / dist if dist > 0 else 0.0
+        cap = float(r.get("cost_cap_r") or 0)
+        over_cap = bool(cap) and cost_r > cap
+        if over_cap and r.get("cost_cap_enforce", False):
+            return self._reject(rec, f"cost {cost_r:.2f}R of the stop (spread {spread:.4g} vs stop {dist:.4g}) > cap {cap:.2f}R")
         equity = self.state.equity or await self.ctx.broker.equity()
         if not equity or equity <= 0:
             return self._reject(rec, "account equity unknown (broker or FX rate unavailable)")
@@ -496,9 +519,11 @@ class RiskAgent(Agent):
                     pos.closed_qty = round(pos.closed_qty - trimmed, 9)
             qty = pos.open_qty
         pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),
-                bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3))
+                bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3),
+                cost_r=round(cost_r, 3), over_cost_cap=over_cap)
         self.state.positions[pos.id] = pos
-        self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}"})
+        self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}, "
+                                           f"cost {cost_r:.2f}R" + (f" (over the {cap:.2f}R cap — log only)" if over_cap else "")})
         await self.bus.publish("position_opened", pos)
 
 

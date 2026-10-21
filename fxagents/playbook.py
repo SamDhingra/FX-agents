@@ -216,14 +216,16 @@ def portfolio(taken: pd.DataFrame, pol: Policy) -> pd.DataFrame:
     """Apply live capacity: per-instrument caps, the index group cap, max open, one entry per
     instrument/timeframe bar, no opposite positions on one instrument (OANDA refuses those), and the
     daily loss stop — counted on trades already CLOSED when the next one would open.
-    Higher estimated win probability wins a tie on the same bar."""
+    A tie on the same bar goes to the higher expectancy `e`, then the higher win probability `p` — the same order the
+    live PlaybookTrader uses (Oct 2026 audit F4: this used to rank by win rate alone, so research and live disagreed)."""
     if not len(taken):
         return taken
     t = taken.copy()
     val = "rw" if "rw" in t.columns else "r"
     if "exit_ts" not in t.columns:
         t["exit_ts"] = t["ts"] + pd.to_timedelta(t["bars"] * t["tf"].map(TF_MIN), unit="min")
-    t = t.sort_values(["ts", "p"], ascending=[True, False]).reset_index(drop=True)
+    keys = ["ts"] + [c for c in ("e", "p") if c in t.columns]
+    t = t.sort_values(keys, ascending=[True] + [False] * (len(keys) - 1)).reset_index(drop=True)
     open_: list[tuple] = []           # (exit_ts, sym, cell, side, day, value)
     day_closed: dict = {}
     seen_bar: set = set()

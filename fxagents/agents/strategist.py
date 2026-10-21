@@ -358,6 +358,23 @@ class StrategistAgent(Agent):
         """Forward record from the permanent store (accumulates across evaluation windows/restarts)."""
         return self.ctx.journal.forward_stats(sid, since)
 
+    def _verdict(self, sid: str, pooled: dict) -> str:
+        """Why this strategy should not be live ('' = no objection): a losing simulated record over ≥20 trades, or a
+        losing REAL record (paper account + shadow books) over `real_demote_n`."""
+        ec = self.ec
+        if pooled["n"] >= 20 and pooled["expectancy"] < ec["demote_below_r"]:
+            return f"{pooled['expectancy']:+.2f}R over {pooled['n']} simulated trades"
+        real = self.real_stats(sid, None)
+        if real["n"] >= int(self.lc["real_demote_n"]) and real["expectancy"] < ec["demote_below_r"]:
+            return f"{real['expectancy']:+.2f}R over {real['n']} real trades"
+        return ""
+
+    def _evidence(self, sid: str, pooled: dict) -> float:
+        """One number to rank strategies that all failed the bar: real expectancy once there are enough real trades,
+        else the simulated one."""
+        real = self.real_stats(sid, None)
+        return real["expectancy"] if real["n"] >= int(self.lc["real_block_n"]) else pooled[sid]["expectancy"]
+
     async def promote_demote(self, now, ts):
         book, ec = self.ctx.book, self.ec
         # promote shadows that beat their parent on forward (post-creation) trades
@@ -386,26 +403,51 @@ class StrategistAgent(Agent):
             elif fwd["n"] >= ec["min_trades_promote"] and fwd["expectancy"] < 0:
                 book.set_status(st.id, "retired", ts, "negative forward expectancy")
                 self._note(ts, f"retired {st.id}: forward {fwd['expectancy']:+.2f}R")
-        # demote losing live versions (always keep at least 2 live)
+        # ── demote live versions the evidence says lose ──
+        # One verdict (`_verdict`) decides both demotion and re-activation, so a strategy demoted on its real trades can
+        # no longer be switched straight back on by its simulated record (Oct 2026 audit F1). There is no hidden
+        # "never below two live" floor (F2): when too few good strategies remain, the best-evidence losers stay LIVE
+        # but on probation — half size, logged — so the account keeps trading while the evidence is poor.
         pooled = {sid: self._forward(sid, None) for sid in book.items}
         live = [s for s in book.items.values() if s.status == "live"]
-        for st in sorted(live, key=lambda s: pooled[s.id]["expectancy"]):
+        bad = [(st, self._verdict(st.id, pooled[st.id])) for st in live]
+        bad = [(st, why) for st, why in bad if why]
+        bad_ids = {st.id for st, _ in bad}
+        need = max(0, int(self.lc.get("min_live", 1)) - (len(live) - len(bad)))
+        keep = {st.id for st, _ in sorted(bad, key=lambda x: self._evidence(x[0].id, pooled), reverse=True)[:need]}
+        demoted: set[str] = set()
+        for st, why in bad:
+            if st.id in keep:
+                if not (getattr(st, "meta", None) or {}).get("probation"):
+                    st.meta = {**(getattr(st, "meta", None) or {}), "probation": True}
+                    book.journal.save_strategy(st.spec(), ts, f"probation: {why}")
+                    self._note(ts, f"{st.id} on probation at {self.lc.get('probation_risk_mult', 0.5):g}× size: {why} "
+                                   f"(too few strategies left to switch it off)")
+                continue
+            book.set_status(st.id, "shadow", ts, f"demoted: {why}")
+            self._note(ts, f"demoted {st.id} to shadow ({why})")
+            demoted.add(st.id)
+        for st in live:                                    # recovered, or no longer needed as the last one standing
+            if (getattr(st, "meta", None) or {}).get("probation") and st.id not in bad_ids:
+                st.meta = {k: v for k, v in st.meta.items() if k != "probation"}
+                book.journal.save_strategy(st.spec(), ts, "probation ended")
+                self._note(ts, f"{st.id} off probation")
+        # re-activate recovered builtin shadows — same evidence bar as a promotion, never one demoted this cycle
+        for st in [s for s in book.items.values() if s.status == "shadow" and s.origin == "builtin"
+                   and s.id not in demoted]:
             p = pooled[st.id]
-            if len([s for s in book.items.values() if s.status == "live"]) <= 2:
-                break
             real = self.real_stats(st.id, None)
-            if p["n"] >= 20 and p["expectancy"] < ec["demote_below_r"]:
-                book.set_status(st.id, "shadow", ts, f"demoted: {p['expectancy']:+.2f}R over {p['n']}")
-                self._note(ts, f"demoted {st.id} to shadow ({p['expectancy']:+.2f}R over {p['n']} simulated trades)")
-            elif real["n"] >= int(self.lc["real_demote_n"]) and real["expectancy"] < ec["demote_below_r"]:
-                book.set_status(st.id, "shadow", ts, f"demoted on real trades: {real['expectancy']:+.2f}R over {real['n']}")
-                self._note(ts, f"demoted {st.id} to shadow ({real['expectancy']:+.2f}R over {real['n']} real trades)")
-        # re-activate recovered builtin shadows
-        for st in [s for s in book.items.values() if s.status == "shadow" and s.origin == "builtin"]:
-            p = pooled[st.id]
-            if p["n"] >= 20 and p["expectancy"] > 0.1:
-                book.set_status(st.id, "live", ts, "recovered")
-                self._note(ts, f"re-activated {st.id} ({p['expectancy']:+.2f}R)")
+            if p["n"] < 20 or p["expectancy"] <= 0.1 or self._verdict(st.id, p):
+                continue
+            if real["n"] >= int(self.lc["real_block_n"]) and real["expectancy"] < 0:
+                self._note(ts, f"held {st.id}: simulated {p['expectancy']:+.2f}R but real trades "
+                               f"{real['expectancy']:+.2f}R over {real['n']}")
+                continue
+            if not self.lc.get("auto_promote", True):
+                self._note(ts, f"would re-activate {st.id} ({p['expectancy']:+.2f}R over {p['n']}) — auto_promote is off")
+                continue
+            book.set_status(st.id, "live", ts, "recovered")
+            self._note(ts, f"re-activated {st.id} ({p['expectancy']:+.2f}R)")
         # cap candidate pool
         cands = [s for s in book.items.values() if s.status == "shadow" and s.origin.startswith("learner:")]
         if len(cands) > ec["max_candidates"]:

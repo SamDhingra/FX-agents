@@ -72,6 +72,9 @@ class JevScorer:
                     else:
                         out[k] = {"value": ans.choice, "confidence": round(ans.confidence, 4)}
                 source = "jev"
+                meta = {**meta, "model": getattr(resp, "model", None) or self.cfg.get("model") or "account-default",
+                        "levels": {k: {str(i): round(float(p), 4) for i, p in (getattr(a, "probabilities", None) or {}).items()}
+                                   for k, a in resp.answers.items() if a.type == "score"}}
                 usage = getattr(resp, "usage", None)
                 usage = usage.model_dump() if hasattr(usage, "model_dump") else None
             except Exception as e:  # network, auth, rate-limit… fall back, never block trading
@@ -83,7 +86,7 @@ class JevScorer:
                     "inputs": state, "outputs": out, "usage": usage, **meta}
         self.state.decisions.appendleft(decision)
         await self.bus.publish("decision", decision)
-        return {"answers": out, "source": source}
+        return {"answers": out, "source": source, "fallback": bool(self.live and source != "jev")}
 
     # ── 1. which strategy for this symbol, this hour ──────────────────────
     async def rate_strategies(self, symbol: str, hour: int, regime: dict, cands: dict[str, dict]) -> dict:
@@ -133,7 +136,8 @@ class JevScorer:
         a = res["answers"]
         q = a.get("quality", fb["quality"])
         return {"quality": q["value"], "confidence": q["confidence"],
-                "htf_aligned": a.get("htf_aligned", fb["htf_aligned"])["value"], "source": res["source"]}
+                "htf_aligned": a.get("htf_aligned", fb["htf_aligned"])["value"], "source": res["source"],
+                "fallback": res["fallback"]}
 
     @staticmethod
     def _h_signal(s: dict) -> dict:
