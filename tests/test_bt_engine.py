@@ -356,14 +356,14 @@ def test_one_plugin_per_bot_setup_listed_with_its_own_fingerprint(tmp_path, monk
     from fxagents.bt import ledger
     from fxagents.strategies import ALL
     files = [f for f in sorted(__import__("pathlib").Path("btplugins").glob("*.py")) if "fxagents.bt.botsetups" in f.read_text()]
-    assert len(files) == 20
+    assert len(files) == 21                                  # 20 + sr_rejection (Oct 21)
     (tmp_path / "btplugins").mkdir()
     for f in files:
         shutil.copy(f, tmp_path / "btplugins" / f.name)
     monkeypatch.chdir(tmp_path)
     ps = {p["file"]: p for p in ledger.plugins()}
-    assert len(ps) == 20 and all(p["params"]["setup"] in ALL and p["name"] == p["params"]["setup"] for p in ps.values())
-    assert ps["ict_amd.py"]["symbol"] == "BTCUSD" and len({p["code_sha"] for p in ps.values()}) == 20
+    assert len(ps) == 21 and all(p["params"]["setup"] in ALL and p["name"] == p["params"]["setup"] for p in ps.values())
+    assert ps["ict_amd.py"]["symbol"] == "BTCUSD" and len({p["code_sha"] for p in ps.values()}) == 21
     from fxagents.bt.run import code_sha
     src = (tmp_path / "btplugins/ict_amd.py").read_bytes()
     assert code_sha(src) != __import__("hashlib").sha256(src).hexdigest()[:12]     # covers the bridge + setup code
