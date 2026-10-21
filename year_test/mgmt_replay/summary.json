@@ -1,0 +1,757 @@
+{
+ "days": 7,
+ "all": {
+  "trades": 108,
+  "actual_total": -14.73,
+  "rules": {
+   "actual_exit": {
+    "n": 108,
+    "total": 3.22,
+    "avg": 0.03,
+    "vs_actual": 17.95,
+    "better": 40,
+    "worse": 12
+   },
+   "stop_only": {
+    "n": 108,
+    "total": 9.94,
+    "avg": 0.092,
+    "vs_actual": 24.68,
+    "better": 32,
+    "worse": 25
+   },
+   "target_1r": {
+    "n": 108,
+    "total": -9.62,
+    "avg": -0.089,
+    "vs_actual": 5.11,
+    "better": 34,
+    "worse": 20
+   },
+   "target_2r": {
+    "n": 108,
+    "total": 4.8,
+    "avg": 0.044,
+    "vs_actual": 19.53,
+    "better": 40,
+    "worse": 17
+   },
+   "target_3r": {
+    "n": 108,
+    "total": 7.35,
+    "avg": 0.068,
+    "vs_actual": 22.08,
+    "better": 36,
+    "worse": 21
+   },
+   "be1": {
+    "n": 108,
+    "total": -9.53,
+    "avg": -0.088,
+    "vs_actual": 5.21,
+    "better": 28,
+    "worse": 30
+   },
+   "part1_2r": {
+    "n": 108,
+    "total": -7.73,
+    "avg": -0.072,
+    "vs_actual": 7.0,
+    "better": 33,
+    "worse": 18
+   },
+   "bot_approx": {
+    "n": 108,
+    "total": -7.41,
+    "avg": -0.069,
+    "vs_actual": 7.32,
+    "better": 33,
+    "worse": 19
+   },
+   "trail1": {
+    "n": 108,
+    "total": -12.46,
+    "avg": -0.115,
+    "vs_actual": 2.27,
+    "better": 32,
+    "worse": 26
+   },
+   "cut15": {
+    "n": 108,
+    "total": 3.24,
+    "avg": 0.03,
+    "vs_actual": 17.97,
+    "better": 52,
+    "worse": 24
+   },
+   "cut30": {
+    "n": 108,
+    "total": 3.52,
+    "avg": 0.033,
+    "vs_actual": 18.25,
+    "better": 49,
+    "worse": 20
+   }
+  }
+ },
+ "books": {
+  "c10_afternoon": {
+   "trades": 1,
+   "actual_total": -1.0,
+   "rules": {
+    "actual_exit": {
+     "n": 1,
+     "total": -0.91,
+     "avg": -0.911,
+     "vs_actual": 0.09,
+     "better": 1,
+     "worse": 0
+    },
+    "stop_only": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "target_1r": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "target_2r": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "target_3r": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "be1": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "part1_2r": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "bot_approx": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "trail1": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "cut15": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    },
+    "cut30": {
+     "n": 1,
+     "total": -1.0,
+     "avg": -1.002,
+     "vs_actual": -0.0,
+     "better": 0,
+     "worse": 0
+    }
+   }
+  },
+  "ema21_rsi55": {
+   "trades": 16,
+   "actual_total": -3.64,
+   "rules": {
+    "actual_exit": {
+     "n": 16,
+     "total": -4.28,
+     "avg": -0.267,
+     "vs_actual": -0.63,
+     "better": 2,
+     "worse": 1
+    },
+    "stop_only": {
+     "n": 16,
+     "total": 1.36,
+     "avg": 0.085,
+     "vs_actual": 5.01,
+     "better": 10,
+     "worse": 4
+    },
+    "target_1r": {
+     "n": 16,
+     "total": 0.16,
+     "avg": 0.01,
+     "vs_actual": 3.8,
+     "better": 10,
+     "worse": 4
+    },
+    "target_2r": {
+     "n": 16,
+     "total": 1.16,
+     "avg": 0.072,
+     "vs_actual": 4.8,
+     "better": 10,
+     "worse": 4
+    },
+    "target_3r": {
+     "n": 16,
+     "total": 1.36,
+     "avg": 0.085,
+     "vs_actual": 5.01,
+     "better": 10,
+     "worse": 4
+    },
+    "be1": {
+     "n": 16,
+     "total": -0.75,
+     "avg": -0.047,
+     "vs_actual": 2.9,
+     "better": 10,
+     "worse": 4
+    },
+    "part1_2r": {
+     "n": 16,
+     "total": -0.3,
+     "avg": -0.019,
+     "vs_actual": 3.35,
+     "better": 10,
+     "worse": 4
+    },
+    "bot_approx": {
+     "n": 16,
+     "total": -0.3,
+     "avg": -0.019,
+     "vs_actual": 3.35,
+     "better": 10,
+     "worse": 4
+    },
+    "trail1": {
+     "n": 16,
+     "total": -0.73,
+     "avg": -0.045,
+     "vs_actual": 2.92,
+     "better": 10,
+     "worse": 4
+    },
+    "cut15": {
+     "n": 16,
+     "total": -3.45,
+     "avg": -0.216,
+     "vs_actual": 0.19,
+     "better": 6,
+     "worse": 6
+    },
+    "cut30": {
+     "n": 16,
+     "total": -4.42,
+     "avg": -0.276,
+     "vs_actual": -0.77,
+     "better": 9,
+     "worse": 5
+    }
+   }
+  },
+  "gold_breakout": {
+   "trades": 3,
+   "actual_total": -1.88,
+   "rules": {
+    "actual_exit": {
+     "n": 3,
+     "total": -0.76,
+     "avg": -0.252,
+     "vs_actual": 1.13,
+     "better": 2,
+     "worse": 0
+    },
+    "stop_only": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "target_1r": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "target_2r": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "target_3r": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "be1": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "part1_2r": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "bot_approx": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "trail1": {
+     "n": 3,
+     "total": -0.77,
+     "avg": -0.256,
+     "vs_actual": 1.12,
+     "better": 2,
+     "worse": 0
+    },
+    "cut15": {
+     "n": 3,
+     "total": -0.47,
+     "avg": -0.156,
+     "vs_actual": 1.41,
+     "better": 3,
+     "worse": 0
+    },
+    "cut30": {
+     "n": 3,
+     "total": -0.34,
+     "avg": -0.113,
+     "vs_actual": 1.54,
+     "better": 3,
+     "worse": 0
+    }
+   }
+  },
+  "h1_vol_trend": {
+   "trades": 1,
+   "actual_total": -0.13,
+   "rules": {
+    "actual_exit": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "stop_only": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "target_1r": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "target_2r": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "target_3r": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "be1": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "part1_2r": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "bot_approx": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "trail1": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "cut15": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    },
+    "cut30": {
+     "n": 1,
+     "total": 0.47,
+     "avg": 0.468,
+     "vs_actual": 0.6,
+     "better": 1,
+     "worse": 0
+    }
+   }
+  },
+  "live": {
+   "trades": 34,
+   "actual_total": 6.49,
+   "rules": {
+    "actual_exit": {
+     "n": 34,
+     "total": 20.57,
+     "avg": 0.605,
+     "vs_actual": 14.08,
+     "better": 27,
+     "worse": 4
+    },
+    "stop_only": {
+     "n": 34,
+     "total": 24.99,
+     "avg": 0.735,
+     "vs_actual": 18.5,
+     "better": 9,
+     "worse": 12
+    },
+    "target_1r": {
+     "n": 34,
+     "total": 2.76,
+     "avg": 0.081,
+     "vs_actual": -3.74,
+     "better": 10,
+     "worse": 9
+    },
+    "target_2r": {
+     "n": 34,
+     "total": 13.48,
+     "avg": 0.397,
+     "vs_actual": 6.99,
+     "better": 14,
+     "worse": 7
+    },
+    "target_3r": {
+     "n": 34,
+     "total": 18.52,
+     "avg": 0.545,
+     "vs_actual": 12.02,
+     "better": 12,
+     "worse": 9
+    },
+    "be1": {
+     "n": 34,
+     "total": 8.94,
+     "avg": 0.263,
+     "vs_actual": 2.45,
+     "better": 6,
+     "worse": 15
+    },
+    "part1_2r": {
+     "n": 34,
+     "total": 4.41,
+     "avg": 0.13,
+     "vs_actual": -2.08,
+     "better": 10,
+     "worse": 9
+    },
+    "bot_approx": {
+     "n": 34,
+     "total": 6.47,
+     "avg": 0.19,
+     "vs_actual": -0.03,
+     "better": 10,
+     "worse": 10
+    },
+    "trail1": {
+     "n": 34,
+     "total": 2.42,
+     "avg": 0.071,
+     "vs_actual": -4.08,
+     "better": 6,
+     "worse": 14
+    },
+    "cut15": {
+     "n": 34,
+     "total": 15.88,
+     "avg": 0.467,
+     "vs_actual": 9.38,
+     "better": 20,
+     "worse": 7
+    },
+    "cut30": {
+     "n": 34,
+     "total": 16.11,
+     "avg": 0.474,
+     "vs_actual": 9.62,
+     "better": 17,
+     "worse": 6
+    }
+   }
+  },
+  "playbook": {
+   "trades": 40,
+   "actual_total": -12.81,
+   "rules": {
+    "actual_exit": {
+     "n": 40,
+     "total": -10.75,
+     "avg": -0.269,
+     "vs_actual": 2.06,
+     "better": 6,
+     "worse": 6
+    },
+    "stop_only": {
+     "n": 40,
+     "total": -13.69,
+     "avg": -0.342,
+     "vs_actual": -0.88,
+     "better": 6,
+     "worse": 7
+    },
+    "target_1r": {
+     "n": 40,
+     "total": -8.61,
+     "avg": -0.215,
+     "vs_actual": 4.2,
+     "better": 8,
+     "worse": 5
+    },
+    "target_2r": {
+     "n": 40,
+     "total": -8.74,
+     "avg": -0.218,
+     "vs_actual": 4.08,
+     "better": 8,
+     "worse": 5
+    },
+    "target_3r": {
+     "n": 40,
+     "total": -10.27,
+     "avg": -0.257,
+     "vs_actual": 2.55,
+     "better": 7,
+     "worse": 6
+    },
+    "be1": {
+     "n": 40,
+     "total": -13.83,
+     "avg": -0.346,
+     "vs_actual": -1.01,
+     "better": 6,
+     "worse": 8
+    },
+    "part1_2r": {
+     "n": 40,
+     "total": -8.97,
+     "avg": -0.224,
+     "vs_actual": 3.84,
+     "better": 7,
+     "worse": 4
+    },
+    "bot_approx": {
+     "n": 40,
+     "total": -9.94,
+     "avg": -0.248,
+     "vs_actual": 2.88,
+     "better": 7,
+     "worse": 4
+    },
+    "trail1": {
+     "n": 40,
+     "total": -10.83,
+     "avg": -0.271,
+     "vs_actual": 1.98,
+     "better": 9,
+     "worse": 6
+    },
+    "cut15": {
+     "n": 40,
+     "total": -7.06,
+     "avg": -0.177,
+     "vs_actual": 5.75,
+     "better": 16,
+     "worse": 8
+    },
+    "cut30": {
+     "n": 40,
+     "total": -6.6,
+     "avg": -0.165,
+     "vs_actual": 6.21,
+     "better": 14,
+     "worse": 7
+    }
+   }
+  },
+  "playbook_regime": {
+   "trades": 13,
+   "actual_total": -1.75,
+   "rules": {
+    "actual_exit": {
+     "n": 13,
+     "total": -1.13,
+     "avg": -0.087,
+     "vs_actual": 0.63,
+     "better": 1,
+     "worse": 1
+    },
+    "stop_only": {
+     "n": 13,
+     "total": -1.42,
+     "avg": -0.109,
+     "vs_actual": 0.33,
+     "better": 4,
+     "worse": 2
+    },
+    "target_1r": {
+     "n": 13,
+     "total": -2.62,
+     "avg": -0.201,
+     "vs_actual": -0.86,
+     "better": 3,
+     "worse": 2
+    },
+    "target_2r": {
+     "n": 13,
+     "total": 0.2,
+     "avg": 0.015,
+     "vs_actual": 1.95,
+     "better": 5,
+     "worse": 1
+    },
+    "target_3r": {
+     "n": 13,
+     "total": -0.96,
+     "avg": -0.074,
+     "vs_actual": 0.79,
+     "better": 4,
+     "worse": 2
+    },
+    "be1": {
+     "n": 13,
+     "total": -2.59,
+     "avg": -0.199,
+     "vs_actual": -0.84,
+     "better": 3,
+     "worse": 3
+    },
+    "part1_2r": {
+     "n": 13,
+     "total": -1.57,
+     "avg": -0.121,
+     "vs_actual": 0.18,
+     "better": 3,
+     "worse": 1
+    },
+    "bot_approx": {
+     "n": 13,
+     "total": -2.34,
+     "avg": -0.18,
+     "vs_actual": -0.59,
+     "better": 3,
+     "worse": 1
+    },
+    "trail1": {
+     "n": 13,
+     "total": -2.02,
+     "avg": -0.155,
+     "vs_actual": -0.27,
+     "better": 4,
+     "worse": 2
+    },
+    "cut15": {
+     "n": 13,
+     "total": -1.12,
+     "avg": -0.086,
+     "vs_actual": 0.63,
+     "better": 6,
+     "worse": 3
+    },
+    "cut30": {
+     "n": 13,
+     "total": -0.7,
+     "avg": -0.054,
+     "vs_actual": 1.05,
+     "better": 5,
+     "worse": 2
+    }
+   }
+  }
+ }
+}
