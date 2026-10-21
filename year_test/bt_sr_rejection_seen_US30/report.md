@@ -1,4 +1,4 @@
-# sr_rejection (US30, code 212aa643bca6, run 20261021-165017-caae) on seen
+# sr_rejection (US30, code 212aa643bca6, run 20261021-171308-8045) on seen
 
 Trades 4274, win 42%, avg -0.189R (95% -0.216 … -0.153), 2× costs -0.334R, halves -0.132 / -0.247, exact coin flip -0.181R, max drawdown 812.7R
 

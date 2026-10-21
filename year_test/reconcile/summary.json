@@ -1,0 +1,49 @@
+{
+ "days": 30,
+ "matched": 47,
+ "journal_only": 30,
+ "broker_only": 0,
+ "state_mismatch": 0,
+ "untagged": 30,
+ "journal_total_r": 2.59,
+ "oanda_total_r": 2.93,
+ "pl_diff_r": {
+  "n": 47,
+  "mean": 0.0074,
+  "median": 0.07,
+  "worst": -0.461,
+  "sum": 0.346
+ },
+ "entry_diff_r": {
+  "n": 47,
+  "mean": 0.0,
+  "median": 0.0,
+  "worst": 0.0,
+  "sum": 0.0
+ },
+ "exit_diff_r": {
+  "n": 47,
+  "mean": -0.059,
+  "median": 0.0,
+  "worst": -2.723,
+  "sum": -2.773
+ },
+ "units_mismatch": 0,
+ "target_slip_r": {
+  "n": 34,
+  "mean": -0.0486,
+  "median": -0.019,
+  "worst": -0.7148,
+  "sum": -1.654
+ },
+ "partial_slip_r": {
+  "n": 34,
+  "mean": -0.0486,
+  "median": -0.019,
+  "worst": -0.7148,
+  "sum": -1.654
+ },
+ "full_target_slip_r": {
+  "n": 0
+ }
+}
