@@ -256,7 +256,11 @@ shadow:
     symbols: [XAUUSD]           # BTC: the OANDA account can't trade it (Oct 20 2026) — backtester only
     risk_pct: 0.001             # 0.10% of the book's equity at the 3-ATR protective stop
     stop_atr: 3.0
-  modes: [playbook, playbook_regime, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py) (overrides `mode`); several run side by side, each with its own journal.
+  c10_afternoon:                # ChatGPT's C10 v2 (morning direction held to 13:00 → continue to 15:45) on paper, rules
+                                # frozen (agents/c10_trader.py); passed 2021–Sep 2026 NDQ, vault +0.082R not significant
+    symbols: [NDQ]
+    risk_pct: 0.001             # 0.10% of the book's equity at the 1.25-ATR stop
+  modes: [playbook, playbook_regime, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py) (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
