@@ -138,6 +138,8 @@ class C10Trader(Agent):
             pos.meta["pending_close"] = reason            # the position manager retries it every bar
             pos.log(self.now(), "close_failed", why=str(e)[:200], reason=reason)
             return
+        if limit:
+            pos.log(self.now(), "limit_exit", level=round(price, 6), price=px, reason=reason)
         pos.status, pos.exit_reason, pos.closed_ts, pos.last_price = "closed", reason, self.now(), px
         pos.log(pos.closed_ts, "exit", price=px, reason=reason, realized=round(pos.realized, 2))
         self.state.realized_today += pos.realized

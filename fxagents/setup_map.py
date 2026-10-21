@@ -25,6 +25,12 @@ import pandas as pd
 
 from .bias import bias_frame
 from .indicators import resample_ohlc
+
+
+def _spread(cfg, sym: str) -> float:
+    """Round-trip spread (price points) charged on every simulated trade — the same configured spread live uses."""
+    from .agents.trading import half_spread
+    return 2 * half_spread(cfg, sym)
 from .sim import Mgmt, backtest
 from .strategies import Strategy
 
@@ -142,7 +148,7 @@ def compute(cfg, strategies: list, data: dict[str, tuple[pd.DataFrame, pd.DataFr
                 try:
                     trades = backtest(st, df, ctx, Mgmt.from_cfg(cfg, rr=st.rr, bar_minutes=tf_min),
                                       s["entry_windows"], s["flatten_at"], bias_score=bias,
-                                      min_align=cfg["bias"]["min_align"])
+                                      min_align=cfg["bias"]["min_align"], spread=_spread(cfg, sym))
                 except Exception as e:  # noqa: BLE001
                     log.warning("setup map: %s %s failed: %s", sym, st.id, e)
                     continue

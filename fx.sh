@@ -112,6 +112,10 @@ case "${1:-help}" in
              #   ./fx.sh mgmtreplay [days=7] [--books live playbook …]  → data/year_test/mgmt_replay/report.md
              $DC exec -T fxagents python -m fxagents.mgmt_replay --days "${2:-7}" "${@:3}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  reconcile) # practice-account journal vs OANDA's own trade records (read-only; R only, no amounts) — audit F9
+             #   ./fx.sh reconcile [days=14]  → data/year_test/reconcile/report.md
+             $DC exec -T fxagents python -m fxagents.reconcile --days "${2:-14}" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   holdout)   # score a frozen outside strategy package on a holdout export, sandboxed: no network, no .env/token,
              # read-only package and data. ./fx.sh holdout <package dir> <export name> <tag>
              #   e.g. ./fx.sh holdout research/astra_v1 holdout_m1 astra_v1   → data/year_test/holdout_astra_v1, published
@@ -366,7 +370,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

@@ -658,7 +658,7 @@ class PositionManagerAgent(Agent):
                         return              # nothing filled → not banked; the pending step retries next bar
                     pos.partial_done = True
                     pos.meta.pop("partial_got", None)
-                    pos.log(now, "partial", price=px, qty=part, r=pos.rr)
+                    pos.log(now, "partial", price=px, qty=part, r=pos.rr, level=round(level, 6))   # level: fill slippage audit
                     await self.bus.publish("position_updated", {"position": pos, "event": "partial",
                                                                 "msg": f"banked {part} @ {px} (+{pos.rr:g}R)"})
             new_stop = self.stop_after(pos, nxt)
@@ -822,6 +822,8 @@ class PositionManagerAgent(Agent):
             self.log.warning("%s close (%s) failed, will retry: %s", pos.symbol, reason, e)
             return False
         pos.meta.pop("pending_close", None)
+        if limit:                                    # a target close is a market order after a touch: log the level
+            pos.log(self.now(), "limit_exit", level=round(price, 6), price=px, reason=reason)
         await self.finalize(pos, px, reason)
         return True
 

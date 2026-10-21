@@ -25,6 +25,7 @@ from ..bias import bias_frame
 from ..sim import Mgmt, backtest, stats
 from ..strategies import BUILTIN, Confluence, Strategy, build_strategy
 from .core import Agent
+from .trading import half_spread
 
 BIAS_FILTERS = ["dtfx_zone", "macd_cross", "rsi_pullback", "ict_ote"]
 
@@ -100,7 +101,7 @@ class StrategistAgent(Agent):
                 if len(df) < 120 or len(h1) < 48:
                     continue
                 b = bias_frame(h1, df.index + pd.Timedelta(tf), weights=self.cfg["bias"]["weights"])
-                out[(s, tf)] = {"df": df, "bias": b["score"].to_numpy()}
+                out[(s, tf)] = {"df": df, "bias": b["score"].to_numpy(), "sym": s}
         return out
 
     def mgmt(self, st: Strategy) -> Mgmt:
@@ -109,7 +110,8 @@ class StrategistAgent(Agent):
     def _bt(self, st: Strategy, item: dict, part: str = "full", ctx: dict | None = None) -> list[dict]:
         s = self.cfg["sessions"]
         df, bias = item["df"], item["bias"]
-        kw = dict(min_align=self.cfg["bias"]["min_align"])
+        kw = dict(min_align=self.cfg["bias"]["min_align"],
+                  spread=2 * half_spread(self.cfg, item["sym"]) if item.get("sym") else 0.0)
         split = int(len(df) * float(self.lc["is_frac"]))
         if part == "is":
             d = df.iloc[:split]

@@ -136,9 +136,13 @@ def _close(realized, units, px_r, reason, bars, mfe, mae, step) -> dict:
 
 
 def backtest(strat: Strategy, df: pd.DataFrame, ctx: dict, m: Mgmt, entry_windows, flatten_at: str,
-             start_i: int = 0, bias_score: np.ndarray | None = None, min_align: float = 0.25) -> list[dict]:
+             start_i: int = 0, bias_score: np.ndarray | None = None, min_align: float = 0.25,
+             spread: float = 0.0) -> list[dict]:
     """bias_score (aligned to df rows, known at each bar close) applies the live HARD bias rule:
-    only signals with side × score ≥ min_align are taken — so stats reflect what can really trade."""
+    only signals with side × score ≥ min_align are taken — so stats reflect what can really trade.
+    spread (price points, round trip = one full spread per unit traded) is charged in R on every trade, so the
+    strategies the Selector ranks pay what the account pays (Oct 2026 audit F3: this simulator used to be free).
+    `r` is net of it; `r_gross` and `cost_r` keep the parts."""
     O, H, L, C = (df[c].to_numpy() for c in ("open", "high", "low", "close"))
     close_ts = ctx["close_ts"]
     fh, fm = map(int, flatten_at.split(":"))
@@ -160,6 +164,8 @@ def backtest(strat: Strategy, df: pd.DataFrame, ctx: dict, m: Mgmt, entry_window
         cont = (np.sign(C - ema50) == s.side) & (np.sign(hist) == s.side)
         res = simulate_outcome(O, H, L, C, s.i, s.side, entry, stop, m, flat_mask, cont)
         busy = s.i + res["bars"]
+        cost_r = spread / abs(entry - stop) * (1.0 + res["adds"] * m.add_frac) if spread > 0 else 0.0
+        res = {**res, "r_gross": res["r"], "cost_r": float(cost_r), "r": float(res["r"] - cost_r)}
         ts = close_ts[s.i]
         trades.append({"ts": ts, "hour": ts.hour, "side": s.side, "entry": entry, "stop": stop,
                        "reason": s.reason, "bias": float(bias_score[s.i]) if bias_score is not None else None, **res})
