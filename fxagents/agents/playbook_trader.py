@@ -5,7 +5,7 @@ PlaybookAgent   keeps it current: live → re-selects as of today and re-runs th
                 history cache is newer (weekly, low priority); replay → re-selects every Monday as of that
                 day from trades strictly before it, so a replay never sees its own future
 PlaybookTrader  on each bar close, scans the cells for that symbol/timeframe, applies the hard bias rule,
-                instrument capacity (gold up to 2 positions; one index position at a time),
+                instrument capacity (gold up to 2 positions; one index position per direction),
                 picks the highest-probability cell, asks Jev for a grade (advisory → size) and hands the
                 entry to Risk with the cell's exit profile.
 """
@@ -190,8 +190,8 @@ class PlaybookTrader(TraderAgent):
         if side and any(p.symbol == sym and p.side != side for p in open_pos):
             return f"playbook: {sym} has an opposite position (OANDA nets positions per instrument)"
         grp = set(pol.index_group)
-        if sym in grp and sum(p.symbol in grp for p in open_pos) >= pol.index_group_max:
-            return "playbook: one index position at a time"
+        if sym in grp and sum(p.symbol in grp and (not side or p.side == side) for p in open_pos) >= pol.index_group_max:
+            return "playbook: one index position per direction at a time"
         return None
 
     def peers(self, sym: str, tf: str, df: pd.DataFrame) -> list[pd.DataFrame]:

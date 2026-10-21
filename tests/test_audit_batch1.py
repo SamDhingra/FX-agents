@@ -199,3 +199,27 @@ def test_f6_enforce_blocks_when_switched_on(tmp_path):
     ra, st, br, ctx = _risk(tmp_path, quote=(19990.0, 20010.0), cost_cap_enforce=True)
     row = _ask(ra, st, "NDQ")
     assert row["action"] == "rejected" and "cap 0.10R" in row["why"] and not br.opened
+
+
+def test_f7_opposite_direction_index_trade_is_allowed(tmp_path):
+    """Long NDQ open: a long US30 is blocked (same bet, double size), a short US30 is not (the risks offset)."""
+    ra, st, br, ctx = _risk(tmp_path, held=["NDQ"])                      # the held NDQ position is long
+    sig = Signal("US30", "plain:5m@v1", -1, 20000.0, 20100.0, st.now)
+    rec = {"ts": st.now.isoformat(), "symbol": "US30", "strategy": sig.strategy, "side": "SHORT", "entry": 20000.0,
+           "stop": 20100.0}
+    st.bias["US30"] = {**st.bias["US30"], "score": -1.0, "label": "BEARISH", "d": -1, "h4": -1, "h1": -1}
+    asyncio.run(ra.on_request({"signal": sig, "grade": {"quality": 0.8, "confidence": 0.8, "source": "test"}, "record": rec}))
+    row = ctx.journal.rows[-1]
+    assert "index group" not in row["why"] and row["action"] == "taken"
+
+
+def test_f7_research_portfolio_caps_per_direction():
+    from fxagents import playbook as P
+    t0 = pd.Timestamp("2026-08-03 09:40", tz=TZ)
+    rows = [{"sym": s, "tf": "5min", "setup": f"{s}{side}", "variant": "default", "mgmt": "std", "ts": t0, "side": side,
+             "day": t0.date(), "r": 1.0, "bars": 12, "p": 0.6, "e": 0.1}
+            for s, side in (("NDQ", 1), ("US30", 1), ("US30", -1))]
+    got = set(P.portfolio(pd.DataFrame(rows[:2]), P.Policy())["setup"])
+    assert got == {"NDQ1"}                                               # same direction: one only
+    got = set(P.portfolio(pd.DataFrame([rows[0], rows[2]]), P.Policy())["setup"])
+    assert got == {"NDQ1", "US30-1"}                                     # opposite: both

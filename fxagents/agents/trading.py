@@ -403,8 +403,9 @@ class RiskAgent(Agent):
         grp = pb.get("group") or {"members": list(r.get("index_group", ["NDQ", "US30"])),
                                   "max": int(r.get("index_group_max", 1))}
         if sig.symbol in grp.get("members", []) and \
-                sum(p.symbol in grp["members"] for p in open_pos) >= int(grp.get("max", 99)):
-            return self._reject(rec, "index group full (one index position at a time)")
+                sum(p.symbol in grp["members"] and p.side == sig.side for p in open_pos) >= int(grp.get("max", 99)):
+            # same direction only: long NDQ + long US30 is one bet at double size; long one + short the other is not
+            return self._reject(rec, "index group full (one index position per direction at a time)")
         if pb and any(p.strategy == sig.strategy for p in open_pos):
             return self._reject(rec, "this playbook cell already has a position")
         if sig.stop is None:

@@ -110,7 +110,7 @@ risk:
   max_margin_pct_total: 0.60         # …and all positions together at most 60%
   max_positions_per_symbol: 1
   index_group: [NDQ, US30]           # these move together …
-  index_group_max: 1                 # … so at most one index position at a time, whichever strategy opens it
+  index_group_max: 1                 # … so at most one index position per DIRECTION (long NDQ blocks long US30, not short US30)
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak
   cost_cap_r: 0.10                   # spread ÷ stop distance above this = friction eats >10% of every R (Oct 2026 audit F6)

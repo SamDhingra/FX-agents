@@ -62,7 +62,7 @@ class Policy:
         "US30": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
 })                              # forex majors removed Oct 2026 (never traded; negative after spread)
     index_group: tuple = ("NDQ", "US30")
-    index_group_max: int = 1          # NDQ / US30 move together: one index position at a time
+    index_group_max: int = 1          # NDQ / US30 move together: one index position per direction at a time
     max_open: int = 3
     daily_loss_r: float = 4.0         # -2% day at 0.5% per trade = -4R
     # volume cells (vol=impulse/dry/climax variants, the VWAP setup) are researched and shown, but only
@@ -251,7 +251,9 @@ def portfolio(taken: pd.DataFrame, pol: Policy) -> pd.DataFrame:
             continue
         if any(o[1] == r.sym and o[3] != r.side for o in open_):
             continue
-        if r.sym in pol.index_group and sum(o[1] in pol.index_group for o in open_) >= pol.index_group_max:
+        # one index bet per direction: long NDQ + long US30 is one bet at double size; long one + short the other is not
+        if r.sym in pol.index_group and \
+                sum(o[1] in pol.index_group and o[3] == r.side for o in open_) >= pol.index_group_max:
             continue
         keep[k] = True
         seen_bar.add((r.sym, r.tf, r.ts))
