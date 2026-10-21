@@ -1133,7 +1133,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.2</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.3</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -1721,10 +1721,10 @@ function renderCompare(){
   const bestR = Math.max(...LG.map(r=>r.sum_r)), anyT = LG.some(r=>r.trades);
   const league = LG.length > 2 ? `<div class="card c12"><h3>All books <span class="sp"></span><span class="mut" style="font-weight:500">${CMP.league.since ? "since " + md(CMP.league.since) + ", " + hm(CMP.league.since) + " NY" : ""}</span></h3>
     <div class="tbl"><table><tr><th>Book</th><th class="r">Trades</th><th class="r hide-m">Winners</th><th class="r hide-m">Win rate</th><th class="r">Total R</th><th class="r hide-m">Avg R</th><th class="r hide-m">P&amp;L</th><th class="r hide-m">Open</th></tr>
-    ${LG.map(r => `<tr><td><i class="dot" style="background:${bookColor(r.book)}"></i><b>${esc(r.book==="live"?"Live":ModeName(r.mode||r.book))}</b>${anyT && r.sum_r===bestR ? ` <span class="tag acc" title="most R">top</span>` : ""}</td>
+    ${LG.map(r => `<tr><td><i class="dot" style="background:${bookColor(r.book)}"></i><b>${esc(r.book==="live"?"Live":ModeName(r.mode||r.book))}</b>${r.since && r.since !== CMP.league.since ? ` <small class="mut">from ${md(r.since)} ${hm(r.since)}</small>` : ""}${anyT && r.sum_r===bestR ? ` <span class="tag acc" title="most R">top</span>` : ""}</td>
       <td class="r num">${r.trades}</td><td class="r num hide-m">${r.wins}</td><td class="r num hide-m">${r.trades?Math.round(r.win_rate*100)+"%":"—"}</td>
       <td class="r num ${cls(r.sum_r)}"><b>${sR(r.sum_r)}</b></td><td class="r num hide-m ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num hide-m ${cls(r.pnl)}">${smoney(r.pnl)}</td><td class="r num hide-m">${r.open}</td></tr>`).join("")}</table></div>
-    <div class="mut" style="font-size:12px;margin-top:8px">Every book is measured over the same period. Read total R together with the trade count: with fewer than about 20 trades, a lead can be luck.</div></div>` : "";
+    <div class="mut" style="font-size:12px;margin-top:8px">Every book is measured over this period, or from its own start if it began later (shown next to its name). Read total R together with the trade count: with fewer than about 20 trades, a lead can be luck.</div></div>` : "";
   const diff = +(G.sum_r - L.sum_r).toFixed(2), few = Math.min(L.trades, G.trades) < 20;
   let verdict;
   if(!L.trades && !G.trades) verdict = `<b>No closed trades yet</b><span class="mut">The comparison fills in as trades close in either book.</span>`;

@@ -94,20 +94,19 @@ def _range_since(now, rng: str) -> str | None:
 
 
 def league(ctx, rng: str) -> dict:
-    """Every book (real + each shadow) over the SAME period: from the range start or the youngest shadow
-    book's first record, whichever is later — so a book that started yesterday isn't compared on a week."""
+    """Every book (real + each shadow) over the range. Each book counts from the range start or its OWN first
+    record, whichever is later (its `since`), so adding a new book never hides the other books' trades.
+    (It used to clip every book to the youngest book's start — a book added at 13:00 blanked the morning.)"""
     shs = getattr(ctx, "shadows", None) or {}
     since = _range_since(ctx.state.now, rng)
-    for sh in shs.values():
-        st = compare_start(ctx, sh)
-        if st and (since is None or st > since):
-            since = st
     rows = []
     for key, c in (("live", ctx), *shs.items()):
-        sm = c.journal.summary(since=since)
+        own = compare_start(ctx, c) if key != "live" else None
+        s_b = own if own and (since is None or own > since) else since
+        sm = c.journal.summary(since=s_b)
         rows.append({"book": key, "mode": getattr(c, "selection_mode", ""), "trades": sm["trades"],
                      "wins": round(sm["trades"] * sm["win_rate"]), "win_rate": sm["win_rate"], "sum_r": sm["sum_r"],
-                     "avg_r": sm.get("avg_r", 0.0), "pnl": sm["pnl"],
+                     "avg_r": sm.get("avg_r", 0.0), "pnl": sm["pnl"], "since": s_b,
                      "open": sum(1 for p in c.state.positions.values() if p.status == "open")})
     return {"since": since, "rows": rows}
 
