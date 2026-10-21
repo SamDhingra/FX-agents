@@ -70,6 +70,26 @@ async def fetch_trades(client, since: pd.Timestamp, state: str = "CLOSED", page:
     return out
 
 
+async def fx_table(client, since: pd.Timestamp):
+    """USD per unit of the account currency at a time, from OANDA's daily USD_<ccy> mid candles (None for USD)."""
+    acct = (await client.req("GET", client.acct("/summary")))["account"]
+    ccy = acct.get("currency", "USD")
+    if ccy == "USD":
+        return None
+    res = await client.req("GET", f"/v3/instruments/USD_{ccy}/candles",
+                           params={"granularity": "D", "price": "M", "from": (since - pd.Timedelta(days=5)).isoformat()})
+    pts = sorted((pd.Timestamp(c["time"]), 1.0 / _f(c["mid"]["c"])) for c in res.get("candles", []) if _f(c["mid"]["c"]))
+    if not pts:
+        raise SystemExit(f"no USD_{ccy} candles — cannot convert OANDA's {ccy} P&L to the journal's USD")
+    ts = [p[0] for p in pts]
+
+    def at(t: pd.Timestamp) -> float:
+        k = max(0, int(np.searchsorted(ts, t, side="right")) - 1)
+        return pts[k][1]
+    at.ccy = ccy
+    return at
+
+
 def load_journal(db: str, since: pd.Timestamp) -> list[dict]:
     con = sqlite3.connect(db)
     con.row_factory = sqlite3.Row
@@ -112,7 +132,20 @@ def target_fills(rows: list[dict]) -> list[dict]:
     return out
 
 
-def reconcile(cfg, journal: list[dict], closed: list[dict], open_: list[dict]) -> dict:
+OANDA_NAMES = {"NDQ": "NAS100_USD", "US30": "US30_USD", "XAUUSD": "XAU_USD", "SPX": "SPX500_USD", "BTCUSD": "BTC_USD"}
+
+
+def _inst_of(cfg, sym: str) -> str:
+    from .oanda import _inst
+    try:
+        return _inst(cfg, sym)
+    except (Exception, SystemExit):  # noqa: BLE001 — not configured here: OANDA's usual name
+        return OANDA_NAMES.get(sym, sym)
+
+
+def reconcile(cfg, journal: list[dict], closed: list[dict], open_: list[dict], fx=None, match_s: float = 120.0) -> dict:
+    """fx(close_time) → USD per unit of the account currency (OANDA's realizedPL is in the account currency, the
+    journal books in USD, the instruments' quote currency). None = the account is in USD."""
     by_pos: dict[str, list[dict]] = {}
     untagged = []
     for t in closed + open_:
@@ -122,6 +155,25 @@ def reconcile(cfg, journal: list[dict], closed: list[dict], open_: list[dict]) -
         else:
             untagged.append(t)
     jrows = {r["id"]: r for r in journal}
+    # trades from before the bot tagged its orders (≈ Oct 8 2026): pair by instrument and open time
+    by_time = set()
+    left = []
+    free = [r for r in journal if r["id"] not in by_pos]
+    for t in untagged:
+        ot = pd.Timestamp(t.get("openTime"))
+        best, gap = None, match_s
+        for r in free:
+            if _inst_of(cfg, r["symbol"]) != t.get("instrument") or r["id"] in by_pos:
+                continue
+            g = abs((pd.Timestamp(r["opened"]) - ot).total_seconds())
+            if g <= gap:
+                best, gap = r, g
+        if best is None:
+            left.append(t)
+        else:
+            by_pos[best["id"]] = [t]
+            by_time.add(best["id"])
+    untagged = left
     pairs, journal_only, broker_only, state_mismatch = [], [], [], []
     for pid, trs in by_pos.items():
         row = jrows.get(pid)
@@ -144,16 +196,23 @@ def reconcile(cfg, journal: list[dict], closed: list[dict], open_: list[dict]) -
         tot = sum(units) or 1.0
         b_entry = sum(_f(t.get("price")) * u for t, u in zip(trs, units)) / tot
         b_exit = sum(_f(t.get("averageClosePrice")) * u for t, u in zip(trs, units)) / tot
-        b_pl = sum(_f(t.get("realizedPL")) + _f(t.get("financing")) + _f(t.get("dividendAdjustment")) for t in trs)
+        rate = 1.0
+        if fx is not None:
+            ct = max((pd.Timestamp(t["closeTime"]) for t in trs if t.get("closeTime")), default=pd.Timestamp(row["closed"]))
+            rate = float(fx(ct))
+        b_pl = rate * sum(_f(t.get("realizedPL")) + _f(t.get("financing")) + _f(t.get("dividendAdjustment")) for t in trs)
         j_pl = _f(row.get("realized"))
+        q = abs(_f(row.get("qty_gross")))
+        j_exit = (_f(row.get("avg_entry") or row["entry"]) + side * (j_pl + _f(row.get("commissions"))) / (q * mult)
+                  if q else _f(row.get("exit_price")))          # the journal's AVERAGE exit (partials included)
         pairs.append({
             "id": pid, "symbol": row["symbol"], "strategy": row["strategy"], "opened": row["opened"],
             "exit_reason": row.get("exit_reason"), "journal_r": row.get("r_multiple"),
             "oanda_r": round(b_pl / rc, 3) if rc else None,
             "pl_diff_r": round((b_pl - j_pl) / rc, 3) if rc else None,
             "entry_diff_r": round(side * (_f(row.get("avg_entry") or row["entry"]) - b_entry) / risk_px, 3) if risk_px else None,
-            "exit_diff_r": round(side * (b_exit - _f(row.get("exit_price"))) / risk_px, 3)
-            if risk_px and row.get("exit_price") else None,
+            "exit_diff_r": round(side * (b_exit - j_exit) / risk_px, 3) if risk_px and j_exit else None,
+            "matched_by": "open time" if pid in by_time else "tag",
             "units_match": abs(tot - abs(_f(row.get("qty_gross")))) <= 1e-6 * max(1.0, tot),
         })
     for r in journal:
@@ -179,7 +238,8 @@ def summarize(res: dict) -> dict:
     p = res["pairs"]
     jr = sum(x["journal_r"] or 0 for x in p)
     br = sum(x["oanda_r"] or 0 for x in p)
-    return {"matched": len(p), "journal_only": len(res["journal_only"]), "broker_only": len(res["broker_only"]),
+    return {"matched": len(p), "matched_by_open_time": sum(x.get("matched_by") == "open time" for x in p),
+            "journal_only": len(res["journal_only"]), "broker_only": len(res["broker_only"]),
             "state_mismatch": len(res["state_mismatch"]), "untagged": len(res["untagged"]),
             "journal_total_r": round(jr, 2), "oanda_total_r": round(br, 2),
             "pl_diff_r": _stat([x["pl_diff_r"] for x in p]), "entry_diff_r": _stat([x["entry_diff_r"] for x in p]),
@@ -192,11 +252,13 @@ def summarize(res: dict) -> dict:
 
 def report(res: dict, s: dict, days: int) -> str:
     L = [f"# Journal vs OANDA — last {days} days", "",
-         f"Matched positions {s['matched']} · journal-only {s['journal_only']} · OANDA-only {s['broker_only']} · "
+         f"Matched positions {s['matched']} ({s.get('matched_by_open_time', 0)} by instrument + open time: trades from "
+         "before the bot tagged its orders) · journal-only {s['journal_only']} · OANDA-only {s['broker_only']} · "
          f"open/closed disagree {s['state_mismatch']} · untagged OANDA trades {s['untagged']} · unit mismatches "
          f"{s['units_mismatch']}", "",
          f"Total on matched positions: journal **{s['journal_total_r']:+.2f}R**, OANDA **{s['oanda_total_r']:+.2f}R** "
-         "(OANDA = realizedPL + financing, in each trade's own R).", "",
+         "(OANDA = realizedPL + financing, converted from the account currency to USD at that day's rate, in each "
+         "trade's own R — so the P&L difference holds financing and OANDA's conversion, not just fills).", "",
          "| difference (R per position, OANDA − journal) | n | mean | median | worst | sum |", "|---|---|---|---|---|---|"]
     for k, name in (("pl_diff_r", "P&L"), ("entry_diff_r", "entry fill (+ = OANDA better)"),
                     ("exit_diff_r", "exit fill (+ = OANDA better)")):
@@ -237,11 +299,12 @@ async def run(cfg, days: int, client=None, out_dir: str = "data/year_test/reconc
     try:
         closed = await fetch_trades(client, since, "CLOSED")
         open_ = await fetch_trades(client, since, "OPEN")
+        fx = await fx_table(client, since)
     finally:
         if own:
             await client.aclose()
     journal = load_journal(cfg["storage"]["db_path"], since)
-    res = reconcile(cfg, journal, closed, open_)
+    res = reconcile(cfg, journal, closed, open_, fx=fx)
     s = summarize(res)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

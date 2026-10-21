@@ -3,6 +3,7 @@ including how far target exits fill from their level (F5 evidence)."""
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import sqlite3
 
@@ -15,6 +16,8 @@ from fxagents.sim import Mgmt, backtest
 from fxagents.strategies import BUILTIN
 
 CFG = load_config("config.yaml")
+CFG1 = copy.deepcopy(CFG)
+CFG1["instruments"]["NDQ"]["multiplier"] = 1.0          # 1 unit = 1 USD a point, so the hand-made rows add up
 
 
 # ── F3 ───────────────────────────────────────────────────────────────────
@@ -114,10 +117,10 @@ def test_reconcile_matches_flags_gaps_and_measures_differences(tmp_path):
     _journal(db, rows)
     closed = [_tr("aaaaaaaaaa", close="20031.0", pl="31.0", fin="0", tid="1"),       # OANDA exit 1 point better
               _tr("dddddddddd", tid="2"),                                            # journal never saw it
-              _tr(None, tid="3")]                                                    # manual trade
+              _tr(None, tid="3", open_="2026-10-16T18:00:00Z")]                      # manual trade, no journal row
     open_ = [_tr("cccccccccc", state="OPEN", tid="4")]
     jr = R.load_journal(db, pd.Timestamp("2026-10-01", tz="UTC"))
-    res = R.reconcile(CFG, jr, closed, open_)
+    res = R.reconcile(CFG1, jr, closed, open_)
     s = R.summarize(res)
     assert s["matched"] == 1 and s["broker_only"] == 1 and s["untagged"] == 1 and s["state_mismatch"] == 0
     assert [x["id"] for x in res["journal_only"]] == ["bbbbbbbbbb"]
@@ -133,7 +136,7 @@ def test_reconcile_matches_flags_gaps_and_measures_differences(tmp_path):
 def test_open_closed_disagreement_is_flagged(tmp_path):
     db = str(tmp_path / "j.sqlite")
     _journal(db, [_row("eeeeeeeeee")])                                                # journal: closed
-    res = R.reconcile(CFG, R.load_journal(db, pd.Timestamp("2026-10-01", tz="UTC")), [],
+    res = R.reconcile(CFG1, R.load_journal(db, pd.Timestamp("2026-10-01", tz="UTC")), [],
                       [_tr("eeeeeeeeee", state="OPEN")])                              # OANDA: still open
     assert res["state_mismatch"] == [{"id": "eeeeeeeeee", "symbol": "NDQ", "journal": "closed", "oanda": "OPEN"}]
 
@@ -152,3 +155,27 @@ def test_fetch_pages_back_until_the_window_starts():
     c = C()
     got = asyncio.run(R.fetch_trades(c, pd.Timestamp("2026-10-01", tz="UTC"), page=2))
     assert [t["id"] for t in got] == ["10", "9", "8"] and c.calls[1]["beforeID"] == "9"
+
+
+def test_untagged_trades_from_before_tagging_pair_by_instrument_and_open_time(tmp_path):
+    db = str(tmp_path / "j.sqlite")
+    _journal(db, [_row("ffffffffff", opened="2026-10-05T10:00:03-04:00")])
+    jr = R.load_journal(db, pd.Timestamp("2026-10-01", tz="UTC"))
+    res = R.reconcile(CFG1, jr, [_tr(None, open_="2026-10-05T14:00:05Z")], [])        # 2 s apart, no tag
+    s = R.summarize(res)
+    assert s["matched"] == 1 and s["matched_by_open_time"] == 1 and s["journal_only"] == 0 and s["untagged"] == 0
+    res = R.reconcile(CFG1, jr, [_tr(None, open_="2026-10-05T14:10:00Z")], [])        # 10 minutes apart: no pair
+    assert R.summarize(res)["matched"] == 0
+
+
+def test_oanda_pl_is_converted_to_the_journals_usd_and_exit_uses_the_average(tmp_path):
+    db = str(tmp_path / "j.sqlite")
+    ev = "[]"
+    # half closed at +1R (20020), rest at 20040: average exit 20030, realized 30 USD on 1 unit; last exit 20040
+    _journal(db, [_row("gggggggggg", exit_price=20040.0, events=ev)])
+    jr = R.load_journal(db, pd.Timestamp("2026-10-01", tz="UTC"))
+    t = _tr("gggggggggg", close="20030.0", pl="41.1", fin="0")                         # 41.1 CAD = 30 USD at 0.73
+    t["closeTime"] = "2026-10-15T15:00:00Z"
+    res = R.reconcile(CFG1, jr, [t], [], fx=lambda ts: 30 / 41.1)
+    p = res["pairs"][0]
+    assert abs(p["pl_diff_r"]) < 1e-9 and abs(p["exit_diff_r"]) < 1e-9 and p["oanda_r"] == 1.5
