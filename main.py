@@ -139,6 +139,16 @@ async def build(cfg, args):
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
               trader, RiskAgent(ctx), pm, TradeAnalystAgent(ctx), JournalAgent(ctx), notifier,
               MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
+    ca = cfg.get("c10_account") or {}
+    if ca.get("enabled"):
+        # C10 (the one strategy that passed 2021–2026) on the account itself, frozen rules, reduced risk
+        if cfg["mode"] == "live" and not ca.get("allow_live"):
+            log.warning("c10_account ignored: mode is live (real money) and c10_account.allow_live is false")
+        else:
+            from fxagents.agents.c10_trader import C10Trader
+            agents.append(C10Trader(ctx, on_account=True))
+            log.info("C10 afternoon continuation trades on the account (%s, risk %.2f%%)",
+                     ", ".join(ca.get("symbols") or ["NDQ"]), 100 * float(ca.get("risk_pct", 0.0025)))
     # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay).
     # Started at the end of build, after the startup reconciliation has put saved positions back.
     supervisor = FlattenSupervisor(ctx, pm)

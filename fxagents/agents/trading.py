@@ -584,7 +584,28 @@ class PositionManagerAgent(Agent):
         self.bus.subscribe("flatten_all", self.on_flatten_all)
         self.bus.subscribe("flatten_symbol", self.on_flatten_symbol)
         self.bus.subscribe("pre_news", self.on_pre_news)
+        self.bus.subscribe("position_opened", self.on_opened)
         self.m = self.cfg["management"]
+
+    async def on_opened(self, pos: Position):
+        """Brokers that can hold a resting target (OANDA, audit F5): put the first target at the broker now, so it
+        fills at the level instead of as a market order after a candle touched it. Books with their own
+        management (external_mgmt) place their own."""
+        place = getattr(self.ctx.broker, "place_target", None)
+        if place is None or pos.meta.get("external_mgmt") or pos.meta.get("tp") or pos.status != "open":
+            return
+        full = not self.m["pyramid"]["enabled"] or pos.meta.get("full_exit")
+        if full:
+            qty = pos.open_qty
+        else:
+            step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
+            qty = floor_step(pos.initial_qty * self.m["partial_at_target"], step)
+            if qty < min_u:
+                return
+        try:
+            await place(pos, self.lvl(pos, 1), qty, "full" if full else "1")
+        except Exception as e:  # noqa: BLE001 — a missing resting target only means the old market-after-touch exit
+            self.log.warning("%s: resting target not placed: %s", pos.symbol, e)
 
     def lvl(self, pos: Position, step: int) -> float:
         r = pos.rr + (step - 1) * self.m["trail_step_r"]
@@ -653,6 +674,8 @@ class PositionManagerAgent(Agent):
                         return
                     if pos.status != "open":
                         return              # closed meanwhile (flatten supervisor, stop): nothing was banked
+                    if px is None and (pos.meta.get("tp") or {}).get("1"):
+                        return              # the resting target at the broker hasn't filled yet: checked next bar
                     if px is None or pos.closed_qty - before <= 1e-9:
                         pos.log(now, "partial_noop", why="broker reduced nothing")
                         return              # nothing filled → not banked; the pending step retries next bar
@@ -821,9 +844,11 @@ class PositionManagerAgent(Agent):
             pos.log(self.now(), "close_failed", why=str(e)[:200], reason=reason)
             self.log.warning("%s close (%s) failed, will retry: %s", pos.symbol, reason, e)
             return False
+        if px is None and limit:
+            return False                             # a resting target that hasn't filled yet: retried next bar
         pos.meta.pop("pending_close", None)
-        if limit:                                    # a target close is a market order after a touch: log the level
-            pos.log(self.now(), "limit_exit", level=round(price, 6), price=px, reason=reason)
+        if limit and not any(e.get("kind") == "limit_exit" and e.get("resting") for e in pos.events[-3:]):
+            pos.log(self.now(), "limit_exit", level=round(price, 6), price=px, reason=reason)   # market after a touch
         await self.finalize(pos, px, reason)
         return True
 
@@ -839,7 +864,7 @@ class PositionManagerAgent(Agent):
 
     async def on_stop(self, ev):
         pos: Position = ev["position"]
-        reason = "stop" if pos.stage == 0 else ("breakeven_plus_stop" if pos.stage == 1 else "trail_stop")
+        reason = ev.get("reason") or ("stop" if pos.stage == 0 else ("breakeven_plus_stop" if pos.stage == 1 else "trail_stop"))
         await self.finalize(pos, ev["price"], reason)
 
     async def on_pre_news(self, ev):

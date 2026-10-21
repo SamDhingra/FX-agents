@@ -50,6 +50,7 @@ class FakeOanda:
         self._closed: dict[str, tuple[float, float]] = {}   # trade id → (units closed, close value)
         self.orders: dict[str, dict] = {}                     # client order id → order (GET /orders/@id)
         self.deferred: list[tuple] = []                       # "defer" fault: requests that execute later
+        self.limits: dict[str, dict] = {}                     # order id → resting LIMIT order (reduce-only targets)
 
     def flush_deferred(self) -> None:
         """Execute requests held by a "defer" fault (an order that reaches OANDA after its response timed out)."""
@@ -71,6 +72,37 @@ class FakeOanda:
         self._closed[t["id"]] = (u, v)
         t["averageClosePrice"] = f"{v / u:.{SPECS[t['instrument']]['displayPrecision'] + 2}f}"
         t["realizedPL"] = "0"
+
+    def touch(self, name: str, px: float) -> list[str]:
+        """Move the price; fill every pending reduce-only LIMIT whose level the bid (sells) / ask (buys) reached.
+        Fills reduce the instrument's open trades oldest first (FIFO), like OANDA."""
+        self.prices[name] = px
+        hs = self.spread.get(name, 0.0) / 2
+        done = []
+        for oid, o in list(self.limits.items()):
+            if o["state"] != "PENDING" or o["instrument"] != name:
+                continue
+            sell = o["units"].startswith("-")
+            lvl = float(o["price"])
+            if not ((sell and px - hs >= lvl) or (not sell and px + hs <= lvl)):
+                continue
+            left = abs(float(o["units"]))
+            for t in sorted(self.open_trades(), key=lambda x: int(x["id"])):
+                if t["instrument"] != name or left <= 1e-9:
+                    continue
+                cur = float(t["currentUnits"])
+                if (cur > 0) != sell:
+                    continue
+                n = min(left, abs(cur))
+                self._record_close(t, n, lvl)
+                rest = abs(cur) - n
+                t["currentUnits"] = str((1 if cur > 0 else -1) * rest) if rest > 1e-9 else "0"
+                if rest <= 1e-9:
+                    t["state"] = "CLOSED"
+                left -= n
+            o["state"] = "FILLED"
+            done.append(oid)
+        return done
 
     def open_trades(self) -> list[dict]:
         return [t for t in self.trades.values() if t["state"] == "OPEN"]
@@ -127,7 +159,22 @@ class FakeOanda:
         if path.startswith("/v3/instruments/") and path.endswith("/candles"):
             return self.candles(path.split("/")[3], q)
         if path == f"{a}/orders" and req.method == "POST":
+            if body["order"].get("type") == "LIMIT":
+                return self.limit(body["order"])
             return self.order(body["order"])
+        if path == f"{a}/pendingOrders":
+            return self.ok({"orders": [o for o in self.limits.values() if o["state"] == "PENDING"]})
+        if path.startswith(f"{a}/orders/") and not path.startswith(f"{a}/orders/@"):
+            parts = path[len(a) + 8:].split("/")
+            o = self.limits.get(parts[0])
+            if o is None:
+                return httpx.Response(404, json={"errorCode": "ORDER_DOESNT_EXIST", "errorMessage": "no such order"})
+            if len(parts) > 1 and parts[1] == "cancel" and req.method == "PUT":
+                if o["state"] != "PENDING":
+                    return httpx.Response(404, json={"errorCode": "ORDER_DOESNT_EXIST", "errorMessage": "not pending"})
+                o["state"] = "CANCELLED"
+                return self.ok({"orderCancelTransaction": {"id": str(self._id()), "orderID": o["id"]}})
+            return self.ok({"order": o})
         if path.startswith(f"{a}/orders/@"):
             o = self.orders.get(path.split("@", 1)[1])
             if o is None:
@@ -233,6 +280,16 @@ class FakeOanda:
         return self.ok({"orderCreateTransaction": {"id": str(int(tid) - 1)},
                         "orderFillTransaction": {"id": str(self._id()), "price": px,
                                                  "tradeOpened": {"tradeID": tid, "units": o["units"], "price": px}}}, 201)
+
+    def limit(self, o: dict) -> httpx.Response:
+        sp = SPECS[o["instrument"]]
+        if o.get("positionFill") != "REDUCE_ONLY" or _dp(o["price"]) > sp["displayPrecision"]:
+            return httpx.Response(400, json={"errorCode": "BAD_TEST_ORDER", "errorMessage": "fake: reduce-only limits"})
+        oid = str(self._id())
+        self.limits[oid] = {"id": oid, "type": "LIMIT", "state": "PENDING", "instrument": o["instrument"],
+                            "units": o["units"], "price": o["price"], "positionFill": "REDUCE_ONLY",
+                            **({"clientExtensions": o["clientExtensions"]} if o.get("clientExtensions") else {})}
+        return self.ok({"orderCreateTransaction": {"id": oid, "type": "LIMIT_ORDER"}}, 201)
 
     def close(self, t: dict, units: str) -> httpx.Response:
         if t["state"] != "OPEN":

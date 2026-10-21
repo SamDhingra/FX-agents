@@ -23,6 +23,7 @@ oanda:
   # token + account id come from .env: OANDA_API_TOKEN, OANDA_ACCOUNT_ID (e.g. 001-002-1234567-001)
   position_fill: DEFAULT            # an entry is also refused if it would offset the opposite side
   client_extensions: true           # set false if the account is linked to MT4
+  resting_targets: true             # targets rest at OANDA as reduce-only limit orders (fill at the level or better)
   poll_seconds: 5
 
 # Instruments. Add `trade: false` under one to make it watch-only (data, bias, map kept; no new entries).
@@ -189,6 +190,16 @@ evaluator:
   promote_margin_r: 0.05       # candidate must beat incumbent expectancy by this (out-of-sample)
   demote_below_r: -0.05        # live strategies below this expectancy go back to shadow
   max_candidates: 6
+
+# ── C10 on the account (Oct 21 2026) ──
+# The morning-to-afternoon continuation rule (fxagents/agents/c10_trader.py) also trades the practice account, frozen.
+# Passed 2021–Sep 2026 (+0.258R, 251 trades); 2016–2020 +0.082R, positive but not significant → reduced risk.
+# The c10_afternoon paper book keeps running, so the frozen forward record continues.
+c10_account:
+  enabled: true
+  symbols: [NDQ]
+  risk_pct: 0.0025             # half the normal 0.5%
+  allow_live: false            # never on a real-money account unless you set this
 
 # ── Learner (runs inside the Strategist) ──
 learner:

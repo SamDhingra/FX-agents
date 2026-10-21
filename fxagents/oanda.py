@@ -300,6 +300,9 @@ class OandaBroker(Broker):
         oc = cfg.get("oanda") or {}
         self.position_fill = oc.get("position_fill", "DEFAULT")
         self.client_ext = bool(oc.get("client_extensions", True))
+        # targets rest at OANDA as reduce-only LIMIT orders at the level (Oct 2026 audit F5: a market order sent after
+        # a candle touched the level filled −0.05R worse on average). false = the old market-after-touch exits.
+        self.resting_targets = bool(oc.get("resting_targets", True))
         self.managed: dict[str, Position] = {}        # trade id → position
         self.unresolved: dict[str, str] = {}          # symbol → client id of an entry whose outcome is unknown
         self._pending: dict[str, dict] = {}           # symbol → {cid, pos, kind, tries} for those entries
@@ -502,6 +505,7 @@ class OandaBroker(Broker):
             if p.symbol == sym and p.side != pos.side and p.status == "open":
                 raise OrderRejected(f"already {('long' if p.side > 0 else 'short')} {sym}; no opposite-side entry")
         pos.stop = stop
+        await self.sweep_targets(sym)          # never let a forgotten reduce-only target touch this new position
         px, tid, filled = await self._market(pos, qty, "initial")
         pos.add_leg(Leg(filled, px, self.state.now, "initial"))
         pos.meta["trades"] = []
@@ -592,9 +596,99 @@ class OandaBroker(Broker):
         pos.commissions += fee
         return pnl - fee
 
+    # ── resting targets (F5) ──
+    async def place_target(self, pos, level: float, qty: float, key: str = "1") -> dict | None:
+        """A reduce-only LIMIT order at `level` for `qty` units (key "1" = the 1R partial, "full" = the whole
+        position). It fills at the level or better the moment the bid (longs) / ask (shorts) gets there."""
+        if not self.resting_targets:
+            return None
+        sym = pos.symbol
+        units = self._units(sym, qty)
+        if Decimal(units) <= 0:
+            return None
+        order = {"type": "LIMIT", "instrument": self.names[sym], "units": f"-{units}" if pos.side > 0 else units,
+                 "price": self._px(sym, level), "timeInForce": "GTC", "positionFill": "REDUCE_ONLY"}
+        if self.client_ext:
+            order["clientExtensions"] = {"id": f"fxa-{pos.id}-tp{key}", "tag": "fxagents", "comment": f"{pos.id} target {key}"}
+        try:
+            res = await self.c.req("POST", self.c.acct("/orders"), json={"order": order})
+        except OandaError as e:
+            log.warning("%s: resting target %s at %s not placed (%s) — market-after-touch for this one", sym, key, level, e)
+            return None
+        oid = str((res.get("orderCreateTransaction") or {}).get("id") or "")
+        if not oid or res.get("orderCancelTransaction"):
+            log.warning("%s: resting target %s refused: %s", sym, key, (res.get("orderCancelTransaction") or {}).get("reason"))
+            return None
+        tp = {"id": oid, "level": float(order["price"]), "qty": float(units)}
+        pos.meta.setdefault("tp", {})[key] = tp
+        pos.log(self.state.now, "target_placed", key=key, level=tp["level"], qty=tp["qty"])
+        return tp
+
+    async def _order_state(self, oid: str) -> str:
+        try:
+            return (await self.c.req("GET", self.c.acct(f"/orders/{oid}")))["order"].get("state", "UNKNOWN")
+        except OandaError as e:
+            if e.status == 404:
+                return "GONE"
+            raise
+
+    async def cancel_targets(self, pos) -> None:
+        """Cancel every resting target of this position (before a market close, after a stop). A reduce-only order
+        left behind could otherwise reduce the NEXT position on the instrument."""
+        for key, tp in list((pos.meta.get("tp") or {}).items()):
+            try:
+                await self.c.req("PUT", self.c.acct(f"/orders/{tp['id']}/cancel"))
+            except OandaError as e:
+                if e.status not in (404,) and "ORDER_DOESNT_EXIST" not in str(e) and "NOT_FOUND" not in str(e):
+                    log.warning("%s: could not cancel resting target %s (%s)", pos.symbol, tp["id"], e)
+                    continue
+            pos.meta["tp"].pop(key, None)
+
+    def _settle_pos(self, pos) -> list:
+        return [t for t in pos.meta.get("trades", []) if t["units"] > 1e-9]
+
+    async def _book_broker_closes(self, pos) -> tuple[float, float]:
+        """Read this position's trades and book what OANDA closed that the bot hasn't (a resting target's fill)."""
+        got = value = 0.0
+        for t in self._settle_pos(pos):
+            tr = (await self.c.req("GET", self.c.acct(f"/trades/{t['id']}")))["trade"]
+            px, n = self._settle(t, tr, pos.last_price or pos.entry)
+            self._done(t)
+            if n > 0:
+                self._book(pos, min(n, pos.open_qty), px)
+                got, value = got + n, value + px * n
+        return got, value
+
+    async def _resting(self, pos, key: str):
+        """'pending' (not filled: the bid/ask hasn't reached the level), a fill price (filled and now booked),
+        or 'gone' (no such order / cancelled: fall back to a market order)."""
+        tp = (pos.meta.get("tp") or {}).get(key)
+        if not tp:
+            return "gone"
+        state = await self._order_state(tp["id"])
+        if state == "PENDING":
+            return "pending"
+        pos.meta["tp"].pop(key, None)
+        if state != "FILLED":
+            return "gone"
+        got, value = await self._book_broker_closes(pos)
+        if got <= 0:
+            return "gone"
+        px = value / got
+        pos.log(self.state.now, "limit_exit", level=tp["level"], price=round(px, 6), key=key, resting=True)
+        return px
+
     async def reduce(self, pos, qty, ref_price, limit=None):
         """Oldest trade first. Each leg is booked as soon as OANDA confirms it, so if a later leg fails
-        (OrderRejected) the earlier ones are not lost."""
+        (OrderRejected) the earlier ones are not lost. With `limit` and a resting target: book its fill, or None
+        while it hasn't filled (the position manager retries next bar)."""
+        if limit is not None and (pos.meta.get("tp") or {}).get("1"):
+            async with self._lock(pos):
+                r = await self._resting(pos, "1")
+            if r == "pending":
+                return None
+            if r != "gone":
+                return r
         async with self._lock(pos):
             left = float(self._units(pos.symbol, min(qty, pos.open_qty)))
             got, value = 0.0, 0.0
@@ -609,6 +703,17 @@ class OandaBroker(Broker):
             return value / got if got > 0 else None      # None: nothing was reduced (e.g. already closed)
 
     async def close(self, pos, ref_price, limit=None):
+        """Market close of everything. With `limit` and a resting full target: book its fill, or None while it
+        hasn't filled. Any market close cancels the position's resting targets first."""
+        if limit is not None and (pos.meta.get("tp") or {}).get("full"):
+            async with self._lock(pos):
+                r = await self._resting(pos, "full")
+            if r == "pending":
+                return None
+            if r != "gone" and not self._settle_pos(pos):
+                return r
+        if pos.meta.get("tp"):
+            await self.cancel_targets(pos)
         async with self._lock(pos):
             got, value = 0.0, 0.0
             for t in [t for t in pos.meta.get("trades", []) if t["units"] > 0]:
@@ -708,6 +813,10 @@ class OandaBroker(Broker):
             tr = open_tr.get(tid)
             if tr is not None and abs(_f(tr.get("currentUnits"))) >= t["units"] - 1e-9:
                 continue          # untouched
+            tp1 = (pos.meta.get("tp") or {}).get("1")
+            if tr is not None and tp1 and await self._order_state(tp1["id"]) == "FILLED":
+                pos.meta["step_hit"] = max(int(pos.meta.get("step_hit", 0)), 1)   # the manager books it next bar
+                continue
             async with lock:
                 tr = (await self.c.req("GET", self.c.acct(f"/trades/{tid}")))["trade"]
                 px, n = self._settle(t, tr, pos.stop)
@@ -719,7 +828,15 @@ class OandaBroker(Broker):
         for pos, got, value in seen.values():
             px = round(value / got, 6)
             if not any(t["units"] > 1e-9 for t in pos.meta.get("trades", [])):
-                await self.bus.publish("stop_filled", {"position": pos, "price": px, "ts": self.state.now})
+                ev = {"position": pos, "price": px, "ts": self.state.now}
+                full = (pos.meta.get("tp") or {}).get("full")
+                if full and await self._order_state(full["id"]) == "FILLED":
+                    ev["reason"] = "target"            # the resting full target closed it, not the stop
+                    pos.log(self.state.now, "limit_exit", level=full["level"], price=px, key="full", resting=True)
+                    pos.meta["tp"].pop("full", None)
+                if pos.meta.get("tp"):
+                    await self.cancel_targets(pos)
+                await self.bus.publish("stop_filled", ev)
             else:
                 pos.log(self.state.now, "broker_reduced", qty=got, price=px)
                 await self.bus.publish("position_updated", {"position": pos, "event": "broker_reduced",
@@ -735,7 +852,33 @@ class OandaBroker(Broker):
                     self.managed[t["id"]] = pos
         if self.managed:
             await self.check_stops()
+        await self.sweep_targets()
         return True
+
+    async def sweep_targets(self, sym: str | None = None) -> int:
+        """Cancel resting targets ("fxa-<id>-tp…") of positions this process no longer manages."""
+        if not (self.resting_targets and self.client_ext):
+            return 0
+        try:
+            orders = (await self.c.req("GET", self.c.acct("/pendingOrders"))).get("orders", [])
+        except OandaError as e:
+            log.warning("pending orders: %s", e)
+            return 0
+        live = {p.id for p in self.managed.values()}
+        n = 0
+        for o in orders:
+            cid = ((o.get("clientExtensions") or {}).get("id") or "")
+            if not (cid.startswith("fxa-") and "-tp" in cid) or (sym and o.get("instrument") != self.names.get(sym)):
+                continue
+            if cid[4:].rsplit("-", 1)[0] in live:
+                continue
+            try:
+                await self.c.req("PUT", self.c.acct(f"/orders/{o['id']}/cancel"))
+                n += 1
+                log.warning("cancelled stale resting target %s (%s)", o["id"], cid)
+            except OandaError as e:
+                log.warning("could not cancel stale target %s: %s", o["id"], e)
+        return n
 
     async def broker_positions(self) -> dict[str, float]:
         res = await self.c.req("GET", self.c.acct("/openPositions"))
