@@ -850,6 +850,8 @@ button,input,select,textarea{font-family:inherit}
 .btbar{height:5px;border-radius:3px;background:var(--line);overflow:hidden;min-width:60px}.btbar i{display:block;height:100%;background:var(--accent)}
 .btgates{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}.btgate{font-size:11.5px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);color:var(--text-2)}.btgate.ok{border-color:var(--up);color:var(--up)}.btgate.no{border-color:var(--down);color:var(--down)}.btgate.pass{font-weight:700}
 .btkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-bottom:16px}.btkpi{background:var(--card-2);border-radius:9px;padding:10px 12px}.btkpi small{display:block;color:var(--muted);font-size:11px}.btkpi b{font-size:17px;font-variant-numeric:tabular-nums}
+#bxRuns{max-height:440px;overflow:auto;overscroll-behavior:contain}#bxRuns thead th{position:sticky;top:0;background:var(--card);z-index:1}
+.bxfilt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}.bxfilt input[type=search],.bxfilt select{padding:6px 8px;border-radius:8px;border:1px solid var(--line-2);background:var(--card-2);color:var(--text);font:inherit;font-size:12.5px}.bxfilt input[type=search]{flex:1;min-width:160px}.bxfilt label{font-size:12px;display:flex;gap:5px;align-items:center}#bxResult,#bxRunsCard{scroll-margin-top:76px}
 .btcols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.btcols>div{min-width:0}.btchart{height:240px}.bttrade{height:380px;margin-top:10px}.btrole{font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid var(--line);margin-left:4px}.btrole.vault{border-color:var(--warn);color:var(--warn)}
 @media (max-width:760px){.btcols{grid-template-columns:1fr}.bttrade{height:320px}}
 .anltab{width:100%;border-collapse:collapse;font-size:13px} .anltab th,.anltab td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
@@ -1066,7 +1068,12 @@ button,input,select,textarea{font-family:inherit}
             <div class="labbtns"><button class="btn" id="bxRun" type="button">Run backtest</button><button class="btn" id="bxReset" type="button">Reset parameters</button></div>
           </div>
           <div class="mut" style="font-size:12px;margin-top:12px;line-height:1.55">Plugins are Python files in <code>btplugins/</code>, added through git (then <code>./fx.sh update</code>) — never uploaded here. Every run is recorded with its exact code. Seen data (2021 → Sep 2026) is for trying ideas; the untouched 2016–2020 vault opens only once, for the identical code and parameters that passed every gate on seen data.</div></div>
-        <div class="card c7"><h3>Runs <span class="sp"></span><span class="mut heading-note" id="bxRunsNote"></span></h3><div class="tbl" id="bxRuns"><div class="empty">Loading…</div></div></div>
+        <div class="card c7" id="bxRunsCard"><h3>Runs <span class="sp"></span><span class="mut heading-note" id="bxRunsNote"></span></h3>
+          <div class="bxfilt"><input id="bxQ" type="search" placeholder="Filter: strategy, instrument…" aria-label="Filter runs" autocomplete="off">
+            <select id="bxF" aria-label="Show"><option value="all">All runs</option><option value="pass">Passed</option><option value="done">Finished</option><option value="live">Running &amp; queued</option><option value="vault">Vault</option></select>
+            <select id="bxO" aria-label="Sort"><option value="new">Newest</option><option value="avg">Best avg R</option><option value="lo">Best 95% low</option></select>
+            <label class="mut"><input type="checkbox" id="bxHide" checked> hide cancelled &amp; errors</label></div>
+          <div class="tbl" id="bxRuns"><div class="empty">Loading…</div></div></div>
         <div class="card c12" id="bxResult" hidden></div>
       </div>
     </section>
@@ -1125,7 +1132,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-20.5</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3867,7 +3874,10 @@ async function loadBt(){
   if(dcur) ds.value = dcur;
   if(!sel.dataset.wired){ sel.dataset.wired = 1; sel.onchange = () => btPick(true); ds.onchange = () => btPick(false); $("#bxReset").onclick = () => btPick(true); $("#bxRun").onclick = btSubmit; }
   btPick(!$("#bxParams").value);
+  btFilterWire();
   btRenderRuns();
+  if(!BXR){ let last = null; try{ last = localStorage.getItem("bxLast"); }catch(e){}
+    if(last && BXC.runs.some(r => r.id === last)) btOpen(last, false); }
   clearTimeout(bxTimer);
   if(page === "bt" && BXC.runs.some(r => ["queued","running","cancel"].includes(r.status))) bxTimer = setTimeout(btRefresh, 10000);
 }
@@ -3898,24 +3908,48 @@ async function btSubmit(){
   $("#bxRun").disabled = true;
   const j = await labPost("api/bt/run", {plugin:p.file, dataset:d.name, symbol:$("#bxSym").value, params:ov});
   $("#bxRun").disabled = false;
-  if(j){ toast("Queued — the worker picks it up in a few seconds."); await loadBt(); btOpen(j.id); }
+  if(j){ toast("Queued — the worker picks it up in a few seconds."); await loadBt(); btOpen(j.id, true); }
 }
 function btRenderRuns(){
   const R = BXC.runs || [];
   const stuck = R.some(r => r.status === "queued" && Date.now() / 1000 - r.created > 90) && !R.some(r => r.status === "running");
   const nq = R.filter(r => ["queued","running"].includes(r.status)).length;
-  $("#bxRunsNote").innerHTML = (stuck ? `<span style="color:var(--warn)">waiting over 90 s — is the worker running? <code>docker compose up -d fxbt</code></span> ` : R.length ? `${R.length} recorded ` : "")
+  $("#bxRunsNote").innerHTML = (stuck ? `<span style="color:var(--warn)">waiting over 90 s — is the worker running? <code>docker compose up -d fxbt</code></span> ` : R.length ? `${(n => n < R.length ? n + " of " : "")(btFiltered(R).length)}${R.length} recorded ` : "")
     + (nq > 1 ? `<button class="btn" id="bxCancelAll" type="button" style="min-height:28px;padding:4px 10px;margin-left:8px">Cancel all queued (${nq})</button>` : "");
   const ca = $("#bxCancelAll"); if(ca) ca.onclick = async () => { if(!confirm(`Cancel ${nq} queued / running backtests?`)) return;
     const j = await labPost("api/bt/cancel_all", {}); if(j){ toast(`Cancelled ${j.queued} queued${j.running ? ", stopping the running one" : ""}.`); loadBt(); } };
   if(!R.length){ $("#bxRuns").innerHTML = `<div class="empty">No runs yet. Pick a plugin and run it on seen data.</div>`; return; }
-  $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${R.map(r => {
+  const V = btFiltered(R);
+  if(!V.length){ $("#bxRuns").innerHTML = `<div class="empty">No runs match the filter.</div>`; return; }
+  $("#bxRuns").innerHTML = `<table class="bttab"><thead><tr><th>When</th><th>Strategy</th><th>Status</th><th class="num">Trades</th><th class="num">Avg R</th><th class="num">95% low</th><th>Gates</th></tr></thead><tbody>${V.map(r => {
     const st = r.status === "running" ? `<div class="btbar" title="${esc(r.stage)}"><i style="width:${r.pct||0}%"></i></div><small class="mut">${esc(r.stage||"")}</small>`
       : r.status === "error" ? `<span style="color:var(--down)">error</span>` : esc(r.status);
     return `<tr data-id="${esc(r.id)}" class="${BXR && BXR.run && BXR.run.id === r.id ? "on" : ""}"><td>${btWhen(r.created)}</td><td>${esc(r.name)} <span class="mut">${esc(r.symbol)}</span>${btDiff(r) ? `<br><small class="mut">${esc(btDiff(r))}</small>` : ""}<span class="btrole ${r.role==="vault"?"vault":""}">${esc(r.role)}</span></td>
       <td>${st}</td><td class="num">${r.trades ?? ""}</td><td class="num ${cls(r.avg_r)}">${r.avg_r==null ? "" : sR(r.avg_r, 3)}</td><td class="num ${cls(r.ci_lo)}">${r.ci_lo==null ? "" : sR(r.ci_lo, 3)}</td>
       <td>${r.status === "done" ? (r.passed ? `<span class="btgate ok pass">PASS</span>` : `<span class="btgate no">no pass</span>`) : ""}</td></tr>`; }).join("")}</tbody></table>`;
-  $$("#bxRuns tbody tr").forEach(tr => tr.onclick = () => btOpen(tr.dataset.id));
+  $$("#bxRuns tbody tr").forEach(tr => tr.onclick = () => btOpen(tr.dataset.id, true));
+}
+function btFiltered(R){
+  const q = ($("#bxQ").value || "").trim().toLowerCase(), f = $("#bxF").value, hide = $("#bxHide").checked;
+  let V = R.filter(r => {
+    if(hide && ["cancelled","error"].includes(r.status)) return false;
+    if(f === "pass" && !(r.status === "done" && r.passed)) return false;
+    if(f === "done" && r.status !== "done") return false;
+    if(f === "live" && !["queued","running","cancel"].includes(r.status)) return false;
+    if(f === "vault" && r.role !== "vault") return false;
+    return !q || `${r.name} ${r.plugin} ${r.symbol} ${r.dataset} ${r.role} ${btDiff(r)}`.toLowerCase().includes(q);
+  });
+  const o = $("#bxO").value, num = x => x == null ? -1e9 : x;
+  if(o === "avg") V = [...V].sort((a, b) => num(b.avg_r) - num(a.avg_r));
+  else if(o === "lo") V = [...V].sort((a, b) => num(b.ci_lo) - num(a.ci_lo));
+  return V;
+}
+function btFilterWire(){
+  if($("#bxQ").dataset.wired) return; $("#bxQ").dataset.wired = 1;
+  const keep = () => { try{ localStorage.setItem("bxFilt", JSON.stringify({q:$("#bxQ").value, f:$("#bxF").value, o:$("#bxO").value, h:$("#bxHide").checked})); }catch(e){} };
+  try{ const v = JSON.parse(localStorage.getItem("bxFilt") || "null"); if(v){ $("#bxQ").value = v.q || ""; $("#bxF").value = v.f || "all"; $("#bxO").value = v.o || "new"; $("#bxHide").checked = v.h !== false; } }catch(e){}
+  $("#bxQ").oninput = () => { keep(); btRenderRuns(); };
+  ["#bxF","#bxO","#bxHide"].forEach(k => $(k).onchange = () => { keep(); btRenderRuns(); });
 }
 function btDiff(r){                    // the parameters this run changed from the plugin's defaults, shortest form
   const p = (BXC.plugins || []).find(x => x.file === r.plugin); let P = {}; try{ P = JSON.parse(r.params || "{}"); }catch(e){}
@@ -3923,13 +3957,16 @@ function btDiff(r){                    // the parameters this run changed from t
   return Object.entries(P).filter(([k, v]) => k === "setup" || k === "tf" || JSON.stringify(v) !== JSON.stringify(p.params[k]))
     .map(([k, v]) => typeof v === "string" ? v : `${k}=${JSON.stringify(v)}`).join(" · ");
 }
-async function btOpen(id){
+async function btOpen(id, scroll = false){
   const box = $("#bxResult"); box.hidden = false;
   let d; try{ d = await api("api/bt/run/" + id); }catch(e){ box.innerHTML = `<div class="empty">Couldn't load the run.</div>`; return; }
   BXR = d; btRenderRuns();
+  try{ localStorage.setItem("bxLast", id); }catch(e){}
+  if(scroll) requestAnimationFrame(() => box.scrollIntoView({behavior: "smooth", block: "start"}));
   const r = d.run, S = d.summary;
   const head = `<h3>${esc(r.name)} <span class="mut" style="font-weight:500">${esc(r.symbol)} · ${esc(r.dataset)} · code ${esc(r.code_sha)} · run ${esc(r.id)}</span><span class="sp"></span>
     ${["queued","running"].includes(r.status) ? `<button class="btn" id="bxCancel" type="button">Cancel</button>` : ""}
+    <button class="btn" type="button" onclick="document.getElementById('bxRunsCard').scrollIntoView({behavior:'smooth',block:'start'})">↑ Runs</button>
     <a class="btn" href="api/bt/run/${esc(r.id)}/report" target="_blank" rel="noopener">Report</a><a class="btn" href="api/bt/run/${esc(r.id)}/code" target="_blank" rel="noopener">Code</a></h3>`;
   if(!S){
     box.innerHTML = head + (r.status === "error" ? `<pre class="mut" style="white-space:pre-wrap;font-size:11.5px">${esc(r.error)}</pre>` : `<div class="empty">${esc(r.status)} — ${esc(r.stage || "")} ${r.pct ? Math.round(r.pct) + "%" : ""}</div>`);

@@ -45,6 +45,13 @@ await page.click('#bxSortSeg button[data-s="worst"]');await page.waitForTimeout(
 const rs=(await page.locator('#bxTrades tbody tr td:last-child').allTextContents()).slice(0,3).map(x=>parseFloat(x.replace('−','-')));
 assert(rs[0]<=rs[1]&&rs[1]<=rs[2],'sorted worst first: '+rs);
 assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow at '+vp.width);
+// runs list: filter box narrows it; clicking a run brings its result into view
+await page.fill('#bxQ','no-such-strategy');await page.waitForTimeout(100);
+assert((await page.locator('#bxRuns').textContent()).includes('No runs match'),'filter');
+await page.fill('#bxQ','');await page.waitForTimeout(100);
+await page.evaluate(()=>scrollTo(0,0));await page.locator('#bxRuns tbody tr').first().click();await page.waitForTimeout(1200);
+{const top=await page.evaluate(()=>document.getElementById('bxResult').getBoundingClientRect().top);assert(top<200&&top>-50,'result scrolled into view: '+top);}
+assert(await page.evaluate(()=>{const e=document.getElementById('bxRuns');return getComputedStyle(e).overflowY==='auto'}),'runs list scrolls');
 await page.locator('#p-bt').screenshot({path:path.join(out,`bt-${vp.width}.png`)});
 await ctx.close();}
 await browser.close();if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('bt ok');
