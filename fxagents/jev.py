@@ -232,6 +232,32 @@ class JevScorer:
                                                                           "strategy": info.get("strategy")})
         return {"prob": res["answers"].get("reversal", fb["reversal"])["value"], "source": res["source"]}
 
+    # ── 4b. open-trade management advice (scored, never acted on) ─────────
+    async def manage_trade(self, info: dict) -> dict:
+        """Two questions about an OPEN trade, asked by the Jev trade adviser (agents/jev_advisor.py):
+        worse  — will the trade finish (stop, target or the time exit) worse than its R right now? (→ cut)
+        extend — will price go at least another 1R its way before the time exit, without first giving back
+                 half the open profit? (→ add / let it run)
+        Without Jev both answers are 0.5 with zero confidence, tagged source='heuristic' (never scored as Jev)."""
+        questions: dict[str, Any] = {}
+        if self.live:
+            side = "long" if info.get("side") == "LONG" else "short"
+            questions["worse"] = Noul(instructions=(
+                f"You manage an open {side} {info.get('symbol')} intraday trade from the strategy described in "
+                f"'thesis'. It exits at its stop, its target or at {info.get('time_exit_ny')} New York at the latest. "
+                f"It is now at {info.get('r_now')}R. Given the recent candles, the trade's progress, the other index "
+                "and any news due, will this trade most likely FINISH worse than it stands right now?"))
+            questions["extend"] = Noul(instructions=(
+                f"Will price most likely move at least another 1R in the trade's direction ({side}) before "
+                f"{info.get('time_exit_ny')} New York, without first giving back half of the trade's open profit?"))
+        fb = {"worse": {"value": 0.5, "confidence": 0.0}, "extend": {"value": 0.5, "confidence": 0.0}}
+        res = await self._ask("trade_advice", info, questions, fb, {"symbol": info.get("symbol"),
+                                                                   "strategy": info.get("strategy")})
+        a = res["answers"]
+        w, e = a.get("worse", fb["worse"]), a.get("extend", fb["extend"])
+        return {"p_worse": w["value"], "conf_worse": w["confidence"], "p_extend": e["value"],
+                "conf_extend": e["confidence"], "source": res["source"]}
+
     # ── 5. learner: is a candidate's improvement real ────────────────────
     async def rate_candidate(self, info: dict) -> dict:
         questions: dict[str, Any] = {}

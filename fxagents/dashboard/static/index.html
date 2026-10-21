@@ -1106,6 +1106,7 @@ button,input,select,textarea{font-family:inherit}
           <div class="mcinfo" id="mcInfo"></div></div>
         <div class="card c12"><h3>Agents</h3><div class="health" id="health"></div></div>
         <div class="card c12"><h3>Trade analyst <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">advice only — scored against how each trade really finished</span></h3><div id="anlBody"><div class="empty">Loading…</div></div></div>
+        <div class="card c12"><h3>Jev trade adviser <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">hold / cut / add calls on open trades — scored, never acted on</span></h3><div id="jadBody"><div class="empty">Loading…</div></div></div>
         <div class="card c6"><h3>Jev decisions</h3><div class="feed" id="decisions"></div></div>
         <div class="card c6"><h3>Activity &amp; alerts</h3><div class="feed" id="alerts"></div></div>
       </div>
@@ -1132,7 +1133,7 @@ button,input,select,textarea{font-family:inherit}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.1</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.2</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2827,7 +2828,7 @@ go = function(p){
   if(p === "home") loadNow(true);
   if(p === "compare") loadEvidence();
   if(p === "backtests") renderJourney();
-  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); loadAnalyst(); }
+  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); loadAnalyst(); loadJevAdvice(); }
 };
 const _openTrade0 = openTrade;
 openTrade = function(t){
@@ -3858,7 +3859,25 @@ async function loadAnalyst(){
       : `<div class="empty">No closed trades scored yet. The analyst watches every open trade at each 5-minute close; its advice shows on the trade's timeline and on the position card.</div>`)
     + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest verdicts</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
 }
-setInterval(() => { if(page === "agents") loadAnalyst(); }, 60000);
+setInterval(() => { if(page === "agents"){ loadAnalyst(); loadJevAdvice(); } }, 60000);
+async function loadJevAdvice(){
+  const el = $("#jadBody"); if(!el) return;
+  let d = null; try{ d = await api(q("api/jev_advice")); }catch(e){}
+  if(!d){ el.innerHTML = `<div class="empty">Couldn't load the adviser's scorecard.</div>`; return; }
+  const NAME = {cut:"CUT", hold:"HOLD", add:"ADD"};
+  const rows = (d.actions || []).map(a => `<tr><td><b>${NAME[a.action]}</b> <span class="mut">${esc(a.meaning)}</span></td><td class="num">${a.n}</td>
+      <td class="num"><b class="${cls(a.avg_value_r)}">${sR(a.avg_value_r,2)}</b></td><td class="num mut">${sR(a.lo,2)} to ${sR(a.hi,2)}</td><td class="num">${Math.round(a.helped*100)}%</td></tr>`).join("");
+  const P = d.policy;
+  const pol = P ? `<div style="margin:10px 0 0;font-size:13px">If every trade had been closed at Jev's first CUT call: <b class="${cls(P.follow_first_cut_avg_r)}">${sR(P.follow_first_cut_avg_r,3)}</b> per trade vs <b class="${cls(P.actual_avg_r)}">${sR(P.actual_avg_r,3)}</b> actually
+      (difference <b class="${cls(P.difference)}">${sR(P.difference,3)}</b>, 95% ${sR(P.lo,2)} to ${sR(P.hi,2)}) over ${P.trades} trades.</div>` : "";
+  const rec = (d.recent || []).slice(0, 12).map(r => `<div class="fi"><span class="when">${md(r.ts)} ${hm(r.ts)}</span><div style="flex:1;min-width:0">
+      <b>${esc(r.symbol)}</b> <b>${NAME[r.action] || esc(r.action)}</b> <span class="mut">${esc(sname(String(r.strategy||"")))}${r.source !== "jev" ? " · heuristic (not scored)" : ""}</span><br>
+      <small class="mut">finish worse ${Math.round(r.p_worse*100)}% · run another 1R ${Math.round(r.p_extend*100)}%</small></div><b class="num ${cls(r.r_now)}">${sR(r.r_now,2)}</b></div>`).join("");
+  el.innerHTML = (rows ? `<div style="overflow-x:auto"><table class="anltab"><thead><tr><th>Call</th><th class="num">Calls</th><th class="num">Value if followed</th><th class="num">95% range</th><th class="num">Helped</th></tr></thead><tbody>${rows}</tbody></table></div>${pol}
+      <div class="mut" style="font-size:12px;margin:8px 0 0">Positive = following Jev would have beaten holding the trade as the strategy does. For HOLD, negative is good. ${d.n_trades} closed trades, ${d.n_calls} Jev calls scored${d.n_heuristic ? ` (${d.n_heuristic} heuristic fallbacks not counted)` : ""}. Jev gets a say in real trades only with a clearly positive record here over ~40+ trades.</div>`
+      : `<div class="empty">No closed trades scored yet. Jev is asked at every 15-minute close while a c10_afternoon trade is open; its calls show on the trade's timeline.</div>`)
+    + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest calls</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
+}
 /* ══ Backtester: plugins in btplugins/, jobs on the fxbt worker, every trade on the chart ══ */
 let BXC = null, BXR = null, bxTimer = null, bxLW = null, bxEq = null, bxSort = "time";
 const btPct = x => x==null||isNaN(x) ? "—" : Math.round(x*100) + "%";

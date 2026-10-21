@@ -215,6 +215,13 @@ dashboard:
 candles:                       # fresh MID candles pushed to the PUBLIC 'candles' branch every 5 min (fxcandles container)
   enabled: true                # false = stop publishing (data is OANDA practice prices, no account data)
 
+jev_advisor:                   # Jev's hold / cut / add calls on open trades — logged and scored, NEVER acted on
+  enabled: true
+  books: [c10_afternoon]       # which paper books it watches
+  every_min: 15                # asks at every 15-minute close while a trade is open
+  cut_at: 0.6                  # CUT when Jev's probability the trade finishes worse than now is >= this
+  add_at: 0.6                  # ADD when the probability of another +1R first is >= this (and the trade is in profit)
+
 tradingview:
   webhook_secret: ""           # set TV_WEBHOOK_SECRET; alerts post to /webhook/tradingview
 

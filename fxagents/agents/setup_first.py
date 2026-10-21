@@ -357,8 +357,9 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     else:
         trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)
     from .analyst import TradeAnalystAgent
+    from .jev_advisor import JevAdvisorAgent
     agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), TradeAnalystAgent(sctx), JournalAgent(sctx),
-              MonitorAgent(sctx)]
+              MonitorAgent(sctx), JevAdvisorAgent(sctx)]     # the adviser switches itself off outside jev_advisor.books
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
     sctx.book_key = mode

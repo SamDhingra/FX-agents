@@ -394,6 +394,16 @@ def build_app(ctx) -> FastAPI:
             return JSONResponse({"n_trades": 0, "checks": [], "recent": []})
         return JSONResponse(scorecard(c.journal))
 
+    @app.get("/api/jev_advice")
+    async def api_jev_advice(request: Request):
+        """Jev trade adviser (shadow): its hold / cut / add calls on open trades, scored against how they finished."""
+        need(request)
+        from ..agents.jev_advisor import scorecard as jsc
+        c = bk(request)
+        if getattr(c, "journal", None) is None:
+            return JSONResponse({"n_trades": 0, "actions": [], "recent": []})
+        return JSONResponse(jsc(c.journal))
+
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):
         need(request)
