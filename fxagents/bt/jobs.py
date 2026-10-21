@@ -57,13 +57,25 @@ def execute(rid: str, audit: int = 10) -> dict:
         sigs = sorted(strat.signals(m), key=lambda s: s.t)
         stage(f"simulating {len(sigs)} signals", 30)
         res = engine.simulate(strat, m, sigs, progress=lambda i, n: stage(f"simulating {i}/{n}", 30 + 45 * i / max(n, 1)))
+        diag = getattr(strat, "diag", None)          # the full-data diagnostics (the audit re-runs signals on slices)
         out = stats.summarize(res, m)
         stage("look-ahead audit", 78)
         out["audit"] = engine.lookahead_audit(strat, m, sigs, audit, warm_days=strat.warmup_days) if audit else None
         out["variants"] = {}
+        vtrades = {}
         for i, (name, ov) in enumerate(strat.variants.items()):
             stage(f"control: {name}", 85 + 10 * i / max(len(strat.variants), 1))
-            out["variants"][name] = stats.summarize(engine.simulate(strat.with_params(**ov), m, controls=False), m)["stats"]
+            vr = engine.simulate(strat.with_params(**ov), m, controls=False)
+            vtrades[name] = vr["trades"]
+            out["variants"][name] = stats.summarize(vr, m)["stats"]
+        extra = []
+        if hasattr(strat, "compare"):                # optional strategy-specific report section
+            if diag is not None:
+                strat.diag = diag
+            try:
+                extra = list(strat.compare(m, res["trades"], vtrades) or [])
+            except Exception as e:  # noqa: BLE001 — a report extra never fails the run
+                extra = ["", f"(strategy comparison failed: {e})"]
         stats.add_variant_gate(out)
         if out["audit"] and out["audit"]["failed"]:
             out["gates"]["no look-ahead"] = False
@@ -73,7 +85,9 @@ def execute(rid: str, audit: int = 10) -> dict:
         (d / "summary.json").write_text(json.dumps(out, default=str))
         with gzip.open(d / "trades.json.gz", "wt") as fh:
             json.dump([_jsonable(t) for t in res["trades"]], fh, default=str)
-        (d / "report.md").write_text(stats.text(title, r["dataset"], out, out["audit"]) + "\n")
+        out["extra"] = extra
+        (d / "report.md").write_text(stats.text(title, r["dataset"], out, out["audit"]) + "\n" +
+                                     ("\n".join(extra) + "\n" if extra else ""))
         s = out["stats"]
         ledger.update(rid, status="done", stage="done", pct=100, finished=time.time(), trades=s.get("trades", 0),
                       avg_r=s.get("avg_R"), ci_lo=s.get("ci_lo"), passed=int(bool(out["gates"]["PASS"])))
