@@ -125,3 +125,31 @@ def test_orphan_merge_restores_the_original_position(tmp_path):
     assert st["cf8f0d0885"] == ("closed", 80.0, 2.0) and st["9acd6396c9"][0] == "void"   # 80 / (2 × 20) = 2R
     rep = asyncio.run(JR.run(cfg, False, client=Client([t]), now=NOW))                   # idempotent
     assert not rep["books"]["live"]["plan"]
+
+
+def test_oanda_multiplier_and_r_correction(tmp_path):
+    from fxagents.reconcile import broker_cfg
+    c = broker_cfg(copy.deepcopy(CFG))
+    assert {s: c["instruments"][s]["multiplier"] for s in ("XAUUSD", "NDQ", "US30")} == {"XAUUSD": 1, "NDQ": 1, "US30": 1}
+    cfg = copy.deepcopy(CFG)
+    cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    # closed by the first repair with the futures multiplier: gold 10 → R 10× too small
+    _db(cfg["storage"]["db_path"], [_row("hhhhhhhhhh", symbol="XAUUSD", status="closed", entry=4000.0, initial_stop=3990.0,
+                                         qty_initial=3.0, realized=60.0, r_multiple=0.2, exit_reason="reconciled_at_oanda",
+                                         closed="2026-10-08T12:00:00-04:00")])
+    rep = asyncio.run(JR.run(cfg, True, client=Client([]), now=NOW))
+    assert [p["action"] for p in rep["books"]["live"]["plan"]] == ["fix_r"]
+    con = sqlite3.connect(cfg["storage"]["db_path"])
+    assert con.execute("SELECT r_multiple FROM trades").fetchone()[0] == 2.0       # 60 / (3 × 10 × 1)
+    con.close()
+    assert not asyncio.run(JR.run(cfg, False, client=Client([]), now=NOW))["books"]["live"]["plan"]
+
+
+def test_reconcile_ignores_void_rows_when_matching():
+    from fxagents import reconcile as R
+    jr = [_row("cf8f0d0885", status="closed", opened="2026-10-08T10:55:06-04:00", realized=40.0, r_multiple=2.0,
+               exit_price=20040.0, closed="2026-10-08T12:00:00-04:00"),
+          _row("9acd6396c9", strategy="orphan:unmanaged", status="void", opened="2026-10-08T10:55:07-04:00")]
+    t = _t(None, open_="2026-10-08T14:55:07Z")
+    res = R.reconcile(R.broker_cfg(copy.deepcopy(CFG)), jr, [t], [])
+    assert [p["id"] for p in res["pairs"]] == ["cf8f0d0885"] and not res["state_mismatch"] and not res["journal_only"]

@@ -38,6 +38,21 @@ def _f(x) -> float:
         return 0.0
 
 
+def broker_cfg(cfg):
+    """The config as the running app sees it: with broker = oanda the instruments carry OANDA's CFD values
+    (multiplier 1 …), not the futures defaults (gold 10, NDQ 2, US30 0.5). Reports and repairs must use these."""
+    import copy
+
+    from .config import apply_broker
+    if cfg.get("_broker_applied") or cfg.get("broker") != "oanda":
+        return cfg
+    c = copy.deepcopy(cfg)
+    if c.get("mode") not in ("paper", "live"):
+        c["mode"] = "paper"                     # the practice account's view, whatever the file's default mode
+    apply_broker(c)
+    return c
+
+
 def pos_id(trade: dict) -> str | None:
     """Journal position id from the bot's client extension ("fxa-<id>-<leg>"), else None."""
     cid = ((trade.get("clientExtensions") or {}).get("id") or "")
@@ -154,6 +169,7 @@ def reconcile(cfg, journal: list[dict], closed: list[dict], open_: list[dict], f
             by_pos.setdefault(pid, []).append(t)
         else:
             untagged.append(t)
+    journal = [r for r in journal if r.get("status") != "void"]          # voided rows hold no trade of their own
     jrows = {r["id"]: r for r in journal}
     # trades from before the bot tagged its orders (≈ Oct 8 2026): pair by instrument and open time
     by_time = set()
@@ -293,6 +309,7 @@ def report(res: dict, s: dict, days: int) -> str:
 
 async def run(cfg, days: int, client=None, out_dir: str = "data/year_test/reconcile") -> dict:
     from .oanda import oanda_from_cfg
+    cfg = broker_cfg(cfg)
     since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
     own = client is None
     client = client or oanda_from_cfg(cfg)

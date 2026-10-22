@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .reconcile import _f, _inst_of, fetch_trades, fx_table, pos_id
+from .reconcile import _f, _inst_of, broker_cfg, fetch_trades, fx_table, pos_id
 
 SKIP_BOOKS = ("daily_rsi2_adx2",)        # positions held overnight on purpose; their own trader re-adopts them
 
@@ -139,7 +139,7 @@ def plan_merges(cfg, allrows: list[dict], closed: list[dict], fx) -> list[dict]:
 
 
 def apply(db: str, plan: list[dict]) -> int:
-    todo = [p for p in plan if p["action"] in ("close", "void")]
+    todo = [p for p in plan if p["action"] in ("close", "void", "fix_r")]
     if not todo:
         return 0
     shutil.copy2(db, f"{db}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
@@ -147,7 +147,9 @@ def apply(db: str, plan: list[dict]) -> int:
     try:
         for p in todo:
             frm = p.get("from", "open")
-            if p["action"] == "close":
+            if p["action"] == "fix_r":
+                con.execute("UPDATE trades SET r_multiple=? WHERE id=? AND status='closed'", (p["r_multiple"], p["id"]))
+            elif p["action"] == "close":
                 con.execute("UPDATE trades SET status='closed', closed=?, exit_price=?, realized=?, r_multiple=?, "
                             "exit_reason='reconciled_at_oanda', notes=? WHERE id=? AND status=?",
                             (p["closed"], p["exit_price"], p["realized"], p["r_multiple"],
@@ -161,7 +163,29 @@ def apply(db: str, plan: list[dict]) -> int:
     return len(todo)
 
 
+def fix_r(cfg, db: str) -> list[dict]:
+    """Rows an earlier repair closed with OANDA's result got their R from the futures multiplier (gold 10, NDQ 2,
+    US30 0.5) instead of OANDA's (1): the USD P&L was right, the R was not. Recompute R = realized ÷ initial risk."""
+    con = sqlite3.connect(db); con.row_factory = sqlite3.Row
+    try:
+        rows = [dict(r) for r in con.execute("SELECT * FROM trades WHERE status='closed' AND exit_reason='reconciled_at_oanda'")]
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        mult = _f(cfg["instruments"].get(r["symbol"], {}).get("multiplier")) or 1.0
+        risk = abs(_f(r.get("qty_initial")) * (_f(r["entry"]) - _f(r["initial_stop"])) * mult)
+        if not risk or r.get("realized") is None:
+            continue
+        good = round(_f(r["realized"]) / risk, 3)
+        if r.get("r_multiple") is None or abs(good - _f(r["r_multiple"])) > 1e-3:
+            out.append({"id": r["id"], "action": "fix_r", "why": f"R {r.get('r_multiple')} → {good:+.3f} (OANDA multiplier)",
+                        "r_multiple": good, "from": "closed"})
+    return out
+
+
 async def run(cfg, do_apply: bool, client=None, now: pd.Timestamp | None = None) -> dict:
+    cfg = broker_cfg(cfg)
     tz = cfg["timezone"]
     now = now or pd.Timestamp.now(tz="UTC")
     before = roll_start(now, tz)
@@ -198,6 +222,7 @@ async def run(cfg, do_apply: bool, client=None, now: pd.Timestamp | None = None)
         plan = merges + plan_account(cfg, [r for r in rows if r["id"] not in merged], closed, open_, allrows, fx)
     else:
         plan = []
+    plan += [p for p in fix_r(cfg, main_db) if p["id"] not in {q["id"] for q in plan}]
     report["books"]["live"] = {"db": main_db, "plan": plan}
     # paper books
     for db in sorted(glob.glob(str(root / "journal_*.sqlite"))):
@@ -222,8 +247,9 @@ def text(rep: dict, applied: bool) -> str:
         if not plan:
             L.append(f"{book}: nothing to repair")
             continue
-        n = {a: sum(p["action"] == a for p in plan) for a in ("close", "void", "keep")}
-        L.append(f"{book}: {len(plan)} stuck row(s) — close with OANDA's result {n['close']}, void {n['void']}, keep {n['keep']}")
+        n = {a: sum(p["action"] == a for p in plan) for a in ("close", "void", "keep", "fix_r")}
+        L.append(f"{book}: {len(plan)} row(s) — close with OANDA's result {n['close']}, void {n['void']}, keep {n['keep']}, "
+                 f"R corrected {n['fix_r']}")
         for p in plan:
             extra = f" → {p['r_multiple']:+.3f}R at {p['exit_price']}" if p["action"] == "close" and p.get("r_multiple") is not None else ""
             L.append(f"  {p['id']}  {p['action']:<5} {p['why']}{extra}")
