@@ -116,6 +116,8 @@ case "${1:-help}" in
              #   ./fx.sh reconcile [days=14]  → data/year_test/reconcile/report.md
              $DC exec -T fxagents python -m fxagents.reconcile --days "${2:-14}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  repair)    # journal rows stuck at 'open' (lost in old restarts): dry run; ./fx.sh repair --apply to fix (backs up first)
+             $DC exec -T fxagents python -m fxagents.journal_repair "${@:2}" </dev/null ;;
   holdout)   # score a frozen outside strategy package on a holdout export, sandboxed: no network, no .env/token,
              # read-only package and data. ./fx.sh holdout <package dir> <export name> <tag>
              #   e.g. ./fx.sh holdout research/astra_v1 holdout_m1 astra_v1   → data/year_test/holdout_astra_v1, published
@@ -370,7 +372,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

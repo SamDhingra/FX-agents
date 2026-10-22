@@ -1,0 +1,104 @@
+"""Journal repair: stuck 'open' rows closed with OANDA's result, duplicates and lost paper trades voided, live
+positions and today's rows never touched, dry run by default, backup before writing."""
+import asyncio
+import copy
+import glob
+import json
+import sqlite3
+
+import pandas as pd
+
+from fxagents import journal_repair as JR
+from fxagents.config import load_config
+from fxagents.journal import SCHEMA
+
+CFG = load_config("config.yaml")
+NOW = pd.Timestamp("2026-10-22 10:00", tz="America/New_York")
+
+
+def _db(path, rows):
+    con = sqlite3.connect(path); con.executescript(SCHEMA)
+    for r in rows:
+        con.execute(f"INSERT INTO trades({','.join(r)}) VALUES({','.join('?' * len(r))})", list(r.values()))
+    con.commit(); con.close()
+
+
+def _row(i, **kw):
+    return {"id": i, "symbol": "NDQ", "side": "LONG", "strategy": "smc_ifvg:5m@v1", "status": "open",
+            "opened": "2026-10-05T10:00:00-04:00", "entry": 20000.0, "initial_stop": 19980.0, "qty_initial": 1.0,
+            "qty_gross": 1.0, "events": "[]"} | kw
+
+
+class Client:
+    def __init__(self, trades): self.trades = trades
+    def acct(self, p): return "/v3/accounts/X" + p
+    async def req(self, m, path, params=None, **kw):
+        if path.endswith("/summary"):
+            return {"account": {"currency": "CAD"}}
+        if "candles" in path:
+            return {"candles": [{"time": "2026-10-01T21:00:00Z", "mid": {"c": "1.40"}}]}
+        st = params["state"]
+        if "beforeID" in (params or {}):
+            return {"trades": []}
+        return {"trades": [t for t in self.trades if t["state"] == st]}
+    async def aclose(self): pass
+
+
+def _t(cid, state="CLOSED", open_="2026-10-05T14:00:00Z", close="20040.0", pl="56.0"):
+    return {"id": "1", "instrument": "NAS100_USD", "state": state, "openTime": open_, "closeTime": "2026-10-05T15:00:00Z",
+            "initialUnits": "1", "averageClosePrice": close, "realizedPL": pl, "financing": "0",
+            "clientExtensions": {"id": cid} if cid else {}}
+
+
+def _cfg(tmp_path):
+    cfg = copy.deepcopy(CFG)
+    cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    cfg["instruments"]["NDQ"]["multiplier"] = 1.0
+    return cfg
+
+
+def test_dry_run_plan_then_apply(tmp_path):
+    cfg = _cfg(tmp_path)
+    _db(cfg["storage"]["db_path"], [
+        _row("aaaaaaaaaa"),                                                     # OANDA closed it (tag)
+        _row("bbbbbbbbbb", opened="2026-10-06T10:00:00-04:00"),                 # still open at OANDA
+        _row("cccccccccc", opened="2026-10-07T10:00:00-04:00"),                 # no OANDA trade at all
+        _row("dddddddddd", opened="2026-10-22T09:45:00-04:00"),                 # today: never touched
+        _row("eeeeeeeeee", opened="2026-10-08T10:55:06-04:00"),                 # duplicate of an orphan row
+        _row("ffffffffff", strategy="orphan:unmanaged", status="closed", opened="2026-10-08T10:55:07-04:00",
+             realized=-5.0, r_multiple=-0.25),
+        _row("gggggggggg", opened="2026-10-09T10:00:00-04:00"),                 # held by the running app
+    ])
+    (tmp_path / "runtime_state.json").write_text(json.dumps({"positions": [{"id": "gggggggggg"}]}))
+    _db(str(tmp_path / "journal_shadow.sqlite"), [_row("pppppppppp", strategy="playbook:NDQ")])
+    _db(str(tmp_path / "journal_daily_rsi2_adx2.sqlite"), [_row("qqqqqqqqqq", strategy="daily")])
+    trades = [_t("fxa-aaaaaaaaaa-initial0"), _t("fxa-bbbbbbbbbb-initial0", state="OPEN", open_="2026-10-06T14:00:00Z"),
+              _t(None, open_="2026-10-08T14:55:07Z")]
+    rep = asyncio.run(JR.run(cfg, False, client=Client(trades), now=NOW))
+    plan = {p["id"]: p for p in rep["books"]["live"]["plan"]}
+    assert set(plan) == {"aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "eeeeeeeeee"}
+    assert plan["aaaaaaaaaa"]["action"] == "close" and plan["aaaaaaaaaa"]["realized"] == 40.0     # 56 CAD / 1.40
+    assert plan["aaaaaaaaaa"]["r_multiple"] == 2.0 and plan["aaaaaaaaaa"]["exit_price"] == 20040.0
+    assert plan["bbbbbbbbbb"]["action"] == "keep"
+    assert plan["cccccccccc"]["action"] == "void" and plan["eeeeeeeeee"]["action"] == "void"
+    assert "duplicate" in plan["eeeeeeeeee"]["why"]
+    assert [p["id"] for p in rep["books"]["shadow"]["plan"]] == ["pppppppppp"]
+    assert "daily_rsi2_adx2" not in rep["books"]
+    con = sqlite3.connect(cfg["storage"]["db_path"])
+    assert con.execute("SELECT COUNT(*) FROM trades WHERE status='open'").fetchone()[0] == 6     # dry run: untouched
+    con.close()
+    rep = asyncio.run(JR.run(cfg, True, client=Client(trades), now=NOW))
+    con = sqlite3.connect(cfg["storage"]["db_path"])
+    st = dict(con.execute("SELECT id, status FROM trades").fetchall())
+    con.close()
+    assert st == {"aaaaaaaaaa": "closed", "bbbbbbbbbb": "open", "cccccccccc": "void", "dddddddddd": "open",
+                  "eeeeeeeeee": "void", "ffffffffff": "closed", "gggggggggg": "open"}
+    assert glob.glob(str(tmp_path / "journal.sqlite.bak-*")) and glob.glob(str(tmp_path / "journal_shadow.sqlite.bak-*"))
+    assert "APPLIED" in JR.text(rep, True)
+
+
+def test_roll_start():
+    assert JR.roll_start(pd.Timestamp("2026-10-22 10:00", tz="America/New_York"), "America/New_York") == \
+        pd.Timestamp("2026-10-21 17:00", tz="America/New_York")
+    assert JR.roll_start(pd.Timestamp("2026-10-22 18:00", tz="America/New_York"), "America/New_York") == \
+        pd.Timestamp("2026-10-22 17:00", tz="America/New_York")
