@@ -865,7 +865,7 @@ button,input,select,textarea{font-family:inherit}
   --bg:#060a11;--bg-2:#090e17;--card:#0d141f;--card-2:#111a27;--line:#1a2535;--line-2:#28374d;--text:#e7eef8;--text-2:#aab8cc;--muted:#73839b;
   --accent:#38d0f2;--accent-2:#7ddff6;--accent-soft:rgb(56 208 242 / .11);--up:#1fc98b;--up-text:#3fe2a3;--up-soft:rgb(31 201 139 / .12);
   --down:#ff5a6a;--down-text:#ff7d8a;--down-soft:rgb(255 90 106 / .12);--warn:#f4b544;--warn-soft:rgb(244 181 68 / .12);
-  --ghost:#9d8cff;--ghost-soft:rgb(157 140 255 / .13);--radius:10px;--shadow:none;--glow:0 0 0 1px rgb(56 208 242 / .25),0 0 18px rgb(56 208 242 / .18)}
+  --ghost:#9d8cff;--ghost-soft:rgb(157 140 255 / .13);--radius:10px;--shadow:none;--glow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent),0 0 18px rgb(56 208 242 / .18)}
 :root[data-skin="pro"][data-theme="light"][data-accent]{color-scheme:light;
   --bg:#eef2f7;--bg-2:#e8edf4;--card:#ffffff;--card-2:#f5f8fb;--line:#dde4ed;--line-2:#c4cfdc;--text:#0e1a2b;--text-2:#44546b;--muted:#68788f;
   --accent:#0789ad;--accent-2:#067a9a;--accent-soft:rgb(7 137 173 / .09);--up:#0f9a68;--up-text:#0b7d54;--up-soft:rgb(15 154 104 / .10);
@@ -928,7 +928,7 @@ button,input,select,textarea{font-family:inherit}
 :root .v10 .text-btn{font-size:11px;min-height:22px;color:var(--accent-2);text-transform:none;letter-spacing:0}
 :root .v10 .btn{border-radius:7px;min-height:32px;font-size:11.5px}
 :root .v10 .seg{border-radius:7px;padding:2px;background:var(--card-2)}.v10 .seg button{min-height:24px;padding:3px 9px;font-size:10.5px;border-radius:5px}
-:root .v10 .seg button.on{background:var(--accent-soft);color:var(--accent-2);box-shadow:inset 0 0 0 1px rgb(56 208 242 / .25)}
+:root .v10 .seg button.on{background:var(--accent-soft);color:var(--accent-2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 :root .v10 .chip{font-size:10px;padding:3px 8px}
 :root .v10 .tag{font-size:10px;padding:1px 6px;border-radius:5px;background:var(--card-2)}
 :root .v10 .pill{font-size:10.5px;height:18px;min-width:18px}
@@ -1034,7 +1034,7 @@ button,input,select,textarea{font-family:inherit}
 .mbe:last-child{border-bottom:0}.mbe .ic{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--card-2);border:1px solid var(--line);color:var(--text-2)}
 .mbe .w{display:flex;flex-direction:column;gap:3px;min-width:0}.mbe .w .elig span{white-space:normal}.mbe .ls{font-size:11px;color:var(--muted)}
 .wl{position:relative;height:28px;border-radius:6px;background:var(--card-2);border:1px solid var(--line);margin:4px 0 18px}
-.wl .w{position:absolute;top:3px;bottom:3px;border-radius:4px;background:var(--accent-soft);border:1px solid rgb(56 208 242 / .35)}
+.wl .w{position:absolute;top:3px;bottom:3px;border-radius:4px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
 .wl .nw{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--accent);box-shadow:0 0 8px var(--accent)}
 .wl .tk{position:absolute;top:100%;margin-top:3px;transform:translateX(-50%);font-size:9px;color:var(--muted)}
 .mb-rules{display:grid;gap:8px;margin-top:4px}.mb-rules>div{display:grid;grid-template-columns:96px 1fr;gap:10px;font-size:11.5px;color:var(--text-2);padding:8px 0;border-top:1px solid var(--line)}
@@ -1116,7 +1116,7 @@ html:root body .askfab svg{width:16px;height:16px}
 :root .v10 .tj .sort-field select{min-height:32px;padding:4px 8px;font-size:11.5px;border-radius:7px;background:var(--card-2);color:var(--text);border:1px solid var(--line-2)}
 :root .v10 .tj .filters.grouped{gap:6px 14px;margin-bottom:8px}
 :root .v10 .fchip{padding:3px 10px;font-size:11px;min-height:26px;border-radius:6px;background:var(--card-2)}
-:root .v10 .fchip.on{background:var(--accent-soft);border-color:rgb(56 208 242 / .5);color:var(--accent-2)}
+:root .v10 .fchip.on{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent-2)}
 :root .v10 .trade-summary{display:flex;gap:16px;font-size:11.5px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap}
 .jt td{vertical-align:middle}.jt td.dt{color:var(--muted);font-size:11.5px}.jt td.dt b{display:block;color:var(--text-2);font-weight:600;font-size:12px}
 .jt .sy b{font-size:12.5px}.jt .sy .side{margin-left:6px;font-size:9.5px;padding:2px 5px}
@@ -1141,6 +1141,62 @@ html:root body .askfab svg{width:16px;height:16px}
   :root .v10 .tj .trade-toolbar{flex-basis:100%}.v10 .tj .search-field{max-width:none}
   :root .v10 .tj-head .sp{display:none}
 }
+
+/* ══ v10b (Oct 22 2026, Sam's review): navy palette, larger sidebar and type, KPI cards, paired overview rows ══ */
+:root[data-skin="pro"][data-theme][data-accent]{
+  --bg:#0a1120;--bg-2:#0c1528;--card:#101a2f;--card-2:#15213a;--line:#1f2c48;--line-2:#2d3e60;--text:#eaf0fa;--text-2:#b5c2d8;--muted:#8090ad;
+  --accent:#7090ff;--accent-2:#a3b6ff;--accent-soft:rgb(112 144 255 / .14);--radius:13px;--glow:0 0 0 1px rgb(112 144 255 / .3),0 0 16px rgb(112 144 255 / .22)}
+:root[data-skin="pro"][data-theme="light"][data-accent]{--accent:#3b5bdb;--accent-2:#3151c9;--accent-soft:rgb(59 91 219 / .09)}
+:root[data-skin="pro"] body{background:radial-gradient(70% 50% at 10% -10%,rgb(112 144 255 / .13),transparent 70%),radial-gradient(50% 45% at 100% 30%,rgb(31 201 139 / .05),transparent 70%),var(--bg);background-attachment:fixed}
+:root[data-skin="pro"][data-theme="light"] body{background:radial-gradient(70% 50% at 10% -10%,rgb(59 91 219 / .08),transparent 70%),var(--bg);background-attachment:fixed}
+:root .v10 .logo{background:linear-gradient(140deg,#7f9cff,#5160d8);color:#fff}
+html body{font-size:13.5px}
+/* sidebar: readable, like the proposal */
+:root .app.v10{grid-template-columns:236px minmax(0,1fr)}
+:root .v10 aside{padding:20px 14px 16px;gap:3px}
+:root .v10 .brand{padding:2px 8px 18px;gap:12px}.v10 .brand b{font-size:17px}.v10 .brand small{font-size:9px}
+:root .v10 .logo{width:36px;height:36px;border-radius:10px;font-size:13px}
+:root .v10 .nav-label{font-size:10px;letter-spacing:1.8px;padding:18px 12px 7px}
+:root .v10 .nav{min-height:40px;padding:8px 12px;gap:12px;font-size:13.5px;border-radius:9px;font-weight:500}
+:root .v10 .nav svg{width:18px;height:18px}
+:root .v10 .nav.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 30%,transparent)}
+:root .v10 .nav.on::before{left:-14px}
+:root .v10 .side-foot .chip{font-size:11px}
+/* headings: sentence case, a little larger */
+:root .v10 .card h3,:root .v10 .hhead h3,:root .v10 .hfold h3,:root .v10 .hxt{font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:-.01em;text-transform:none;color:var(--text);margin:0 0 12px}
+:root .v10 .hhead h3,:root .v10 .hfold h3,:root .v10 .hxt{margin:0}
+:root .v10 .card h3 .heading-note,:root .v10 .heading-note{font-family:var(--sans);font-size:11.5px}
+:root .v10 .card,:root .v10 .hsec,:root .v10 .hx{padding:16px 18px}
+:root .v10 #title{font-size:21px}
+/* KPI cards */
+.kcards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.kc{background:linear-gradient(180deg,rgb(255 255 255 / .025),transparent 80px),var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px 18px;display:flex;flex-direction:column;gap:6px;min-width:0;box-shadow:inset 0 1px 0 rgb(255 255 255 / .035)}
+.kc .kh{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--text-2)}
+.kc .kh svg{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.kc>b{font-family:var(--display);font-size:28px;font-weight:620;letter-spacing:-.03em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kc>em{font-style:normal;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* paired rows: each pair shares a height, so no column runs longer than its neighbour */
+:root .v10 .hrows{gap:12px;align-items:stretch}
+:root .v10 .hrows>*{min-width:0;margin:0}
+:root .v10 .hrows>*{grid-area:auto;order:0}:root .v10 .hrows>.c8{grid-column:span 8}:root .v10 .hrows>.c4{grid-column:span 4}
+:root .v10 .hrows .hx{display:flex;flex-direction:column;padding:16px 18px 0;background:var(--card)}
+:root .v10 .hrows .hx .hxtop{align-items:center;gap:12px}
+:root .v10 .hrows .hxchart{margin:10px -18px 0;flex:1;display:flex;align-items:flex-end}
+:root .v10 .hrows .market-card .bias-row{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+:root .v10 .hrows .market-card{display:flex;flex-direction:column}
+:root .v10 .hrows .market-card .bias-row{flex:1;grid-auto-rows:1fr}
+:root .v10 .hrows .market-card .bx{align-content:space-between}
+:root .v10 .market-card .bx .p{display:block;font-family:var(--display);font-size:21px;font-weight:600;color:var(--text);letter-spacing:-.02em;margin:4px 0 0}:root .v10 .market-card .bx .p+span{font-size:12px;font-weight:600}
+:root .v10 .hrows .hxchart{align-items:stretch}
+:root .v10 .bx{padding:11px 12px;border-radius:10px}.bx .s{font-size:14px}.tfc{font-size:9.5px;padding:4px 0}.tfc b{font-size:13px}
+:root .v10 .condition-row{padding:9px 0;font-size:12.5px}.v10 .condition-row b{font-size:12.5px}
+:root .v10 .nx2{padding:8px 2px}.v10 .nx2 span,.v10 .nowlead{font-size:13px}.v10 .nx2 b{font-size:12.5px}
+:root .v10 .pick{font-size:13px;padding:7px 0}
+.pc .pl{font-size:18px}.pc .h b.sym{font-size:15px}.pc .grid4 b{font-size:13px}
+@media (max-width:1180px){:root .v10 .hrows>.c8,:root .v10 .hrows>.c4{grid-column:span 12}.kcards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:761px) and (max-width:1180px){:root .app.v10{grid-template-columns:64px minmax(0,1fr)}:root .v10 .nav{font-size:0}}
+@media (max-width:1180px){:root .v10 .hrows>.possec{order:1}:root .v10 .hrows>.hx{order:2}:root .v10 .hrows>.market-card{order:3}:root .v10 .hrows>.operations-card{order:4}:root .v10 .hrows>.nowsec{order:5}:root .v10 .hrows>.selections-card{order:6}}
+@media (max-width:760px){.kcards{gap:10px}.kc{padding:12px 14px}.kc>b{font-size:22px}:root .app.v10{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
@@ -1213,25 +1269,24 @@ html:root body .askfab svg{width:16px;height:16px}
     <!-- OVERVIEW -->
     <section class="page on" id="p-home">
       <div id="newsBanner"></div>
-      <div class="todaystrip" id="todayStrip"></div>
-      <div class="hgrid">
-        <div class="hmain">
-          <div class="hx" id="hero">
-            <div class="kpi hxk">
-              <div class="hxtop"><span class="hxl" id="hxLabel">Equity</span><div class="hxv num" id="equityValue">—</div><div class="hxd" id="hxDelta"></div><span class="sp" style="flex:1"></span>
-                <div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></div>
-            </div>
-            <div class="chart hxchart"><svg id="eq" height="150" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
-            <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
-          </div>
-          <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History ›</button></div><div class="pos" id="positions"></div></div>
-          <div class="card market-card"><h3>Market bias <span class="mut heading-note">Daily · 4H · 1H structure</span><span class="sp"></span><span id="swipeHint" hidden></span><button class="text-btn" data-p="bias">All timeframes ›</button></h3><div class="bias-row" id="bias"></div></div>
+      <div class="kcards" id="todayStrip">
+        <div class="kc"><div class="kh"><span id="hxLabel">Account equity</span><svg viewBox="0 0 24 24"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M3 7l2-3h11l2 3 M16 13h3"/></svg></div><b class="num" id="equityValue">—</b><em id="kEqSub">—</em></div>
+        <div class="kc"><div class="kh"><span>Realized today</span><svg viewBox="0 0 24 24"><path d="M4 19V5 M4 19h16 M7 15l4-4 3 3 5-6"/></svg></div><b class="num" id="kReal">—</b><em id="kRealSub">—</em></div>
+        <div class="kc"><div class="kh"><span>Open P&amp;L</span><svg viewBox="0 0 24 24"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg></div><b class="num" id="kOpen">—</b><em id="kOpenSub">—</em></div>
+        <div class="kc"><div class="kh"><span>Risk to stops</span><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/></svg></div><b class="num" id="kRisk">—</b><em id="kRiskSub">—</em></div>
+      </div>
+      <div class="grid hrows">
+        <div class="hx c8" id="hero">
+          <div class="kpi hxk"><div class="hxtop"><h3 class="hxt">Account performance</h3><div class="hxd" id="hxDelta"></div><span class="sp" style="flex:1"></span>
+            <div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></div></div>
+          <div class="chart hxchart"><svg id="eq" height="190" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
+          <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
         </div>
-        <div class="hside">
-          <div class="card operations-card"><h3>Trading conditions</h3><div class="fuel" id="fuel"></div><div id="conditions"><div class="empty">Waiting for account data…</div></div><button class="text-btn" data-p="agents">Agents and activity ›</button></div>
-          <div class="hsec nowsec" id="nowSec"><div class="hhead"><button class="hfold" id="nowFold" type="button" aria-expanded="true" aria-controls="nowBody"><h3>Up next</h3><span class="peek" id="nowPeek"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="btn rcbtn" id="recapBtn" type="button"><span class="long">Evening </span>Recap</button></div><div id="nowBody"><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div></div>
-          <div class="card selections-card"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
-        </div>
+        <div class="card operations-card c4"><h3>Risk &amp; system <span class="sp"></span><button class="text-btn" data-p="agents">Agents ›</button></h3><div class="fuel" id="fuel"></div><div id="conditions"><div class="empty">Waiting for account data…</div></div></div>
+        <div class="hsec possec c8"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History ›</button></div><div class="pos" id="positions"></div></div>
+        <div class="card selections-card c4"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
+        <div class="card market-card c8"><h3>Market bias <span class="mut heading-note">context before execution</span><span id="swipeHint" hidden></span><span class="sp"></span><button class="text-btn" data-p="bias">Explore timeframes ›</button></h3><div class="bias-row" id="bias"></div></div>
+        <div class="hsec nowsec c4" id="nowSec"><div class="hhead"><button class="hfold" id="nowFold" type="button" aria-expanded="true" aria-controls="nowBody"><h3>Up next</h3><span class="peek" id="nowPeek"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="btn rcbtn" id="recapBtn" type="button"><span class="long">Evening </span>Recap</button></div><div id="nowBody"><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div></div>
       </div>
     </section>
 
@@ -2685,7 +2740,7 @@ $("#scrim").addEventListener("click", closeBooks);
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeBooks(); });
 function setBook(b){
   if(b === BOOK) return;
-  BOOK = b; LAST_RECEIVED=0; S=null; tradeRows=[]; $("#hxDelta").textContent="Loading selected book…"; $("#todayStrip").innerHTML=""; EQ_SHOWN=null; $("#positions").innerHTML=""; $("#eq").innerHTML=""; $("#equityValue").textContent="—"; $("#conditions").innerHTML=""; $("#bias").innerHTML=""; $("#picks").innerHTML=""; $("#newsBanner").innerHTML="";
+  BOOK = b; LAST_RECEIVED=0; S=null; tradeRows=[]; $("#hxDelta").textContent="Loading selected book…"; EQ_SHOWN=null; $("#positions").innerHTML=""; $("#eq").innerHTML=""; $("#equityValue").textContent="—"; $("#conditions").innerHTML=""; $("#bias").innerHTML=""; $("#picks").innerHTML=""; $("#newsBanner").innerHTML="";
   try{ localStorage.setItem("fx-book", b); }catch(e){}
   document.body.classList.toggle("shadow", b !== "live");
   paintBook();
@@ -4740,6 +4795,33 @@ renderTrades = function(){
 if(page === "calendar") renderCalendar();
 if(page === "trades") renderTrades();
 $("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-10-22.v10.2");
+
+/* v10b: the overview's KPI cards (static markup, so the equity count-up keeps animating) */
+hero = function(s){
+  const d = s.day_pnl, pct = s.equity ? d / (s.equity - d) * 100 : 0, k = d > 0 ? "up" : d < 0 ? "down" : "flat", t = s.today || {};
+  $("#hxLabel").textContent = BOOK === "live" ? "Account equity" : "Paper equity · " + bookName(BOOK);
+  countTo(s.equity);
+  $("#kEqSub").innerHTML = `<span class="${cls(d)}">${d > 0 ? "▲" : d < 0 ? "▼" : "•"} ${smoney(d, 2)} (${(pct >= 0 ? "+" : "") + fmt(pct, 2)}%)</span> today · ${BOOK === "live" ? esc(bookLabel("live")) : "virtual"}`;
+  $("#kReal").textContent = smoney(s.realized_today); $("#kReal").className = "num " + cls(s.realized_today);
+  $("#kRealSub").textContent = `${t.trades || 0} closed${t.trades ? " · " + Math.round(t.win_rate * 100) + "% won · " + sR(t.sum_r) : ""}`;
+  $("#kOpen").textContent = smoney(s.unrealized); $("#kOpen").className = "num " + cls(s.unrealized);
+  $("#kOpenSub").textContent = `${s.positions.length} open position${s.positions.length === 1 ? "" : "s"}`;
+  $("#kRisk").textContent = money(s.open_risk, 0); $("#kRisk").className = "num";
+  $("#kRiskSub").textContent = s.open_risk === 0 && s.positions.length ? "stops in profit" : "if every stop is hit · before slippage";
+  $("#hxDelta").innerHTML = `<span class="chg ${k}">${d > 0 ? "▲" : d < 0 ? "▼" : "•"} ${smoney(d, 2)} <span style="opacity:.75">${(pct >= 0 ? "+" : "") + fmt(pct, 2)}%</span></span><span class="mut">today</span>`;
+};
+
+/* v10b: the equity chart fills its card (the row height is set by the Risk & system card beside it) */
+const _equity10 = equity;
+equity = function(s){
+  const svg = $("#eq"), side = $(".hrows .operations-card"), head = $("#hero .hxtop");
+  if(svg && side && head){
+    const wide = matchMedia("(min-width:1181px)").matches;
+    const h = wide ? Math.max(190, Math.round(side.offsetHeight - head.offsetHeight - 30)) : 190;
+    if(+svg.getAttribute("height") !== h) svg.setAttribute("height", h);
+  }
+  _equity10(s);
+};
 </script>
 </body>
 </html>
