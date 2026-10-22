@@ -98,6 +98,7 @@ class Strategy:
     entry_windows: list | None = None   # [(start_mod, end_mod), …] NY minutes allowed for the FILL; None = any time
     max_per_day: int | None = None      # per trading day (18:00 NY → 18:00)
     one_at_a_time: bool = True
+    cooldown_min: float = 0.0           # minutes after an exit before the next fill (one_at_a_time books)
     news_block: tuple | None = (15, 15) # minutes before/after FOMC/CPI/NFP/PPI with no fills; None = off
     news_10am: bool = False             # also block ±5 min around 10:00 NY every weekday (ISM, JOLTS …)
     warmup_days: int = 90               # history the look-ahead audit gives each re-run (longer for slow indicators)

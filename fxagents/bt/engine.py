@@ -305,6 +305,8 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
             "signal_time": pd.Timestamp(s.t, tz="UTC"), "j": j, "jx": o["jx"]})
         f["taken"] += 1
         busy = o["jx"]
+        if strat.cooldown_min:                       # no new fill until `cooldown_min` minutes after this exit
+            busy = max(busy, int(np.searchsorted(m.ns, m.ns[o["jx"]] + strat.cooldown_min * MIN)) - 1)
         per_day[sd] = per_day.get(sd, 0) + 1
         if controls:
             dist = None if tgt_m is None else tgt_m - e
