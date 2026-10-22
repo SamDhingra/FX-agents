@@ -234,11 +234,39 @@ class ShadowBroker(PaperBroker):
         return await super().close(pos, self.state.last_prices.get(pos.symbol, ref_price) if limit is not None else ref_price,
                                    limit=None)
 
+    store = None            # the live bar store (set by build_shadow): stops missed while the app was down
+
+    def _gap_stop(self, pos, bar):
+        """A position restored after a restart: did a stop trigger in the minutes the app was down? Those catch-up
+        bars are stored but never replayed live. Returns the fill price or None."""
+        t0 = pos.meta.pop("gap_from", None)
+        if t0 is None or self.store is None:
+            return None
+        try:
+            df = self.store.m1(pos.symbol)
+            df = df[(df.index >= pd.Timestamp(t0)) & (df.index < bar.ts)]
+        except Exception:  # noqa: BLE001
+            return None
+        hs = self._hs(pos.symbol)
+        for o, h, l in zip(df["open"].to_numpy(), df["high"].to_numpy(), df["low"].to_numpy()):
+            far = (l - hs) if pos.side > 0 else (h + hs)
+            if (far - pos.stop) * pos.side <= 0:
+                fo = o - pos.side * hs
+                return self.round_px(pos.symbol, fo if (fo - pos.stop) * pos.side < 0 else pos.stop)
+        return None
+
     async def on_bar(self, bar) -> None:
         """Resting stops trigger when the bid (longs) / ask (shorts) reaches them, not the mid."""
         hs = self._hs(bar.symbol)
         for pos in list(self.open_positions.values()):
             if pos.symbol != bar.symbol or pos.open_qty <= 0:
+                continue
+            px = self._gap_stop(pos, bar)
+            if px is not None:
+                self._book(pos, pos.open_qty, px)
+                self.open_positions.pop(pos.id, None)
+                pos.log(bar.ts, "gap_stop", why="stop reached while the app was restarting", price=px)
+                await self.bus.publish("stop_filled", {"position": pos, "price": px, "ts": bar.ts})
                 continue
             far = (bar.low - hs) if pos.side > 0 else (bar.high + hs)
             if (far - pos.stop) * pos.side <= 0:
@@ -363,4 +391,44 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
     sctx.book_key = mode
+    broker.store = main.store
+    if cfg["mode"] in ("paper", "live") and not cfg.get("replay"):
+        restore_shadow(sctx, journal.path)
     return sctx, agents, feed
+
+
+def restore_shadow(sctx: Ctx, journal_path: str) -> int:
+    """Shadow books keep their positions in memory, so an update/restart used to drop every open paper trade
+    (Oct 21 2026). Each book now saves its open positions — with their management state (stage, partial done,
+    targets) — to <journal>_runtime.json on every position event and clock tick, like the real account's
+    runtime_state.json, and puts them back here before its agents start. Returns how many were restored."""
+    from ..state import RuntimeStore
+    p = Path(journal_path)
+    store = RuntimeStore(p.with_name(p.stem + "_runtime.json"))
+    st, broker = sctx.state, sctx.broker
+    now = st.now or pd.Timestamp.now(tz=sctx.cfg["timezone"])
+    n = 0
+    try:
+        since = pd.Timestamp(store.path.stat().st_mtime, unit="s", tz="UTC") if store.path.exists() else None
+        halt, saved = store.restore(st, now)
+    except Exception as e:  # noqa: BLE001 — a damaged file must never stop the app; the journal still has the trades
+        log.warning("shadow %s: could not restore open positions (%s)", sctx.book_key if hasattr(sctx, "book_key") else "", e)
+        halt, saved = "", []
+    for pos in saved:
+        if pos.status != "open" or pos.open_qty <= 1e-12:
+            continue
+        pos.log(now, "readopted", why="app restarted; position restored from the shadow book's runtime state")
+        if since is not None:
+            pos.meta["gap_from"] = since.isoformat()        # check the missed minutes against its stop
+        st.positions[pos.id] = pos
+        broker.open_positions[pos.id] = pos
+        n += 1
+    if halt:
+        st.trading_enabled, st.halt_reason = False, halt
+    for topic in ("position_opened", "position_updated", "position_closed", "stop_filled", "clock"):
+        sctx.bus.subscribe(topic, lambda _ev, store=store, st=st: store.save(st))
+    sctx.runtime_store = store
+    if n:
+        log.info("shadow %s: %d open position(s) restored after the restart", getattr(sctx, "book_key", ""), n)
+    store.save(st)
+    return n
