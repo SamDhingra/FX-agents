@@ -43,3 +43,10 @@ def test_eligibility_order(tmp_path):
     st.positions[p.id] = p
     o = e()
     assert o["state"] == "open" and o["why"].startswith("Short c10_afternoon") and "+0.50R" in o["why"]
+
+
+def test_books_daily(tmp_path):
+    ctx = make_ctx(tmp_path)
+    r = TestClient(build_app(ctx)).get("/api/books_daily").json()
+    live = r["books"][0]
+    assert live["book"] == "live" and "2026-10-14" in live["days"] and live["days"]["2026-10-14"]["trades"] == 1

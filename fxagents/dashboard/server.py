@@ -428,6 +428,17 @@ def build_app(ctx) -> FastAPI:
                 "events": [{"date": e["ts"].strftime("%Y-%m-%d"), "title": e["title"], "tier": e["tier"],
                             "time": e["ts"].strftime("%H:%M")} for e in (ctx.news.events if ctx.news else [])]}
 
+    @app.get("/api/books_daily")
+    async def api_books_daily(request: Request):
+        """Every book's closed-trade results per day (Performance → Books): the account and each shadow book,
+        from its own first record, so books of different ages compare on their own dates."""
+        need(request)
+        out = []
+        for key, c in (("live", ctx), *(getattr(ctx, "shadows", None) or {}).items()):
+            out.append({"book": key, "mode": getattr(c, "selection_mode", ""), "days": c.journal.daily(),
+                        "open": sum(1 for p in c.state.positions.values() if p.status == "open")})
+        return {"books": out}
+
     @app.get("/api/day/{day}")
     async def api_day(day: str, request: Request):
         need(request)
