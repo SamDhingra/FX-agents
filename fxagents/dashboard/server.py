@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from .. import units
-from . import extras, ghosts, insights
+from . import biasgrid, extras, ghosts, insights
 from .ask import Asker
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -402,6 +402,11 @@ def build_app(ctx) -> FastAPI:
         if getattr(c, "journal", None) is None:
             return JSONResponse({"n_trades": 0, "actions": [], "recent": []})
         return JSONResponse(jsc(c.journal))
+
+    @app.get("/api/bias_grid")
+    async def api_bias_grid(request: Request):
+        need(request)
+        return JSONResponse(biasgrid.grid(bk(request)))
 
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):

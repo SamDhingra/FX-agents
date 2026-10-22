@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0c1320">
+<meta name="theme-color" content="#060a11">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <meta name="apple-mobile-web-app-title" content="FX-Agents">
 <meta name="mobile-web-app-capable" content="yes">
 <title>FX-Agents · Trading workspace</title>
-<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';d.skin='classic';try{for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off'],skin:['classic','ink','mint','carbon']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
+<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';d.skin='pro';d.theme='dark';d.surface='solid';try{if(!localStorage.getItem('fx-v10')){localStorage.setItem('fx-v10','1');localStorage.setItem('fx-skin','pro');localStorage.setItem('fx-theme','dark');localStorage.setItem('fx-surface','solid')}for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off'],skin:['classic','ink','mint','carbon','pro']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
 <style>
 :root{
   color-scheme: dark;
@@ -856,6 +856,224 @@ button,input,select,textarea{font-family:inherit}
 @media (max-width:760px){.btcols{grid-template-columns:1fr}.bttrade{height:320px}}
 .anltab{width:100%;border-collapse:collapse;font-size:13px} .anltab th,.anltab td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
 .anltab td.num{text-align:right} .anltab th.num{text-align:right} .anltab{min-width:440px} .anltab td,.anltab th{white-space:nowrap} .anltab td:first-child{white-space:normal}
+
+/* ══ v10 (Oct 22 2026): dense, dark-first "Terminal" workspace ═══════════════════════════════════════════════════
+   One compact header bar instead of top bar + page heading + context strip (~170 px back), tighter spacing, small
+   uppercase section labels, tabular numbers, two-column overview, hairline panels with a faint top highlight.
+   Layout rules apply to every theme; the Terminal palette is the new default theme (others stay selectable). */
+:root[data-skin="pro"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#060a11;--bg-2:#090e17;--card:#0d141f;--card-2:#111a27;--line:#1a2535;--line-2:#28374d;--text:#e7eef8;--text-2:#aab8cc;--muted:#73839b;
+  --accent:#38d0f2;--accent-2:#7ddff6;--accent-soft:rgb(56 208 242 / .11);--up:#1fc98b;--up-text:#3fe2a3;--up-soft:rgb(31 201 139 / .12);
+  --down:#ff5a6a;--down-text:#ff7d8a;--down-soft:rgb(255 90 106 / .12);--warn:#f4b544;--warn-soft:rgb(244 181 68 / .12);
+  --ghost:#9d8cff;--ghost-soft:rgb(157 140 255 / .13);--radius:10px;--shadow:none;--glow:0 0 0 1px rgb(56 208 242 / .25),0 0 18px rgb(56 208 242 / .18)}
+:root[data-skin="pro"][data-theme="light"][data-accent]{color-scheme:light;
+  --bg:#eef2f7;--bg-2:#e8edf4;--card:#ffffff;--card-2:#f5f8fb;--line:#dde4ed;--line-2:#c4cfdc;--text:#0e1a2b;--text-2:#44546b;--muted:#68788f;
+  --accent:#0789ad;--accent-2:#067a9a;--accent-soft:rgb(7 137 173 / .09);--up:#0f9a68;--up-text:#0b7d54;--up-soft:rgb(15 154 104 / .10);
+  --down:#d93848;--down-text:#b92c3b;--down-soft:rgb(217 56 72 / .09);--warn:#b07c12;--warn-soft:rgb(176 124 18 / .10);
+  --ghost:#5b47d6;--ghost-soft:rgb(91 71 214 / .09);--glow:0 0 0 1px rgb(7 137 173 / .25)}
+:root[data-skin="pro"] body{background:
+  radial-gradient(60% 40% at 0% 0%,rgb(56 208 242 / .07),transparent 70%),
+  radial-gradient(50% 35% at 100% 0%,rgb(157 140 255 / .06),transparent 70%),
+  linear-gradient(rgb(255 255 255 / .018) 1px,transparent 1px) 0 0/100% 32px,
+  linear-gradient(90deg,rgb(255 255 255 / .018) 1px,transparent 1px) 0 0/32px 100%,var(--bg);background-attachment:fixed}
+:root[data-skin="pro"][data-theme="light"] body{background:radial-gradient(60% 40% at 0% 0%,rgb(7 137 173 / .06),transparent 70%),
+  linear-gradient(rgb(14 26 43 / .025) 1px,transparent 1px) 0 0/100% 32px,linear-gradient(90deg,rgb(14 26 43 / .025) 1px,transparent 1px) 0 0/32px 100%,var(--bg);background-attachment:fixed}
+.sample-pro{background:linear-gradient(135deg,#060a11,#111a27)}.sample-pro i{background:#1a2535!important}.sample-pro b{background:#38d0f2!important;border-color:#7ddff6!important}.sample-pro em{background:linear-gradient(160deg,transparent 50%,#1fc98b 51%,transparent 56%),#0d141f!important;border-color:#28374d!important}
+:root .v10 .num,:root .v10 td,:root .v10 .hxv{font-variant-numeric:tabular-nums}
+
+/* shell */
+:root .app.v10{grid-template-columns:204px minmax(0,1fr)}
+:root .v10 aside{margin:0;top:0;height:100dvh;border:0;border-right:1px solid var(--line);border-radius:0;background:linear-gradient(180deg,var(--bg-2),var(--bg));box-shadow:none;padding:14px 10px 12px;gap:1px;color:var(--text-2)}
+:root .v10 .brand{padding:2px 8px 14px;gap:10px}.v10 .brand b{font-size:15px;letter-spacing:-.3px;color:var(--text)}.v10 .brand small{font-size:8px;letter-spacing:1.6px;color:var(--muted)}
+:root .v10 .logo{width:30px;height:30px;border-radius:8px;font-size:12px;background:linear-gradient(140deg,var(--accent),#7a6cf0);color:#04121a;box-shadow:var(--glow)}
+:root .v10 .nav-label{font-size:9px;letter-spacing:1.6px;color:var(--muted);padding:14px 10px 5px;opacity:.85}
+:root .v10 .nav{min-height:32px;padding:6px 10px;gap:10px;font-size:12.5px;border-radius:7px;color:var(--text-2);position:relative}
+:root .v10 .nav svg{width:16px;height:16px;stroke-width:1.7}
+:root .v10 .nav:hover{background:var(--card-2);color:var(--text)}
+:root .v10 .nav.on{background:linear-gradient(90deg,var(--accent-soft),transparent);color:var(--text);box-shadow:none}
+:root .v10 .nav.on::before{content:"";position:absolute;left:-10px;top:6px;bottom:6px;width:2px;border-radius:2px;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+:root .v10 .nav.on svg{color:var(--accent)}
+:root .v10 .side-foot{padding:10px 8px 0;gap:4px}.v10 .side-foot .chip{color:var(--muted);font-size:10px}.v10 .side-foot a.chip{border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+:root .v10 main{padding:0 18px 40px;max-width:2100px}
+
+/* one header bar */
+:root .v10 .top{position:sticky;top:0;z-index:20;margin:0 -18px 12px;padding:8px 18px;min-height:54px;gap:10px;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);box-shadow:none;flex-wrap:nowrap}
+:root .v10 .ttl{display:flex;flex-direction:column;min-width:0;gap:1px}
+:root .v10 .crumbs{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap;overflow:hidden}
+:root .v10 .crumbs .eyebrow{font-size:9px;letter-spacing:1.5px;color:var(--accent);margin:0;font-weight:700}
+:root .v10 .pdesc{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+:root .v10 #title{font-size:19px;line-height:1.15;letter-spacing:-.025em;margin:0;white-space:nowrap}
+:root .v10 .tchips{display:flex;align-items:center;gap:6px;margin-left:10px;min-width:0;overflow:hidden}
+:root .v10 .tchips #mode{background:var(--accent-soft);color:var(--accent-2);border:0;border-radius:5px}
+:root .v10 .tchips #status{border:0;background:none;padding:4px 2px}
+:root .v10 #contextNote{font-size:10.5px;color:var(--muted);border-left:1px solid var(--line-2);padding-left:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+:root .v10 .top .page-actions{display:flex;gap:6px;flex-wrap:nowrap}
+:root .v10 .top .btn,:root .v10 .top .bookbtn{min-height:32px;padding:5px 10px;font-size:11px;border-radius:7px}
+:root .v10 .top .btn.icon{min-width:32px;min-height:32px;padding:6px}
+:root .v10 .connection{font-size:10px}.v10 #clock{font-size:11px;color:var(--text-2);font-weight:600;padding:0 2px}
+:root .v10 .shbar{margin:0 0 10px}
+:root .v10 .connection-banner{margin-bottom:10px}
+
+/* panels */
+:root .v10 .grid{gap:12px}
+:root .v10 .card,:root .v10 .hsec,:root .v10 .hx{background:linear-gradient(180deg,rgb(255 255 255 / .022),transparent 120px),var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / .035);padding:14px}
+:root[data-theme="light"] .v10 .card,:root[data-theme="light"] .v10 .hsec,:root[data-theme="light"] .v10 .hx{box-shadow:0 1px 2px rgb(14 26 43 / .05)}
+:root .v10 .card h3,:root .v10 .hhead h3,:root .v10 .hfold h3{font-family:var(--sans);font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-2);margin:0 0 10px;gap:8px}
+:root .v10 .hhead h3,:root .v10 .hfold h3{margin:0}
+:root .v10 .card h3 .heading-note,:root .v10 .heading-note{font-size:10.5px;letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted);margin-left:2px}
+:root .v10 .hhead{margin-bottom:10px}
+:root .v10 .empty{padding:6px 0;font-size:12px}
+:root .v10 .text-btn{font-size:11px;min-height:22px;color:var(--accent-2);text-transform:none;letter-spacing:0}
+:root .v10 .btn{border-radius:7px;min-height:32px;font-size:11.5px}
+:root .v10 .seg{border-radius:7px;padding:2px;background:var(--card-2)}.v10 .seg button{min-height:24px;padding:3px 9px;font-size:10.5px;border-radius:5px}
+:root .v10 .seg button.on{background:var(--accent-soft);color:var(--accent-2);box-shadow:inset 0 0 0 1px rgb(56 208 242 / .25)}
+:root .v10 .chip{font-size:10px;padding:3px 8px}
+:root .v10 .tag{font-size:10px;padding:1px 6px;border-radius:5px;background:var(--card-2)}
+:root .v10 .pill{font-size:10.5px;height:18px;min-width:18px}
+:root .v10 th{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:7px 10px;background:var(--card-2)}
+:root .v10 td{padding:7px 10px;font-size:12.5px}
+:root .v10 tr.row:hover td{background:var(--accent-soft)}
+:root .v10 .tbl{border:1px solid var(--line);border-radius:8px;background:transparent}
+:root .v10 .feed{max-height:380px}.v10 .fi{padding:7px 2px;font-size:12px}
+:root .v10 .calhead,:root .v10 .msum,:root .v10 .trade-toolbar,:root .v10 .filters{margin-bottom:10px}
+:root .v10 .trade-toolbar{gap:8px}.v10 .search-field input{padding:8px 0}
+
+/* overview: KPI strip, then main + side columns */
+:root .v10 #p-home .todaystrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-radius:var(--radius);margin-bottom:12px;background:var(--card);border:1px solid var(--line);box-shadow:inset 0 1px 0 rgb(255 255 255 / .035)}
+:root .v10 #p-home .todaystrip:empty{display:none}
+:root .v10 #p-home .todaystrip>div{min-height:0;padding:10px 14px;border:0!important;border-right:1px solid var(--line)!important;gap:2px;position:relative}
+:root .v10 #p-home .todaystrip>div:last-child{border-right:0!important}
+:root .v10 #p-home .todaystrip small{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+:root .v10 #p-home .todaystrip b{font-family:var(--sans);font-size:20px;font-weight:650;letter-spacing:-.02em}
+:root .v10 #p-home .todaystrip em{font-size:11px;color:var(--muted)}
+:root .v10 .hgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);gap:12px;align-items:start}
+:root .v10 .hmain,:root .v10 .hside{display:grid;gap:12px;min-width:0;align-content:start}
+:root .v10 .hgrid .hx,:root .v10 .hgrid .possec,:root .v10 .hgrid .nowsec,:root .v10 .hgrid .card,:root .v10 #p-home .todaystrip{grid-area:auto;grid-column:auto;order:0;min-width:0}
+:root .v10 #title:focus{outline:none}
+:root .v10 .top .btn,:root .v10 .top .bookbtn,:root .v10 .tchips .chip{white-space:nowrap}
+@media(min-width:761px){:root .v10 .only-m{display:none!important}}
+@media(max-width:1600px){:root .v10 .appearance-label{display:none}:root .v10 .appearance-trigger{padding:6px 9px}}
+:root .v10 .hx{padding:12px 14px 0;overflow:hidden;background:radial-gradient(90% 120% at 0% 0%,var(--accent-soft),transparent 60%),var(--card)}
+:root .v10 .hxtop{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+:root .v10 .hxl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+:root .v10 .hxv{font-family:var(--sans);font-size:28px;font-weight:650;letter-spacing:-.03em;margin:0;line-height:1.1}
+:root .v10 .hxd{font-size:12px;min-height:0}.v10 .hxd .chg{padding:2px 8px;font-size:11.5px}
+:root .v10 .hxtop .seg{align-self:center}
+:root .v10 .hxchart{margin:6px -14px 0}
+:root .v10 #equityEmpty{padding:30px 0 34px;text-align:center}
+:root .v10 .market-card .bias-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
+:root .v10 .operations-card .fuel .g .big{font-size:20px}
+:root .v10 .condition-row{padding:7px 0;font-size:11.5px}.v10 .condition-row b{font-size:11.5px}.v10 .condition-note{margin:8px 0;font-size:10.5px}
+:root .v10 .nx2{padding:6px 2px}.v10 .nx2 span,.v10 .nowlead{font-size:12px}.v10 .nx2 b{font-size:12px}
+:root .v10 .rcbtn{min-height:26px;padding:3px 10px;font-size:11px}
+:root .v10 .pick{padding:5px 0;font-size:12px}
+
+/* compact bias rows on the overview (full grid on the Market Bias page) */
+.bx{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card-2);cursor:pointer;min-width:0}
+.bx:hover{border-color:var(--accent)}
+.bx .s{font-weight:700;font-size:13px}.bx .p{font-size:12px;color:var(--text-2)}
+.bx .tfr{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.tfc{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 0;border-radius:5px;background:var(--card);border:1px solid var(--line);font-size:9px;color:var(--muted);letter-spacing:.05em}
+.tfc b{font-size:12px;line-height:1}.tfc.u{border-color:rgb(31 201 139 / .35);background:var(--up-soft)}.tfc.u b{color:var(--up-text)}
+.tfc.d{border-color:rgb(255 90 106 / .35);background:var(--down-soft)}.tfc.d b{color:var(--down-text)}.tfc.n b{color:var(--muted)}
+.tfc.ctx{opacity:.75}
+.ctxp{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:5px;border:1px solid var(--line-2);color:var(--text-2);white-space:nowrap}
+.ctxp.Bullish{color:var(--up-text);border-color:rgb(31 201 139 / .4);background:var(--up-soft)}.ctxp.Bearish{color:var(--down-text);border-color:rgb(255 90 106 / .4);background:var(--down-soft)}
+.ctxp.Mixed,.ctxp.Suspended,.ctxp.In{color:var(--warn);border-color:rgb(244 181 68 / .4);background:var(--warn-soft)}
+.elig{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-2);min-width:0}
+.elig i{width:7px;height:7px;border-radius:50%;flex:none;background:var(--muted)}
+.elig.ready i{background:var(--up);box-shadow:0 0 8px var(--up)}.elig.open i{background:var(--accent);box-shadow:0 0 8px var(--accent)}.elig.wait i{background:var(--warn)}.elig.blocked i{background:var(--down)}
+.elig b{color:var(--text);font-weight:600;white-space:nowrap}.elig span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* open positions: entry → current → stop → target on one rail */
+:root .v10 .pos{gap:8px}
+.pc{padding:11px 12px;border-radius:9px;background:var(--card-2);border:1px solid var(--line);cursor:pointer;position:relative;overflow:hidden}
+.pc:hover{border-color:var(--accent)}
+.pc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--side-c,var(--accent))}
+.pc.L{--side-c:var(--up)}.pc.S{--side-c:var(--down)}
+.pc .h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.pc .h b.sym{font-size:14px}.pc .h .sp{flex:1}
+.pc .pl{font-size:16px;font-weight:700}.pc .plr{font-size:11.5px;font-weight:600;margin-left:6px}
+.pc .meta{font-size:11px;color:var(--muted);white-space:nowrap}
+.rail{position:relative;height:6px;margin:34px 6px 34px;border-radius:99px;background:linear-gradient(90deg,var(--down-soft),var(--card) 45%,var(--up-soft))}
+.rail .seg2{position:absolute;top:0;bottom:0;border-radius:99px}
+.rail .mk{position:absolute;top:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;border:2px solid var(--card-2)}
+.rail .mk.st{background:var(--down)}.rail .mk.st0{background:transparent;border:1.5px dashed var(--down);width:9px;height:9px}
+.rail .mk.en{background:var(--text);width:8px;height:8px}.rail .mk.tg{background:var(--up)}
+.rail .mk.now{width:13px;height:13px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),0 0 12px var(--accent);border:0}
+.rail .lb{position:absolute;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap;line-height:1.15;text-align:center}
+.rail .lb.t{bottom:12px}.rail .lb.b{top:12px}.rail .lb b{display:block;color:var(--text-2);font-weight:600;font-size:10.5px}
+.rail .lb.now b{color:var(--accent-2)}
+.pc .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;font-size:11px}
+.pc .grid4 div{display:flex;flex-direction:column;gap:1px;min-width:0}.pc .grid4 small{color:var(--muted);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase}
+.pc .grid4 b{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc .anl{margin-top:8px}
+.pempty{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:2px 0}
+.pempty b{color:var(--text-2);font-weight:600}
+
+/* Market Bias page */
+.mb-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px}
+.mbc{display:flex;flex-direction:column;gap:10px;cursor:pointer}
+.mbc:hover{border-color:var(--accent)}
+.mbc .h{display:flex;align-items:flex-start;gap:10px}
+.mbc .ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:800;background:var(--accent-soft);color:var(--accent-2);flex:none;letter-spacing:.03em}
+.mbc .nm b{display:block;font-size:13.5px}.mbc .nm small{color:var(--muted);font-size:11px}
+.mbc .h .ctxp{margin-left:auto}
+.mbc .px{display:flex;align-items:baseline;gap:8px}.mbc .px b{font-size:22px;font-weight:650;letter-spacing:-.02em}.mbc .px span{font-size:11.5px;font-weight:600}
+.mbc .tfr{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.mbc .tfc{padding:5px 0;font-size:9.5px}.mbc .tfc b{font-size:14px}
+.mbc .ft{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}
+.gbar{position:relative;height:5px;border-radius:99px;background:linear-gradient(90deg,var(--down) 0%,var(--line-2) 50%,var(--up) 100%);opacity:.85}
+.gbar i{position:absolute;top:-4px;width:3px;height:13px;border-radius:2px;background:var(--text);box-shadow:0 0 0 2px var(--card)}
+.gbar em{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--text-2);opacity:.5}
+.mbt td.c{text-align:center}.mbt .tag2{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;border:1px solid var(--line-2);min-width:74px;justify-content:center}
+.mbt .tag2.u{color:var(--up-text);border-color:rgb(31 201 139 / .4);background:var(--up-soft)}.mbt .tag2.d{color:var(--down-text);border-color:rgb(255 90 106 / .4);background:var(--down-soft)}.mbt .tag2.n{color:var(--warn);border-color:rgb(244 181 68 / .35)}
+.mbt th.ctxh{color:var(--muted);opacity:.8}.mbt td.sym b{display:block}.mbt td.sym small{color:var(--muted)}
+.mbe{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)}
+.mbe:last-child{border-bottom:0}.mbe .ic{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--card-2);border:1px solid var(--line);color:var(--text-2)}
+.mbe .w{display:flex;flex-direction:column;gap:3px;min-width:0}.mbe .w .elig span{white-space:normal}.mbe .ls{font-size:11px;color:var(--muted)}
+.wl{position:relative;height:28px;border-radius:6px;background:var(--card-2);border:1px solid var(--line);margin:4px 0 18px}
+.wl .w{position:absolute;top:3px;bottom:3px;border-radius:4px;background:var(--accent-soft);border:1px solid rgb(56 208 242 / .35)}
+.wl .nw{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.wl .tk{position:absolute;top:100%;margin-top:3px;transform:translateX(-50%);font-size:9px;color:var(--muted)}
+.mb-rules{display:grid;gap:8px;margin-top:4px}.mb-rules>div{display:grid;grid-template-columns:96px 1fr;gap:10px;font-size:11.5px;color:var(--text-2);padding:8px 0;border-top:1px solid var(--line)}
+.mb-rules b{font-size:11px;color:var(--text)}
+
+/* trade drawer: wider on desktops so the chart has room */
+@media(min-width:1100px){html:root body .drawer{width:min(760px,62vw)}}
+/* ask button: smaller, out of the way */
+html:root body .askfab{right:16px;bottom:16px;padding:8px 13px 8px 10px;font-size:12px;box-shadow:0 6px 20px rgb(0 0 0 / .35)}
+@media(min-width:761px){html:root body .askfab{display:none}}
+html:root body .askfab svg{width:16px;height:16px}
+
+@media (min-width:761px) and (max-width:1180px){
+  :root .app.v10{grid-template-columns:62px minmax(0,1fr)}
+  :root .v10 aside{padding:12px 8px}.v10 .brand>div:last-child,.v10 .nav-label,.v10 .side-foot{display:none}
+  :root .v10 .nav{font-size:0;justify-content:center;padding:8px 0}.v10 .nav svg{width:18px;height:18px}.v10 .nav.on::before{left:-8px}
+  :root .v10 .pdesc,:root .v10 #contextNote,:root .v10 .appearance-label{display:none}
+  :root .v10 .hgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:1380px){:root .v10 .pdesc{display:none}}
+@media (max-width:760px){
+  :root .app.v10{grid-template-columns:minmax(0,1fr)}
+  :root .v10 main{padding:0 12px calc(96px + env(safe-area-inset-bottom))}
+  :root .v10 .top{position:relative;margin:0 -12px 10px;padding:calc(8px + var(--sat,0px)) 12px 8px;flex-wrap:wrap;row-gap:6px}
+  :root .v10 .ttl{order:0;flex:1}:root .v10 #theme{order:1}:root .v10 #appearance,:root .v10 .connection{display:none}
+  :root .v10 #clock{order:1}
+  :root .v10 .tchips{order:2;flex-basis:100%;margin:0;flex-wrap:wrap}
+  :root .v10 .top .page-actions{order:3;flex-basis:100%;flex-wrap:wrap}
+  :root .v10 .top .btn,:root .v10 .top .bookbtn{min-height:36px}
+  :root .v10 #title{font-size:22px}:root .v10 .crumbs,:root .v10 .hide-m,:root .v10 #contextNote{display:none!important}
+  :root .v10 #p-home .todaystrip{grid-template-columns:1fr 1fr}
+  :root .v10 #p-home .todaystrip>div:nth-child(2){border-right:0!important}
+  :root .v10 #p-home .todaystrip>div:nth-child(-n+2){border-bottom:1px solid var(--line)!important}
+  :root .v10 .hgrid{grid-template-columns:minmax(0,1fr)}
+  :root .v10 .hxv{font-size:26px}
+  .pc .grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mbt{min-width:640px}
+  html:root body .askfab{bottom:calc(84px + env(safe-area-inset-bottom))}
+}
 </style>
 </head>
 <body>
@@ -874,15 +1092,17 @@ button,input,select,textarea{font-family:inherit}
   <symbol id="i-cmp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="M14 8l3-3 3 3" /></symbol>
   <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-bias" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/><path d="M3 21h18"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></symbol>
 </svg>
 
-<div class="app">
+<div class="app v10">
   <aside aria-label="Main navigation">
     <div class="brand"><div class="logo">FX</div><div><b>FX-Agents</b><small>TRADING WORKSPACE</small></div></div>
     <div class="nav-label">WORKSPACE</div>
     <button class="nav on" data-p="home"><svg><use href="#i-home"/></svg>Overview</button>
+    <button class="nav" data-p="bias"><svg><use href="#i-bias"/></svg>Market Bias</button>
     <button class="nav" data-p="calendar"><svg><use href="#i-cal"/></svg>P&amp;L calendar</button>
     <button class="nav" data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
     <button class="nav" data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
@@ -904,23 +1124,21 @@ button,input,select,textarea{font-family:inherit}
 
   <main id="workspace" tabindex="-1">
     <header class="top">
-      <div class="workspace-name">FX / <span>Trading workspace</span></div>
+      <div class="ttl"><div class="crumbs"><span class="eyebrow" id="pageGroup">WORKSPACE / OVERVIEW</span><span class="pdesc" id="pageDescription">Your account, positions and market context at a glance.</span></div><h1 id="title" tabindex="-1">Overview</h1></div>
+      <div class="tchips"><span class="chip" id="mode">Awaiting account</span><span class="chip" id="status">Awaiting state</span><span id="contextNote">Connecting to your trading workspace…</span></div>
       <span class="sp"></span>
       <span class="connection" id="connection" role="status">Connecting…</span>
       <span class="chip num" id="clock">— NY</span>
-      <button class="btn appearance-trigger" id="appearance" aria-label="Customize appearance" aria-haspopup="dialog"><span class="accent-dot"></span><span class="appearance-label">Appearance</span></button>
-      <button class="btn icon" id="theme" title="Switch color theme" aria-label="Switch color theme"><svg><use href="#i-sun"/></svg></button>
-    </header>
-    <div class="page-heading">
-      <div><div class="eyebrow" id="pageGroup">WORKSPACE / OVERVIEW</div><h1 id="title" tabindex="-1">Overview</h1><p id="pageDescription">Your account, positions and market context at a glance.</p></div>
       <div class="page-actions">
         <button class="bookbtn" id="bookBtn" hidden aria-haspopup="listbox" aria-expanded="false"><i class="bd"></i><span class="bn" id="bookName">Account</span><span class="bk" id="bookKind">account</span><svg><use href="#i-right"/></svg></button>
         <button class="btn" id="pause" disabled title="Pause new entries"><svg><use href="#i-pause"/></svg><span>Pause entries</span></button>
         <button class="btn red" id="flatten" disabled>Flatten all</button>
-        <button class="btn icon only-m" id="appearance2" type="button" aria-label="Appearance" title="Appearance"><svg><use href="#i-sun"/></svg></button>
       </div>
-    </div>
-    <div class="context-strip"><span class="chip" id="mode">Awaiting account</span><span class="chip" id="status">Awaiting state</span><span id="contextNote">Connecting to your trading workspace…</span></div>
+      <button class="btn hide-m" id="askTop" type="button" title="Ask the bot about its own records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span>Ask</span></button>
+      <button class="btn appearance-trigger" id="appearance" aria-label="Customize appearance" aria-haspopup="dialog"><span class="accent-dot"></span><span class="appearance-label">Appearance</span></button>
+      <button class="btn icon" id="theme" title="Switch color theme" aria-label="Switch color theme"><svg><use href="#i-sun"/></svg></button>
+      <button class="btn icon only-m" id="appearance2" type="button" aria-label="Appearance" title="Appearance"><svg><use href="#i-sun"/></svg></button>
+    </header>
     <div class="connection-banner" id="connectionBanner" role="status" hidden></div>
 
     <div class="shbar" id="shbar"><span id="shtext">Paper book: virtual fills, no orders are sent</span></div>
@@ -928,25 +1146,40 @@ button,input,select,textarea{font-family:inherit}
     <!-- OVERVIEW -->
     <section class="page on" id="p-home">
       <div id="newsBanner"></div>
-      <div class="home">
-        <div class="hx" id="hero">
-          <div class="kpi hxk">
-            <div class="hxtop"><span class="hxl" id="hxLabel">Equity</span><span class="sp" style="flex:1"></span>
-              <div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></div>
-            <div class="hxv num" id="equityValue">—</div>
-            <div class="hxd" id="hxDelta"></div>
+      <div class="todaystrip" id="todayStrip"></div>
+      <div class="hgrid">
+        <div class="hmain">
+          <div class="hx" id="hero">
+            <div class="kpi hxk">
+              <div class="hxtop"><span class="hxl" id="hxLabel">Equity</span><div class="hxv num" id="equityValue">—</div><div class="hxd" id="hxDelta"></div><span class="sp" style="flex:1"></span>
+                <div class="seg" id="eqSeg" aria-label="Equity period"><button data-r="1D">1D</button><button data-r="1W" class="on">1W</button><button data-r="ALL">All</button></div></div>
+            </div>
+            <div class="chart hxchart"><svg id="eq" height="150" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
+            <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
           </div>
-          <div class="chart hxchart"><svg id="eq" height="132" role="img" aria-label="Account equity over time"></svg><div class="tip" id="eqTip"></div></div>
-          <div class="empty" id="equityEmpty" hidden>The equity line appears after two snapshots.</div>
+          <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History ›</button></div><div class="pos" id="positions"></div></div>
+          <div class="card market-card"><h3>Market bias <span class="mut heading-note">Daily · 4H · 1H structure</span><span class="sp"></span><span id="swipeHint" hidden></span><button class="text-btn" data-p="bias">All timeframes ›</button></h3><div class="bias-row" id="bias"></div></div>
         </div>
-        <div class="todaystrip" id="todayStrip"></div>
-        <div class="hsec possec"><div class="hhead"><h3>Open positions</h3><span class="pill" id="posCount">0</span><span class="sp" style="flex:1"></span><button class="text-btn" data-p="trades">History</button></div><div class="pos" id="positions"></div></div>
-        <div class="hsec nowsec" id="nowSec"><div class="hhead"><button class="hfold" id="nowFold" type="button" aria-expanded="true" aria-controls="nowBody"><h3>Up next</h3><span class="peek" id="nowPeek"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="btn rcbtn" id="recapBtn" type="button"><span class="long">Evening </span>Recap</button></div><div id="nowBody"><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div></div>
+        <div class="hside">
+          <div class="card operations-card"><h3>Trading conditions</h3><div class="fuel" id="fuel"></div><div id="conditions"><div class="empty">Waiting for account data…</div></div><button class="text-btn" data-p="agents">Agents and activity ›</button></div>
+          <div class="hsec nowsec" id="nowSec"><div class="hhead"><button class="hfold" id="nowFold" type="button" aria-expanded="true" aria-controls="nowBody"><h3>Up next</h3><span class="peek" id="nowPeek"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="btn rcbtn" id="recapBtn" type="button"><span class="long">Evening </span>Recap</button></div><div id="nowBody"><p class="nowlead" id="nowLead"></p><div id="nowLine" class="nowlist"></div></div></div>
+          <div class="card selections-card"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
+        </div>
       </div>
-      <div class="grid home-rest">
-        <div class="card c12 market-card"><h3>Market watch <span class="mut heading-note">daily, 4-hour and 1-hour trend</span><span class="sp"></span><span class="mut" id="swipeHint"></span></h3><div class="bias-row" id="bias"></div></div>
-        <div class="card c6 selections-card"><h3>Strategy selection <span class="sp"></span><span class="tag">This hour</span></h3><div id="picks"></div></div>
-        <div class="card c6 operations-card"><h3>Trading conditions</h3><div class="fuel" id="fuel"></div><div id="conditions" style="margin-top:12px"><div class="empty">Waiting for account data…</div></div><button class="text-btn" data-p="agents">Agents and activity</button></div>
+    </section>
+
+    <!-- MARKET BIAS -->
+    <section class="page" id="p-bias">
+      <div class="mb-cards" id="mbCards"><div class="card"><div class="empty">Loading…</div></div></div>
+      <div class="grid">
+        <div class="card c12"><h3>Timeframe alignment <span class="mut heading-note">structure direction on each timeframe · completed candles only</span><span class="sp"></span><span class="mut heading-note" id="mbWhen"></span></h3><div class="tbl" id="mbTable"></div></div>
+        <div class="card c7"><h3>Entry eligibility <span class="mut heading-note">the bot's own checks, first blocking reason shown</span></h3><div id="mbElig"></div></div>
+        <div class="card c5"><h3>Entry windows · New York <span class="sp"></span><span class="mut heading-note" id="mbWinNote"></span></h3><div id="mbWindows"></div>
+          <div class="mb-rules">
+            <div><b>Daily · 4H · 1H</b><span>The bias rule. Score = 0.40 × Daily + 0.35 × 4H + 0.25 × 1H; trades only in its direction once |score| ≥ <span id="mbMin">0.25</span>.</span></div>
+            <div><b>15m · 5m</b><span>Intraday context for you; not part of the rule.</span></div>
+            <div><b>Safeguards</b><span>Bias-aligned losses in a row suspend it until a fresh 1H break; a Jev audit in doubt halves size.</span></div>
+          </div></div>
       </div>
     </section>
 
@@ -1123,6 +1356,7 @@ button,input,select,textarea{font-family:inherit}
 </nav>
 
 <div class="sheet" id="moreSheet">
+  <button data-p="bias"><svg><use href="#i-bias"/></svg>Market Bias</button>
   <button data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
   <button data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
@@ -4064,6 +4298,170 @@ function btHist(H){
     <line x1="${12 * W}" x2="${12 * W}" y1="0" y2="56" stroke="var(--muted)" stroke-width=".3"/></svg>
     <div class="mut" style="display:flex;justify-content:space-between;font-size:11px"><span>≤ −3R</span><span>0</span><span>+3R</span><span>≥ +6R</span></div>`;
 }
+
+/* ══ v10 (Oct 22 2026): Terminal theme · Market Bias page · open-position rail · dense overview ═══════════════════ */
+const INAME = {XAUUSD:"Gold", NDQ:"Nasdaq 100", US30:"Dow 30", SPX500:"S&P 500", BTCUSD:"Bitcoin", ETHUSD:"Ether",
+  EURUSD:"Euro / Dollar", GBPUSD:"Pound / Dollar", USDJPY:"Dollar / Yen", AUDUSD:"Aussie / Dollar", USDCAD:"Dollar / CAD", XAGUSD:"Silver"};
+const ICODE = {XAUUSD:"AU", NDQ:"NQ", US30:"DJ", SPX500:"SP", BTCUSD:"BT", ETHUSD:"ET", XAGUSD:"AG"};
+const icode = s => ICODE[s] || String(s).slice(0, 2);
+const iname = s => INAME[s] || s;
+let BG = null, BG_AT = 0;
+
+/* theme: Terminal joins the presets and toggles light/dark within itself */
+SKIN_PRESETS.pro = {skin:"pro", theme:"dark", surface:"solid"};
+(() => {
+  const box = $(".theme-presets"); if(!box || box.querySelector('[data-preset="pro"]')) return;
+  box.insertAdjacentHTML("afterbegin", `<button type="button" class="theme-preset" data-preset="pro" aria-pressed="false"><span class="theme-sample sample-pro" aria-hidden="true"><i></i><b></b><em></em></span><strong>Terminal</strong><small>Dark · dense · default</small></button>`);
+  box.querySelector('[data-preset="pro"]').onclick = () => setAppearance({...SKIN_PRESETS.pro, theme:document.documentElement.dataset.skin === "pro" ? document.documentElement.dataset.theme : "dark"});
+  syncAppearance();
+})();
+$("#theme").onclick = () => { const d = document.documentElement.dataset;
+  if(d.skin === "pro") return setAppearance({theme:d.theme === "dark" ? "light" : "dark"});
+  setAppearance(d.skin && d.skin !== "classic" ? {skin:"classic", surface:"glass", theme:d.theme === "dark" ? "light" : "dark"} : {theme:d.theme === "dark" ? "light" : "dark"}); };
+
+/* pages */
+titles.bias = "Market Bias";
+pageDescriptions.bias = "Direction on every timeframe, and whether the bot can trade each instrument right now.";
+shortTitles.bias = "Bias";
+MORE.push("bias");
+const _go10 = go;
+go = function(p){
+  _go10(p);
+  if(p === "bias") loadBiasGrid(true);
+  if(p === "home") loadBiasGrid(false);
+};
+setInterval(() => { if(page === "bias") loadBiasGrid(true); else if(page === "home") loadBiasGrid(false); }, 30000);
+
+async function loadBiasGrid(paint){
+  if(!paint && BG && Date.now() - BG_AT < 25000) return;
+  try{ BG = await api(q("api/bias_grid")); BG_AT = Date.now(); }catch(e){ if(paint && !BG) $("#mbCards").innerHTML = `<div class="card"><div class="empty">Couldn't load the bias (${esc(e.message)}).</div></div>`; return; }
+  if(page === "bias") renderBiasPage();
+  if(page === "home" && S) bias(S);
+}
+
+const arrowOf = v => v == null ? `<b class="mut">·</b>` : v > 0 ? `<b>↗</b>` : v < 0 ? `<b>↘</b>` : `<b>—</b>`;
+const tfCls = v => v == null ? "n" : v > 0 ? "u" : v < 0 ? "d" : "n";
+const tfWord = v => v == null ? "—" : v > 0 ? "Bullish" : v < 0 ? "Bearish" : "Neutral";
+function ctxOf(row){ const c = row.context; return c === "In Doubt" ? "In" : c; }
+function eligHTML(e){ if(!e) return ""; return `<div class="elig ${esc(e.state)}"><i></i><b>${esc(e.label)}</b><span>${esc(e.why || "")}</span></div>`; }
+function chg(p){ return p == null ? "" : `<span class="${cls(p)}">${p > 0 ? "+" : ""}${fmt(p, 2)}%</span>`; }
+
+/* overview: one compact row per instrument (Daily / 4H / 1H from the live bias; 15m / 5m from the bias grid) */
+bias = function(s){
+  const el = $("#bias"); if(!el) return;
+  const syms = Object.keys(s.prices).length ? Object.keys(s.prices) : Object.keys(s.bias);
+  const rows = {}; ((BG && BG.rows) || []).forEach(r => rows[r.symbol] = r);
+  el.innerHTML = syms.map(sym => {
+    const b = s.bias[sym] || {}, r = rows[sym] || {}, c = r.cells || {};
+    const cells = [["D", b.d ?? c.d], ["4H", b.h4 ?? c.h4], ["1H", b.h1 ?? c.h1], ["15m", c.m15, 1], ["5m", c.m5, 1]];
+    const label = b.state ? (b.state === "IN DOUBT" ? "In" : b.state === "SUSPENDED" ? "Suspended" : b.state === "BULLISH" ? "Bullish" : b.state === "BEARISH" ? "Bearish" : "Mixed") : (r.context ? ctxOf(r) : "Mixed");
+    const shown = b.state ? (b.state === "NEUTRAL" ? "Neutral" : b.state.charAt(0) + b.state.slice(1).toLowerCase()) : (r.context || "—");
+    return `<div class="bx" data-sym="${esc(sym)}" role="button" tabindex="0" title="${esc(iname(sym))}: open the instrument">
+      <div><span class="s">${esc(sym)}</span> <span class="p num">${fpx(s.prices[sym] ?? b.price)}</span> ${chg(r.change_pct)}</div><span></span><span class="ctxp ${label}">${esc(shown)}</span>
+      <div class="tfr">${cells.map(([k, v, ctx]) => `<div class="tfc ${tfCls(v)}${ctx ? " ctx" : ""}" title="${k}: ${tfWord(v)}${ctx ? " (context only)" : ""}">${k}${arrowOf(v)}</div>`).join("")}</div>
+      ${r.eligibility ? `<div style="grid-column:1/-1">${eligHTML(r.eligibility)}</div>` : ""}
+    </div>`;
+  }).join("") || `<div class="empty">Waiting for prices…</div>`;
+  $$("#bias .bx").forEach(x => { x.onclick = () => openInstrument(x.dataset.sym); x.onkeydown = e => { if(e.key === "Enter") openInstrument(x.dataset.sym); }; });
+};
+
+/* open positions: stop · entry · now · target on one rail, in R from the entry */
+let SEEN10 = null;
+positions = function(s){
+  $("#posCount").textContent = s.positions.length;
+  const el = $("#positions");
+  if(!s.positions.length){
+    const syms = Object.keys(s.prices);
+    el.innerHTML = `<div class="pempty"><b>No open positions.</b><span>${s.trading_enabled ? "Watching " + esc(syms.join(" · ")) + " for setups." : "New entries are paused."}</span><button class="text-btn" data-go="bias">Why not trading? ›</button></div>`;
+    el.querySelector("[data-go]").onclick = () => go("bias");
+    SEEN10 = new Set(); return;
+  }
+  el.innerHTML = s.positions.map(p => {
+    const L = p.side === "LONG", risk = Math.abs(p.entry - p.initial_stop) || 1, toR = px => (px - p.entry) / risk * (L ? 1 : -1);
+    const rStop = toR(p.stop), rTgt = p.target != null ? toR(p.target) : null, rNow = p.r_now;
+    const lo = Math.min(-1, rStop, rNow) - .2, hi = Math.max(rTgt ?? 1, rNow, 1) + .2, X = r => (r - lo) / (hi - lo) * 100;
+    const a = Math.min(X(0), X(rNow)), w = Math.abs(X(rNow) - X(0));
+    const moved = Math.abs(rStop + 1) > .02;
+    const near = Math.abs(X(rStop) - X(0)) < 14, LX = r => Math.min(91, Math.max(9, X(r)));
+    const held = p.opened && S && S.now ? Math.max(0, (new Date(S.now) - new Date(p.opened)) / 60000) : null;
+    const heldTxt = held == null ? "" : held >= 120 ? Math.floor(held / 60) + "h " + String(Math.round(held % 60)).padStart(2, "0") + "m" : Math.round(held) + "m";
+    const strat = String(p.strategy || "").split("@")[0];
+    const stopState = p.stop_in_profit ? "in profit" : moved ? "trailed" : "initial";
+    return `<div class="pc pcard ${L ? "L" : "S"}" data-id="${esc(p.id)}">
+      <div class="h prow"><span class="side ${p.side[0]}">${p.side}</span><b class="sym">${esc(p.symbol)}</b><span class="tag acc">${esc(strat)}</span>
+        ${p.bias_mode ? `<span class="tag">${esc(String(p.bias_mode).replace("_", " "))}</span>` : ""}<span class="popen meta">open ›</span><span class="sp"></span>
+        <span class="pl num ${cls(p.unrealized)}">${smoney(p.unrealized, 0)}</span><span class="plr num ${cls(rNow)}">${sR(rNow)}</span></div>
+      <div class="meta" style="margin-top:3px">${p.opened ? "opened " + hm(p.opened) + " NY" : ""}${heldTxt ? " · " + heldTxt : ""} · step ${p.stage}${p.adds ? ` · +${p.adds} adds` : ""}${p.partial_done ? " · partial banked" : ""}</div>
+      <div class="rail" aria-label="Stop, entry, current price and target">
+        <span class="seg2" style="left:${a}%;width:${w}%;background:var(${rNow >= 0 ? "--up" : "--down"});opacity:.85"></span>
+        ${moved ? `<i class="mk st0" style="left:${X(-1)}%" title="initial stop ${fpx(p.initial_stop)}"></i>` : ""}
+        <i class="mk st" style="left:${X(rStop)}%" title="stop ${fpx(p.stop)}"></i>
+        <i class="mk en" style="left:${X(0)}%" title="entry ${fpx(p.entry)}"></i>
+        ${rTgt != null ? `<i class="mk tg" style="left:${X(rTgt)}%" title="target ${fpx(p.target)}"></i>` : ""}
+        <i class="mk now" style="left:${X(rNow)}%" title="now ${fpx(p.price)}"></i>
+        <span class="lb ${near ? "b" : "t"}" style="left:${LX(rStop)}%">Stop<b class="num">${fpx(p.stop)}</b></span>
+        <span class="lb t" style="left:${LX(0)}%">Entry<b class="num">${fpx(p.entry)}</b></span>
+        ${rTgt != null ? `<span class="lb t" style="left:${LX(rTgt)}%">Target ${sR(rTgt, 1)}<b class="num">${fpx(p.target)}</b></span>` : ""}
+        ${near ? "" : `<span class="lb b now" style="left:${LX(rNow)}%">Now<b class="num">${fpx(p.price)}</b></span>`}
+      </div>
+      <div class="grid4">
+        <div><small>Size</small><b>${lots(p.lots)}</b></div>
+        <div><small>Stop</small><b>${sR(rStop, 2)} · ${stopState}</b></div>
+        <div><small>Risk</small><b>${p.stop_pips != null ? fmt(p.stop_pips, 0) + " pts" : fpx(risk)}${p.risk_mult < 1 ? ` · ×${p.risk_mult}` : ""}</b></div>
+        <div><small>Jev</small><b>${p.jev_quality != null ? fmt(p.jev_quality, 2) + " / " + fmt(p.jev_confidence, 2) : "—"}</b></div>
+      </div>
+      ${p.analyst && p.analyst.verdict ? `<div class="anl v-${esc(p.analyst.verdict)}" title="Shadow analyst — advice only, it never touches the trade"><b>Analyst: ${esc(ANL_V[p.analyst.verdict] || p.analyst.verdict)}</b>${(p.analyst.checks || []).length ? " · " + (p.analyst.checks || []).map(c => esc(ANL_C[c] || c)).join(" · ") : " · trade on track"}</div>` : ""}
+    </div>`;
+  }).join("");
+  $$("#positions .pc").forEach((c, i) => { const p = s.positions[i]; if(!p) return;
+    if(SEEN10 && !SEEN10.has(p.id)) c.classList.add("fresh");
+    c.onclick = e => { if(e.target.closest("button,a,.slide")) return; openTrade(posTrade(p));
+      const k = $$("#drawer .kpi .v")[1]; if(k){ k.textContent = sR(p.r_now) + " now"; k.className = "v num " + cls(p.r_now); } }; });
+  SEEN10 = new Set(s.positions.map(p => p.id));
+};
+
+/* the Market Bias page */
+function renderBiasPage(){
+  if(!BG) return;
+  const rows = BG.rows || [], tfs = BG.tfs || [];
+  $("#mbWhen").textContent = BG.now ? "as of " + hm(BG.now) + " NY" : "";
+  $("#mbMin").textContent = fmt(BG.min_align, 2);
+  $("#mbCards").innerHTML = rows.map(r => {
+    const c = r.cells || {}, pos = r.score == null ? null : Math.round((r.score + 1) / 2 * 100);
+    const n = r.known || 0, agree = r.up >= r.down ? `${r.up} of ${n} bullish` : `${r.down} of ${n} bearish`;
+    return `<div class="card mbc" data-sym="${esc(r.symbol)}" role="button" tabindex="0">
+      <div class="h"><span class="ic">${esc(icode(r.symbol))}</span><div class="nm"><b>${esc(iname(r.symbol))}</b><small>${esc(r.symbol)}</small></div><span class="ctxp ${ctxOf(r)}">${esc(r.context)}</span></div>
+      <div class="px"><b class="num">${fpx(r.price)}</b>${chg(r.change_pct)}<span class="mut" style="font-weight:500">since 17:00</span></div>
+      <div class="tfr">${tfs.map(t => `<div class="tfc ${tfCls(c[t.key])}${t.key.startsWith("m") ? " ctx" : ""}" title="${t.label}: ${tfWord(c[t.key])}">${t.label}${arrowOf(c[t.key])}</div>`).join("")}</div>
+      ${pos == null ? "" : `<div class="gbar" title="bias score ${fmt(r.score, 2)}"><em style="left:${(1 - BG.min_align) / 2 * 100}%"></em><em style="left:${(1 + BG.min_align) / 2 * 100}%"></em><i style="left:calc(${pos}% - 1px)"></i></div>`}
+      <div class="ft"><span>${n ? agree : "warming up"}</span><span>score <b class="num ${cls(r.score)}">${r.score == null ? "—" : (r.score > 0 ? "+" : "") + fmt(r.score, 2)}</b></span></div>
+      ${eligHTML(r.eligibility)}
+    </div>`;
+  }).join("") || `<div class="card"><div class="empty">No instruments.</div></div>`;
+  $$("#mbCards .mbc").forEach(x => { x.onclick = () => openInstrument(x.dataset.sym); x.onkeydown = e => { if(e.key === "Enter") openInstrument(x.dataset.sym); }; });
+  $("#mbTable").innerHTML = `<table class="mbt"><thead><tr><th>Instrument</th>${tfs.map(t => `<th class="c${t.key.startsWith("m") ? " ctxh" : ""}" style="text-align:center">${t.label}${t.key.startsWith("m") ? " ·ctx" : ""}</th>`).join("")}<th class="r">Score</th><th>Context</th><th>PDH / PDL</th><th class="r">Accuracy</th></tr></thead><tbody>${rows.map(r => {
+    const c = r.cells || {}, pd = r.pd_pos == null ? "" : r.pd_pos > 1 ? " · above PDH" : r.pd_pos < 0 ? " · below PDL" : r.pd_pos > .5 ? ` · premium ${Math.round(r.pd_pos * 100)}%` : ` · discount ${Math.round((1 - r.pd_pos) * 100)}%`;
+    return `<tr><td class="sym"><b>${esc(r.symbol)}</b><small>${esc(iname(r.symbol))}</small></td>${tfs.map(t => `<td class="c"><span class="tag2 ${tfCls(c[t.key])}">${c[t.key] == null ? "—" : (c[t.key] > 0 ? "↗ " : c[t.key] < 0 ? "↘ " : "— ") + tfWord(c[t.key])}</span></td>`).join("")}
+      <td class="r num ${cls(r.score)}">${r.score == null ? "—" : (r.score > 0 ? "+" : "") + fmt(r.score, 2)}</td><td><span class="ctxp ${ctxOf(r)}">${esc(r.context)}</span></td>
+      <td class="num mut">${r.pdh == null ? "—" : fpx(r.pdh) + " / " + fpx(r.pdl)}${pd}</td><td class="r num mut">${r.accuracy == null ? "—" : Math.round(r.accuracy * 100) + "% (" + r.accuracy_n + ")"}</td></tr>`; }).join("")}</tbody></table>`;
+  $("#mbElig").innerHTML = rows.map(r => {
+    const ls = r.last_signal;
+    return `<div class="mbe"><span class="ic">${esc(icode(r.symbol))}</span><div class="w"><div style="display:flex;gap:8px;align-items:baseline"><b>${esc(r.symbol)}</b><span class="mut" style="font-size:11px">${esc(iname(r.symbol))}</span></div>${eligHTML(r.eligibility)}
+      ${ls ? `<div class="ls">Last signal ${md(ls.ts)} ${hm(ls.ts)} · ${esc(String(ls.strategy || "").split("@")[0])} ${Number(ls.side) > 0 ? "long" : "short"} · <b>${esc(ls.action)}</b>${ls.why ? " — " + esc(ls.why) : ""}</div>` : `<div class="ls">No signals recorded yet.</div>`}</div></div>`;
+  }).join("");
+  const wins = BG.windows || [], mins = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const nowM = BG.now ? Number(BG.now.slice(11, 13)) * 60 + Number(BG.now.slice(14, 16)) : null;
+  const inWin = nowM != null && wins.some(([a, b]) => nowM >= mins(a) && nowM < mins(b));
+  $("#mbWinNote").textContent = nowM == null ? "" : inWin ? "inside a window now" : "outside the windows now";
+  $("#mbWindows").innerHTML = `<div class="wl">${wins.map(([a, b]) => `<span class="w" style="left:${mins(a) / 14.4}%;width:${(mins(b) - mins(a)) / 14.4}%" title="${a}–${b} NY"></span>`).join("")}
+    ${nowM == null ? "" : `<span class="nw" style="left:${nowM / 14.4}%" title="now"></span>`}${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => `<span class="tk" style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, "0")}</span>`).join("")}</div>
+    <div class="mut" style="font-size:11px;margin-top:-4px">${wins.map(([a, b]) => `${a}–${b}`).join(" · ")} · day-trading flatten 15:50</div>`;
+}
+
+$("#askTop").onclick = () => $("#askFab").click();
+/* first paint: honour #bias in the address (the router ran before this page existed) */
+if(location.hash === "#bias") go("bias"); else if(page === "home") loadBiasGrid(false);
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-10-22.v10");
 </script>
 </body>
 </html>
