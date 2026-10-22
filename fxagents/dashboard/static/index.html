@@ -1178,10 +1178,10 @@ html body{font-size:13.5px}
 /* paired rows: each pair shares a height, so no column runs longer than its neighbour */
 :root .v10 .hrows{gap:12px;align-items:stretch}
 :root .v10 .hrows>*{min-width:0;margin:0}
-:root .v10 .hrows>*{grid-area:auto;order:0}:root .v10 .hrows>.c8{grid-column:span 8}:root .v10 .hrows>.c4{grid-column:span 4}
+:root .v10 .hrows>*{grid-area:auto;order:0}:root .v10 .hrows>.c8{grid-column:span 8}:root .v10 .hrows>.c4{grid-column:span 4}:root .v10 .hrows>.c6{grid-column:span 6}:root .v10 .hrows>.c12{grid-column:span 12}
 :root .v10 .hrows .hx{display:flex;flex-direction:column;padding:16px 18px 0;background:var(--card)}
 :root .v10 .hrows .hx .hxtop{align-items:center;gap:12px}
-:root .v10 .hrows .hxchart{margin:10px -18px 0;flex:1;display:flex;align-items:flex-end}
+:root .v10 .hrows .hxchart{margin:10px -18px 0;flex:1;display:flex;align-items:flex-end;max-height:330px}
 :root .v10 .hrows .market-card .bias-row{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 :root .v10 .hrows .market-card{display:flex;flex-direction:column}
 :root .v10 .hrows .market-card .bias-row{flex:1;grid-auto-rows:1fr}
@@ -1193,10 +1193,100 @@ html body{font-size:13.5px}
 :root .v10 .nx2{padding:8px 2px}.v10 .nx2 span,.v10 .nowlead{font-size:13px}.v10 .nx2 b{font-size:12.5px}
 :root .v10 .pick{font-size:13px;padding:7px 0}
 .pc .pl{font-size:18px}.pc .h b.sym{font-size:15px}.pc .grid4 b{font-size:13px}
-@media (max-width:1180px){:root .v10 .hrows>.c8,:root .v10 .hrows>.c4{grid-column:span 12}.kcards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1180px){:root .v10 .hrows>.c8,:root .v10 .hrows>.c4,:root .v10 .hrows>.c6{grid-column:span 12}.kcards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:761px) and (max-width:1180px){:root .app.v10{grid-template-columns:64px minmax(0,1fr)}:root .v10 .nav{font-size:0}}
 @media (max-width:1180px){:root .v10 .hrows>.possec{order:1}:root .v10 .hrows>.hx{order:2}:root .v10 .hrows>.market-card{order:3}:root .v10 .hrows>.operations-card{order:4}:root .v10 .hrows>.nowsec{order:5}:root .v10 .hrows>.selections-card{order:6}}
 @media (max-width:760px){.kcards{gap:10px}.kc{padding:12px 14px}.kc>b{font-size:22px}:root .app.v10{grid-template-columns:minmax(0,1fr)}}
+
+/* ══ v10 phase 3: Agents & Jev · backtest evidence ══ */
+.kc .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;margin-top:2px}
+.kc .st i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.kc .st.ok{color:var(--up-text)}.kc .st.ok i{background:var(--up);box-shadow:0 0 8px var(--up)}
+.kc .st.warn{color:var(--warn)}.kc .st.warn i{background:var(--warn)}.kc .st.bad{color:var(--down-text)}.kc .st.bad i{background:var(--down)}
+.ag-health .kc>b{font-size:18px;letter-spacing:-.01em}
+.ag-side{display:grid;gap:12px;align-content:stretch;min-width:0}.ag-side>.card{min-width:0}
+:root .v10 .ag-tl{display:flex;flex-direction:column}
+.agtl{flex:1;min-height:320px;max-height:640px;overflow:auto;margin:0 -4px;padding:0 4px}
+.tle{display:grid;grid-template-columns:62px 28px 1fr auto;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:start}
+.tle:last-child{border-bottom:0}
+.tle .t{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:5px}
+.tle .t small{display:block;font-size:10px}
+.tle .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--card-2);border:1px solid var(--line);font-size:12px}
+.tle .ic svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tle.jev .ic{color:var(--ghost);border-color:color-mix(in srgb,var(--ghost) 40%,transparent);background:var(--ghost-soft)}
+.tle.exec .ic{color:var(--up-text);border-color:color-mix(in srgb,var(--up) 40%,transparent);background:var(--up-soft)}
+.tle.risk .ic{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:var(--warn-soft)}
+.tle.market .ic{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-soft)}
+.tle.err .ic{color:var(--down-text);border-color:color-mix(in srgb,var(--down) 45%,transparent);background:var(--down-soft)}
+.tle .b{min-width:0}.tle .b b{font-size:13px;font-weight:600;display:block}.tle .b span{font-size:12px;color:var(--text-2);display:block;overflow-wrap:anywhere}
+.tle .b details summary{font-size:11px;margin-top:3px}.tle .b pre{font-size:10.5px;max-height:180px}
+.tle .r{font-size:12px;font-weight:600;white-space:nowrap;padding-top:4px}
+.agj .verdict{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--accent-2);margin:2px 0 10px}
+.agj .kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:12.5px;padding:8px 0;border-top:1px solid var(--line)}
+.agj .kv span{color:var(--muted)}.agj .why{font-size:12.5px;color:var(--text-2);line-height:1.5;margin:8px 0}
+.agj .foot{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin-top:6px}
+.rs{display:grid;grid-template-columns:56px 1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.rs:last-child{border-bottom:0}.rs .tm{font-variant-numeric:tabular-nums;color:var(--text-2);font-weight:600}.rs b{font-weight:500}.rs small{display:block;color:var(--muted);font-size:11px}
+.rs .cd{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* backtest evidence */
+.bte{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);gap:12px;margin:2px 0 14px}
+.bte>div{background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.bte h4{margin:0 0 8px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+.bte .verdict{margin-left:auto;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:3px 8px;border-radius:5px}
+.bte .verdict.ok{background:var(--up-soft);color:var(--up-text)}.bte .verdict.no{background:var(--down-soft);color:var(--down-text)}
+.gt{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line);font-size:12px}
+.gt:last-child{border-bottom:0}.gt .m{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800}
+.gt.ok .m{background:var(--up-soft);color:var(--up-text)}.gt.no .m{background:var(--down-soft);color:var(--down-text)}
+.gt .v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}.gt.no .v{color:var(--down-text)}
+.gt .ci{grid-column:2/-1;position:relative;height:6px;border-radius:3px;background:var(--card);margin:2px 0 2px}
+.gt .ci i{position:absolute;top:0;bottom:0;border-radius:3px}.gt .ci em{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--text-2)}.gt .ci b{position:absolute;top:-2px;width:2px;height:10px;background:var(--text);border-radius:1px}
+.fn{display:grid;gap:5px}.fn .r{display:grid;grid-template-columns:minmax(0,96px) 1fr 46px;gap:8px;align-items:center;font-size:11.5px}
+.fn .r span{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fn .r b{text-align:right;font-variant-numeric:tabular-nums}
+.fn .bar{height:14px;border-radius:4px;background:var(--card);overflow:hidden}.fn .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 50%,transparent));border-radius:4px}
+.fn .r.drop span{color:var(--warn)}
+.cb{display:grid;gap:7px}.cb .r{display:grid;grid-template-columns:minmax(0,104px) 1fr 62px;gap:8px;align-items:center;font-size:11.5px}
+.cb .r span{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cb .r b{text-align:right;font-variant-numeric:tabular-nums}
+.cb .ax{position:relative;height:14px;background:var(--card);border-radius:4px}.cb .ax em{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--line-2)}
+.cb .ax i{position:absolute;top:2px;bottom:2px;border-radius:3px}.cb .r.me span{color:var(--text);font-weight:700}
+.cb.note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+@media (max-width:1180px){.bte{grid-template-columns:1fr}}
+@media (max-width:760px){.tle{grid-template-columns:48px 26px 1fr}.tle .r{grid-column:3}}
+
+/* ══ v10c: market bias tiles (overview) — tinted glass tile, one joined timeframe strip, alignment meter ══ */
+:root .v10 .market-card .bias-row{gap:12px}
+.bt2{position:relative;display:flex;flex-direction:column;gap:12px;padding:14px 15px;border-radius:12px;cursor:pointer;min-width:0;overflow:hidden;
+  background:radial-gradient(120% 90% at 100% 0%,color-mix(in srgb,var(--tint) 16%,transparent),transparent 60%),linear-gradient(180deg,rgb(255 255 255 / .03),transparent),var(--card-2);
+  border:1px solid color-mix(in srgb,var(--tint) 22%,var(--line));transition:border-color .15s,transform .15s}
+.bt2:hover{border-color:color-mix(in srgb,var(--tint) 55%,transparent);transform:translateY(-1px)}
+.bt2.t-up{--tint:var(--up)}.bt2.t-dn{--tint:var(--down)}.bt2.t-mx{--tint:var(--warn)}
+.bt2 .hd{display:flex;align-items:center;gap:10px;min-width:0}
+.bt2 .av{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:.02em;flex:none;
+  color:var(--text);background:linear-gradient(140deg,color-mix(in srgb,var(--tint) 35%,transparent),color-mix(in srgb,var(--tint) 8%,transparent));border:1px solid color-mix(in srgb,var(--tint) 35%,transparent)}
+.bt2 .nm{min-width:0}.bt2 .nm b{display:block;font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bt2 .nm small{display:block;font-size:11px;color:var(--muted)}
+.bt2 .pill2{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;color:color-mix(in srgb,var(--tint) 80%,var(--text));background:color-mix(in srgb,var(--tint) 14%,transparent);white-space:nowrap}
+.bt2 .pill2 i{width:6px;height:6px;border-radius:50%;background:var(--tint);box-shadow:0 0 8px var(--tint)}
+.bt2 .px{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.bt2 .px b{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.bt2 .px .ch{font-size:11.5px;font-weight:650;padding:2px 7px;border-radius:6px;font-variant-numeric:tabular-nums}
+.bt2 .px .ch.up{background:var(--up-soft)}.bt2 .px .ch.down{background:var(--down-soft)}
+.bt2 .strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;border-radius:9px;overflow:hidden}
+.bt2 .strip>div{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0 6px;background:var(--card);font-size:10px;color:var(--muted);letter-spacing:.04em;position:relative}
+.bt2 .strip>div b{font-size:14px;line-height:1}
+.bt2 .strip>div.u{background:color-mix(in srgb,var(--up) 15%,var(--card))}.bt2 .strip>div.u b{color:var(--up-text)}
+.bt2 .strip>div.d{background:color-mix(in srgb,var(--down) 15%,var(--card))}.bt2 .strip>div.d b{color:var(--down-text)}
+.bt2 .strip>div.n b{color:var(--muted)}
+.bt2 .strip>div.c::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:repeating-linear-gradient(90deg,var(--line-2) 0 4px,transparent 4px 7px)}
+.bt2 .strip>div.r::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:color-mix(in srgb,var(--tint) 60%,transparent)}
+.bt2 .meter{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.bt2 .meter .mdots{display:flex;gap:3px}.bt2 .meter .mdots i{width:14px;height:4px;border-radius:2px;background:var(--line-2)}
+.bt2 .meter .mdots i.on{background:var(--tint);box-shadow:0 0 6px color-mix(in srgb,var(--tint) 60%,transparent)}
+.bt2 .meter .sc{margin-left:auto;font-variant-numeric:tabular-nums}.bt2 .meter .sc b{color:var(--text-2)}
+.bt2 .el{display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px solid var(--line);font-size:11.5px;color:var(--text-2);min-width:0}
+.bt2 .el i{width:7px;height:7px;border-radius:50%;flex:none;background:var(--muted)}
+.bt2 .el.ready i{background:var(--up);box-shadow:0 0 8px var(--up)}.bt2 .el.open i{background:var(--accent);box-shadow:0 0 8px var(--accent)}.bt2 .el.wait i{background:var(--warn)}.bt2 .el.blocked i{background:var(--down)}
+.bt2 .el b{font-weight:650;color:var(--text);white-space:nowrap}.bt2 .el span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+:root .v10 .hrows .market-card .bt2{justify-content:space-between}
+.bt2 .meter span{white-space:nowrap}.bt2 .pill2{padding:3px 8px;font-size:10.5px}.bt2 .meter .mdots i{width:11px}
 </style>
 </head>
 <body>
@@ -1236,7 +1326,7 @@ html body{font-size:13.5px}
     <button class="nav" data-p="bt"><svg><use href="#i-play"/></svg>Backtester</button>
     <div class="nav-label">MONITORING</div>
     <button class="nav" data-p="news"><svg><use href="#i-news"/></svg>News</button>
-    <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
+    <button class="nav" data-p="agents"><svg><use href="#i-bot"/></svg>Activity &amp; Jev</button>
     <button class="nav" data-p="machine"><svg><use href="#i-play"/></svg>Time machine</button>
     <div class="side-foot">
       <span class="chip" id="jevchip">Jev</span>
@@ -1474,15 +1564,22 @@ html body{font-size:13.5px}
 
     <!-- AGENTS -->
     <section class="page" id="p-agents">
-      <div class="grid">
+      <div class="kcards ag-health" id="agHealth"></div>
+      <div class="grid hrows">
+        <div class="card c8 ag-tl"><h3>Decision timeline <span class="mut heading-note">a readable chain of what happened and why</span><span class="sp"></span>
+          <div class="seg" id="agFilt"><button data-c="all" class="on">All</button><button data-c="jev">Jev</button><button data-c="exec">Execution</button><button data-c="risk">Risk</button><button data-c="market">Market</button></div></h3>
+          <div class="agtl" id="agTimeline"><div class="empty">Loading…</div></div></div>
+        <div class="c4 ag-side">
+          <div class="card"><h3>Latest Jev assessment <span class="sp"></span><span class="tag" id="agJevMode">advisory</span></h3><div id="agJev"><div class="empty">No Jev decision yet.</div></div></div>
+          <div class="card"><h3>Upcoming restrictions <span class="mut heading-note">New York time</span></h3><div id="agRestr"><div class="empty">Nothing scheduled.</div></div></div>
+        </div>
+        <div class="card c6"><h3>Trade analyst <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">advice only · scored against how each trade finished</span></h3><div id="anlBody"><div class="empty">Loading…</div></div></div>
+        <div class="card c6"><h3>Jev trade adviser <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">hold / cut / add on open trades · never acted on</span></h3><div id="jadBody"><div class="empty">Loading…</div></div></div>
         <div class="card c12"><h3>Mission control <span class="sp"></span><span class="mcrate" id="mcRate"></span></h3><div class="mc" id="mcWrap"></div>
           <div class="mcleg"><span><i style="background:#5b9bff"></i>market data</span><span><i style="background:#f2b84b"></i>setups &amp; picks</span><span><i style="background:#b48cff"></i>Jev</span><span><i style="background:#3fd08f"></i>trades</span><span><i style="background:#ff6f6a"></i>alerts &amp; flatten</span></div>
           <div class="mcinfo" id="mcInfo"></div></div>
-        <div class="card c12"><h3>Agents</h3><div class="health" id="health"></div></div>
-        <div class="card c12"><h3>Trade analyst <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">advice only — scored against how each trade really finished</span></h3><div id="anlBody"><div class="empty">Loading…</div></div></div>
-        <div class="card c12"><h3>Jev trade adviser <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">hold / cut / add calls on open trades — scored, never acted on</span></h3><div id="jadBody"><div class="empty">Loading…</div></div></div>
-        <div class="card c6"><h3>Jev decisions</h3><div class="feed" id="decisions"></div></div>
-        <div class="card c6"><h3>Activity &amp; alerts</h3><div class="feed" id="alerts"></div></div>
+        <div class="card c12"><h3>Agent heartbeats</h3><div class="health" id="health"></div></div>
+        <details class="card c12 breakdown"><summary>Raw feeds · Jev decisions and alerts</summary><div class="grid" style="margin-top:8px"><div class="c6"><div class="feed" id="decisions"></div></div><div class="c6"><div class="feed" id="alerts"></div></div></div></details>
       </div>
     </section>
   </main>
@@ -1503,7 +1600,7 @@ html body{font-size:13.5px}
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
   <button data-p="bt"><svg><use href="#i-play"/></svg>Backtester</button>
   <button data-p="news"><svg><use href="#i-news"/></svg>News</button>
-  <button data-p="agents"><svg><use href="#i-bot"/></svg>Agents &amp; Jev</button>
+  <button data-p="agents"><svg><use href="#i-bot"/></svg>Activity &amp; Jev</button>
   <button data-p="machine"><svg><use href="#i-play"/></svg>Time machine</button>
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
@@ -4811,17 +4908,176 @@ hero = function(s){
   $("#hxDelta").innerHTML = `<span class="chg ${k}">${d > 0 ? "▲" : d < 0 ? "▼" : "•"} ${smoney(d, 2)} <span style="opacity:.75">${(pct >= 0 ? "+" : "") + fmt(pct, 2)}%</span></span><span class="mut">today</span>`;
 };
 
-/* v10b: the equity chart fills its card (the row height is set by the Risk & system card beside it) */
+/* v10b: the equity chart matches the Risk & system card's CONTENT height (its stretched height would feed back
+   into the row and grow the chart on every update), clamped to 170–300 px */
 const _equity10 = equity;
 equity = function(s){
   const svg = $("#eq"), side = $(".hrows .operations-card"), head = $("#hero .hxtop");
-  if(svg && side && head){
-    const wide = matchMedia("(min-width:1181px)").matches;
-    const h = wide ? Math.max(190, Math.round(side.offsetHeight - head.offsetHeight - 30)) : 190;
-    if(+svg.getAttribute("height") !== h) svg.setAttribute("height", h);
+  let h = 200;
+  if(svg && side && head && matchMedia("(min-width:1181px)").matches){
+    const top = side.getBoundingClientRect().top, kids = [...side.children].filter(c => c.offsetParent !== null);
+    const content = kids.length ? Math.max(...kids.map(c => c.getBoundingClientRect().bottom)) - top + 16 : 0;
+    h = Math.max(170, Math.min(300, Math.round(content - head.offsetHeight - 44)));
   }
+  if(svg && +svg.getAttribute("height") !== h) svg.setAttribute("height", h);
   _equity10(s);
 };
+
+/* ══ v10 phase 3: Agents & Jev (health, decision timeline, latest Jev call, restrictions) · backtest evidence ═══════ */
+titles.agents = "Activity & Jev"; shortTitles.agents = "Activity";
+pageDescriptions.agents = "What the system knows, what it decided and why.";
+const AG = {filt:"all", sig:null, trades:null, at:0};
+const AGI = {jev:'<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>',
+  exec:'<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>', risk:'<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/></svg>',
+  market:'<svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8"/></svg>', err:'<svg viewBox="0 0 24 24"><path d="M12 8v5M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'};
+const agoS = sec => sec == null ? "—" : sec < 90 ? Math.round(sec) + "s ago" : sec < 5400 ? Math.round(sec / 60) + "m ago" : Math.round(sec / 3600) + "h ago";
+function beatAge(s, keys){ const now = Date.now() / 1000, v = keys.map(k => s.heartbeats[k]).filter(x => x != null); return v.length ? now - Math.max(...v) : null; }
+function stTag(age, okTxt){ return age == null ? `<span class="st"><i></i>no heartbeat</span>` : age > 180 ? `<span class="st bad"><i></i>stale · ${agoS(age)}</span>` : age > 90 ? `<span class="st warn"><i></i>slow · ${agoS(age)}</span>` : `<span class="st ok"><i></i>${okTxt} · ${agoS(age)}</span>`; }
+function agHealth(s){
+  const jd = (s.decisions || []).find(d => /jev/i.test(d.source || ""));
+  const F = NOW && NOW.fuel;
+  const tile = (h, icon, b, st, sub) => `<div class="kc"><div class="kh"><span>${h}</span>${icon}</div><b>${b}</b>${st}<em>${sub}</em></div>`;
+  const ic = p => `<svg viewBox="0 0 24 24">${p}</svg>`;
+  $("#agHealth").innerHTML =
+    tile("Market data", ic('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'), `${Object.keys(s.prices || {}).length} instruments`, stTag(beatAge(s, ["market_data", "shadow_feed"]), "streaming"), "1-minute bars → every agent")
+  + tile("Execution", ic('<path d="M4 6h16M4 12h16M4 18h16"/>'), s.trading_enabled ? "Entries enabled" : "Entries paused", stTag(beatAge(s, ["position_manager", "trader", "c10_trader"]), "managing"), `${s.positions.length} open · ${({paper:"practice account", live:"live account", sim:"simulation"}[s.mode] || s.mode)}`)
+  + tile("Risk engine", ic('<path d="M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/>'), F && F.budget ? money(Math.max(0, F.budget - F.used), 0) + " left" : s.news_block ? "News blackout" : "Limits armed", stTag(beatAge(s, ["risk", "monitor"]), "checking"), s.news_block ? esc(s.news_block.title) + " · no entries" : F && F.budget ? `of today's ${money(F.budget, 0)} loss budget` : "size · caps · news · kill switch")
+  + tile("Jev adviser", ic('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4"/>'), s.jev_live ? "Connected" : "Heuristic fallback", jd ? `<span class="st ${s.jev_live ? "ok" : "warn"}"><i></i>last call ${hm(jd.ts)}${jd.latency_ms ? " · " + fmt(jd.latency_ms / 1000, 1) + "s" : ""}</span>` : `<span class="st"><i></i>no calls yet</span>`, s.jev_live ? "grades setups · audits the bias · advises" : "Jev offline: its gate blocks entries when configured");
+}
+function tlEvents(s){
+  const ev = [];
+  for(const d of s.decisions || []){
+    const o = d.outputs || {}, isJ = /jev/i.test(d.source || "") || /rating|audit|advice|jev/i.test(d.kind || "");
+    const bits = ["quality", "confidence", "prob", "verdict", "action", "decision"].filter(k => o[k] != null).map(k => `${k} ${typeof o[k] === "number" ? fmt(o[k], 2) : esc(o[k])}`);
+    ev.push({ts:d.ts, c:isJ ? "jev" : "market", t:`${(d.kind || "decision").replace(/_/g, " ")}${d.symbol ? " · " + d.symbol : ""}`,
+      d:[d.strategy ? esc(String(d.strategy).split("@")[0]) : "", bits.join(" · "), o.why || o.reason ? esc(o.why || o.reason) : ""].filter(Boolean).join(" — "),
+      r:d.latency_ms ? fmt(d.latency_ms / 1000, 1) + "s" : "", raw:o});
+  }
+  for(const a of s.alerts || []){
+    const m = a.msg || "", c = a.level === "error" ? "err" : a.level === "warn" ? "risk" : /fill|order|opened|closed|position|target|stop|flatten/i.test(m) ? "exec" : /bias|news|structure/i.test(m) ? "market" : "risk";
+    ev.push({ts:a.ts, c, t:m.length > 80 ? m.slice(0, 78) + "…" : m, d:m.length > 80 ? esc(m) : "", r:a.level === "info" ? "" : a.level});
+  }
+  for(const g of AG.sig || []){
+    const taken = g.action === "taken";
+    ev.push({ts:g.ts, c:taken ? "exec" : "risk", t:`${taken ? "Signal taken" : "Signal " + (g.action || "skipped")} · ${g.symbol} ${Number(g.side) > 0 ? "long" : "short"}`,
+      d:`${esc(String(g.strategy || "").split("@")[0])}${g.why ? " — " + esc(g.why) : ""}`, r:g.entry ? fpx(g.entry) : ""});
+  }
+  for(const t of AG.trades || []){
+    if(t.opened) ev.push({ts:t.opened, c:"exec", t:`Opened ${t.side} ${t.symbol}`, d:esc(String(t.strategy || "").split("@")[0]) + (t.entry ? " · entry " + fpx(t.entry) : ""), r:""});
+    if(t.closed) ev.push({ts:t.closed, c:t.realized >= 0 ? "exec" : "risk", t:`Closed ${t.symbol} · ${exitLabel(t.exit_reason)}`, d:`${esc(String(t.strategy || "").split("@")[0])} · ${fpx(t.entry)} → ${fpx(t.exit_price)}`, r:`<span class="${cls(t.realized)}">${sR(t.r_multiple)} · ${smoney(t.realized)}</span>`});
+  }
+  for(const p of s.positions || []) ev.push({ts:p.opened, c:"exec", t:`Holding ${p.side} ${p.symbol}`, d:`${esc(String(p.strategy).split("@")[0])} · ${sR(p.r_now)} now`, r:`<span class="${cls(p.unrealized)}">${smoney(p.unrealized)}</span>`});
+  const seen = new Set();
+  return ev.filter(e => e.ts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).filter(e => { const k = e.ts + e.t; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 150);
+}
+function agTimeline(s){
+  const ev = tlEvents(s).filter(e => AG.filt === "all" || e.c === AG.filt || (AG.filt === "risk" && e.c === "err"));
+  let day = "";
+  $("#agTimeline").innerHTML = ev.map(e => { const d = String(e.ts).slice(0, 10), nd = d !== day; day = d;
+    return `<div class="tle ${e.c}"><div class="t">${hm(e.ts)}${nd ? `<small>${md(e.ts)}</small>` : ""}</div><span class="ic">${AGI[e.c] || AGI.market}</span>
+      <div class="b"><b>${esc(e.t)}</b>${e.d ? `<span>${e.d}</span>` : ""}${e.raw && Object.keys(e.raw).length ? `<details><summary>details</summary><pre>${esc(JSON.stringify(e.raw, null, 1))}</pre></details>` : ""}</div><div class="r">${e.r || ""}</div></div>`; }).join("")
+    || `<div class="empty">Nothing in this category yet.</div>`;
+}
+function agJev(s){
+  const d = (s.decisions || []).find(x => /jev/i.test(x.source || "") || /rating|audit|advice/i.test(x.kind || ""));
+  $("#agJevMode").textContent = s.jev_live ? "advisory · live" : "heuristic";
+  if(!d){ $("#agJev").innerHTML = `<div class="empty">No Jev decision yet.</div>`; return; }
+  const o = d.outputs || {}, verdict = o.verdict || o.action || o.decision || (o.quality != null ? (o.quality >= .6 ? "Good setup" : o.quality >= .4 ? "Marginal setup" : "Weak setup") : o.prob != null ? (o.prob >= .5 ? "Bias holds" : "Bias in doubt") : (d.kind || "").replace(/_/g, " "));
+  const kv = [["Quality", o.quality], ["Confidence", o.confidence], ["Probability", o.prob]].filter(([, v]) => v != null);
+  $("#agJev").innerHTML = `<div class="agj"><div class="mut" style="font-size:11.5px">${esc((d.kind || "").replace(/_/g, " "))}${d.symbol ? " · " + esc(d.symbol) : ""}${d.strategy ? " · " + esc(String(d.strategy).split("@")[0]) : ""}</div>
+    <div class="verdict">${esc(String(verdict).charAt(0).toUpperCase() + String(verdict).slice(1))}</div>
+    ${o.why || o.reason ? `<div class="why">${esc(o.why || o.reason)}</div>` : ""}
+    ${kv.map(([k, v]) => `<div class="kv"><span>${k}</span><b class="num">${typeof v === "number" ? fmt(v, 2) : esc(v)}</b></div>`).join("")}
+    <div class="foot"><span>${md(d.ts)} ${hm(d.ts)} NY${d.latency_ms ? " · " + fmt(d.latency_ms / 1000, 1) + "s" : ""}</span><span>model judgment · not a calibrated win probability</span></div></div>`;
+}
+function agRestr(s){
+  const rows = [];
+  for(const e of (s.news || []).filter(e => e.minutes_to >= 0 && e.minutes_to <= 24 * 60 && ["tier1", "high", "medium"].includes(e.tier)).slice(0, 5))
+    rows.push({ts:e.ts, l:esc(e.title), sub:`${e.tier === "tier1" ? "Tier 1" : e.tier} news · no entries ${(e.blackout || [])[0] ?? "?"} min before → ${(e.blackout || [])[1] ?? "?"} after`});
+  for(const i of ((NOW && NOW.items) || []).filter(i => i.key !== "news").slice(0, 4)) rows.push({ts:i.at, l:esc(i.label), sub:i.live ? "in progress" : ""});
+  rows.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  $("#agRestr").innerHTML = rows.length ? rows.slice(0, 7).map(r => `<div class="rs"><span class="tm">${hm(r.ts)}</span><span><b>${r.l}</b>${r.sub ? `<small>${r.sub}</small>` : ""}</span><span class="cd" data-count="${r.ts}">${countdown(r.ts)}</span></div>`).join("") : `<div class="empty">No news blackouts or window changes in the next 24 hours.</div>`;
+}
+async function agLoad(force){
+  if(!force && Date.now() - AG.at < 20000) return;
+  AG.at = Date.now();
+  try{ [AG.sig, AG.trades] = await Promise.all([api(q("api/signals?limit=80")), api(q("api/trades?limit=40"))]); }catch(e){}
+  if(!NOW) try{ await loadNow(true); }catch(e){}
+  if(page === "agents" && S) renderAgentsV10(S);
+}
+function renderAgentsV10(s){ agHealth(s); agTimeline(s); agJev(s); agRestr(s); }
+const _renderAgents10 = renderAgents;
+renderAgents = function(s){ _renderAgents10(s); renderAgentsV10(s); agLoad(false); };
+$$("#agFilt button").forEach(b => b.onclick = () => { AG.filt = b.dataset.c; $$("#agFilt button").forEach(x => x.classList.toggle("on", x === b)); if(S) agTimeline(S); });
+const _go13 = go;
+go = function(p){ _go13(p); if(p === "agents") agLoad(true); };
+
+/* backtest evidence: every gate with its number, the signal funnel, and the rule against its controls */
+function btEvidence(S){
+  const s = S.stats || {}, c = S.coin || {}, G = S.gates || {}, ce = S.coin_edge, tm = S.timing, v = S.variants || {};
+  const pass = !!G.PASS;
+  const ciBar = (lo, hi, mid) => { const a = Math.min(-.25, lo * 1.15), b = Math.max(.25, hi * 1.15), X = x => (x - a) / (b - a) * 100;
+    return `<div class="ci"><i style="left:${X(lo)}%;width:${Math.max(1, X(hi) - X(lo))}%;background:${lo > 0 ? "var(--up)" : hi < 0 ? "var(--down)" : "var(--warn)"};opacity:.75"></i><em style="left:${X(0)}%"></em>${mid != null ? `<b style="left:calc(${X(mid)}% - 1px)"></b>` : ""}</div>`; };
+  const val = k => {
+    if(/100 trades/.test(k)) return [`${s.trades || 0}`];
+    if(/^avg R/.test(k)) return [sR(s.avg_R, 3)];
+    if(/95% range above 0/.test(k) && !/coin|timing/.test(k)) return [`${sR(s.ci_lo, 2)} … ${sR(s.ci_hi, 2)}`, ciBar(s.ci_lo, s.ci_hi, s.avg_R)];
+    if(/2× costs/.test(k)) return [sR(s.avg_R_2x, 3)];
+    if(/halves/.test(k)) return [(S.halves || []).map(x => sR(x, 2)).join(" / ")];
+    if(/coin/.test(k)) return ce ? [`${sR(ce.avg_R, 3)} (${sR(ce.ci_lo, 2)} … ${sR(ce.ci_hi, 2)})`, ciBar(ce.ci_lo, ce.ci_hi, ce.avg_R)] : [`${sR(s.avg_R, 3)} vs ${sR(c.avg_R, 3)}`];
+    if(/timing/.test(k)) return tm ? [`${sR(tm.avg_R, 3)} (${sR(tm.ci_lo, 2)} … ${sR(tm.ci_hi, 2)})`, ciBar(tm.ci_lo, tm.ci_hi, tm.avg_R)] : ["—"];
+    if(/variants/.test(k)) return [Object.entries(v).map(([n, x]) => `${n} ${sR(x.avg_R, 3)}`).join(" · ") || "—"];
+    if(/look-ahead/.test(k)) return [S.audit ? `${S.audit.failed} of ${S.audit.checked} changed` : "—"];
+    return [""];
+  };
+  const gates = Object.entries(G).filter(([k]) => k !== "PASS").map(([k, ok]) => { const [t, extra] = val(k);
+    return `<div class="gt ${ok ? "ok" : "no"}"><span class="m">${ok ? "✓" : "✗"}</span><span>${esc(k)}</span><span class="v">${t}</span>${extra || ""}</div>`; }).join("");
+  const F = Object.entries(S.funnel || {}), top = Math.max(1, ...F.map(([, n]) => n));
+  const fun = F.map(([k, n], i) => { const drop = i && n < F[i - 1][1];
+    return `<div class="r ${drop ? "drop" : ""}" title="${drop ? (F[i - 1][1] - n) + " removed here" : ""}"><span>${esc(k)}</span><div class="bar"><i style="width:${Math.max(1, n / top * 100)}%"></i></div><b>${n.toLocaleString()}</b></div>`; }).join("");
+  const rows = [["This rule", s.avg_R, 1], ["Coin flip", c.avg_R], ...(S.random ? [["Random timing", S.random.avg_R]] : []), ...Object.entries(v).map(([n, x]) => [n, x.avg_R])].filter(([, x]) => x != null);
+  const m = Math.max(.1, ...rows.map(([, x]) => Math.abs(x))) * 1.15, X = x => 50 + x / m * 50;
+  const cmp = rows.map(([n, x, me]) => `<div class="r ${me ? "me" : ""}"><span>${esc(n)}</span><div class="ax"><em style="left:50%"></em><i style="left:${Math.min(X(0), X(x))}%;width:${Math.abs(X(x) - X(0))}%;background:var(${x >= 0 ? "--up" : "--down"});${me ? "" : "opacity:.6"}"></i></div><b class="${cls(x)}">${sR(x, 3)}</b></div>`).join("");
+  return `<div class="bte">
+    <div><h4>Evidence gates <span class="verdict ${pass ? "ok" : "no"}">${pass ? "PASSED" : "FAILED"}</span></h4>${gates}</div>
+    <div><h4>Signal funnel <span class="mut" style="font-weight:500;font-size:11px">where candidates were removed</span></h4><div class="fn">${fun || '<div class="empty">—</div>'}</div></div>
+    <div><h4>Against its controls <span class="mut" style="font-weight:500;font-size:11px">average R per trade</span></h4><div class="cb">${cmp}</div><div class="cb note">The rule has to beat each control; a positive average on its own is not evidence.</div></div>
+  </div>`;
+}
+const _btOpen13 = btOpen;
+btOpen = async function(id, scroll = false){
+  await _btOpen13(id, scroll);
+  const S_ = BXR && BXR.summary, box = $("#bxResult"); if(!S_ || !box) return;
+  const g = box.querySelector(".btgates"); if(g) g.outerHTML = btEvidence(S_);
+  box.querySelectorAll(".mut").forEach(el => { if(/^Funnel:/.test(el.textContent.trim())) el.innerHTML = el.innerHTML.replace(/^\s*Funnel:[^<]*(<br>)?/, ""); });
+};
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-10-22.v10.3");
+
+/* v10c: overview market-bias tiles */
+bias = function(s){
+  const el = $("#bias"); if(!el) return;
+  const syms = Object.keys(s.prices).length ? Object.keys(s.prices) : Object.keys(s.bias);
+  const rows = {}; ((BG && BG.rows) || []).forEach(r => rows[r.symbol] = r);
+  const arr = v => v == null ? "·" : v > 0 ? "↗" : v < 0 ? "↘" : "→";
+  el.innerHTML = syms.map(sym => {
+    const b = s.bias[sym] || {}, r = rows[sym] || {}, c = r.cells || {};
+    const cells = [["D", b.d ?? c.d, "r"], ["4H", b.h4 ?? c.h4, "r"], ["1H", b.h1 ?? c.h1, "r"], ["15m", c.m15, "c"], ["5m", c.m5, "c"]];
+    const st = b.state || "", label = st === "BULLISH" ? "Bullish" : st === "BEARISH" ? "Bearish" : st === "SUSPENDED" ? "Suspended" : st === "IN DOUBT" ? "In doubt" : st === "NEUTRAL" ? "Neutral" : (r.context || "—");
+    const tint = st === "BULLISH" || (!st && r.context === "Bullish") ? "up" : st === "BEARISH" || (!st && r.context === "Bearish") ? "dn" : "mx";
+    const known = cells.filter(([, v]) => v != null), dir = tint === "dn" ? -1 : 1, agree = known.filter(([, v]) => v === dir).length;
+    const e = r.eligibility, ch = r.change_pct;
+    return `<div class="bt2 t-${tint}" data-sym="${esc(sym)}" role="button" tabindex="0" title="${esc(iname(sym))}: trades, best strategy and timeframe">
+      <div class="hd"><span class="av">${esc(icode(sym))}</span><div class="nm"><b>${esc(iname(sym))}</b><small>${esc(sym)}</small></div><span class="pill2"><i></i>${esc(label)}</span></div>
+      <div class="px"><b>${fpx(s.prices[sym] ?? b.price)}</b>${ch == null ? "" : `<span class="ch ${cls(ch)}">${ch > 0 ? "+" : ""}${fmt(ch, 2)}%</span>`}</div>
+      <div class="strip">${cells.map(([k, v, kind]) => `<div class="${tfCls(v)} ${kind}" title="${k}: ${tfWord(v)}${kind === "c" ? " (context only)" : " (bias rule)"}">${k}<b>${arr(v)}</b></div>`).join("")}</div>
+      <div class="meter"><span class="mdots">${cells.map(([, v]) => `<i class="${v === dir && tint !== "mx" ? "on" : ""}"></i>`).join("")}</span><span>${known.length ? `${agree} of ${known.length} ${tint === "dn" ? "bearish" : tint === "up" ? "bullish" : "aligned"}` : "warming up"}</span>
+        <span class="sc">score <b class="${cls(b.score)}">${b.score == null ? "—" : (b.score > 0 ? "+" : "") + fmt(b.score, 2)}</b></span></div>
+      ${e ? `<div class="el ${esc(e.state)}"><i></i><b>${esc(e.label)}</b><span>${esc(e.why || "")}</span></div>` : ""}
+    </div>`;
+  }).join("") || `<div class="empty">Waiting for prices…</div>`;
+  $$("#bias .bt2").forEach(x => { x.onclick = () => openInstrument(x.dataset.sym); x.onkeydown = ev => { if(ev.key === "Enter") openInstrument(x.dataset.sym); }; });
+};
+if(S && page === "home") bias(S);
 </script>
 </body>
 </html>
