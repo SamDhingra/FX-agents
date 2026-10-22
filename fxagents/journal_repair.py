@@ -106,6 +106,38 @@ def plan_account(cfg, rows: list[dict], closed: list[dict], open_: list[dict], j
     return out
 
 
+def plan_merges(cfg, allrows: list[dict], closed: list[dict], fx) -> list[dict]:
+    """A position the bot lost track of and re-adopted as 'orphan:unmanaged': the original row (open, or voided by
+    an earlier repair) holds the part booked before (e.g. the 1R partial), the orphan row only the rest — and the
+    orphan's R is measured from the stop where it was found (often trailed), not the original. Merge: the original
+    row is closed with OANDA's result for the WHOLE trade, in R of its own initial risk; the orphan row → 'void'."""
+    out = []
+    for o in [r for r in allrows if (r.get("strategy") or "").startswith("orphan") and r["status"] == "closed"]:
+        ot = pd.Timestamp(o["opened"])
+        trs = [t for t in closed if t.get("instrument") == _inst_of(cfg, o["symbol"])
+               and abs((pd.Timestamp(t["openTime"]) - ot).total_seconds()) <= 2]
+        if len(trs) != 1:
+            continue
+        t = trs[0]
+        orig = [r for r in allrows if r["id"] != o["id"] and r["symbol"] == o["symbol"] and r["status"] in ("open", "void")
+                and not (r.get("strategy") or "").startswith("orphan")
+                and 0 <= (ot - pd.Timestamp(r["opened"])).total_seconds() <= 10]
+        if len(orig) != 1:
+            continue
+        r = orig[0]
+        rate = float(fx(pd.Timestamp(t["closeTime"]))) if fx and t.get("closeTime") else 1.0
+        pl = rate * (_f(t.get("realizedPL")) + _f(t.get("financing")) + _f(t.get("dividendAdjustment")))
+        mult = _f(cfg["instruments"].get(r["symbol"], {}).get("multiplier")) or 1.0
+        risk = abs(_f(r.get("qty_initial")) * (_f(r["entry"]) - _f(r["initial_stop"])) * mult)
+        ct = pd.Timestamp(t["closeTime"]).tz_convert(cfg["timezone"]) if t.get("closeTime") else pd.Timestamp(o["closed"])
+        out.append({"id": r["id"], "action": "close", "why": f"merged with orphan row {o['id']} (the same OANDA trade)",
+                    "closed": ct.isoformat(), "exit_price": round(_f(t.get("averageClosePrice")), 6),
+                    "realized": round(pl, 2), "r_multiple": round(pl / risk, 3) if risk else None, "from": r["status"]})
+        out.append({"id": o["id"], "action": "void", "why": f"merged into {r['id']} (its original position)",
+                    "from": "closed"})
+    return out
+
+
 def apply(db: str, plan: list[dict]) -> int:
     todo = [p for p in plan if p["action"] in ("close", "void")]
     if not todo:
@@ -114,14 +146,15 @@ def apply(db: str, plan: list[dict]) -> int:
     con = sqlite3.connect(db)
     try:
         for p in todo:
+            frm = p.get("from", "open")
             if p["action"] == "close":
                 con.execute("UPDATE trades SET status='closed', closed=?, exit_price=?, realized=?, r_multiple=?, "
-                            "exit_reason='reconciled_at_oanda', notes=? WHERE id=? AND status='open'",
+                            "exit_reason='reconciled_at_oanda', notes=? WHERE id=? AND status=?",
                             (p["closed"], p["exit_price"], p["realized"], p["r_multiple"],
-                             "journal repair: result from OANDA's trade record", p["id"]))
+                             f"journal repair: result from OANDA's trade record ({p['why']})", p["id"], frm))
             else:
-                con.execute("UPDATE trades SET status='void', exit_reason='void', notes=? WHERE id=? AND status='open'",
-                            (f"journal repair: {p['why']}", p["id"]))
+                con.execute("UPDATE trades SET status='void', exit_reason='void', notes=? WHERE id=? AND status=?",
+                            (f"journal repair: {p['why']}", p["id"], frm))
         con.commit()
     finally:
         con.close()
@@ -138,12 +171,19 @@ async def run(cfg, do_apply: bool, client=None, now: pd.Timestamp | None = None)
     report: dict = {"before": before.isoformat(), "books": {}}
     # practice account
     rows = stale_rows(main_db, before, held)
-    if rows:
+    con = sqlite3.connect(main_db); con.row_factory = sqlite3.Row
+    orphan_n = con.execute("SELECT COUNT(*) FROM trades WHERE strategy LIKE 'orphan%' AND status='closed'").fetchone()[0]
+    con.close()
+    if rows or orphan_n:
         from .oanda import oanda_from_cfg
         own = client is None
         client = client or oanda_from_cfg(cfg)
         try:
-            since = min(pd.Timestamp(r["opened"]) for r in rows) - pd.Timedelta(days=1)
+            con = sqlite3.connect(main_db)
+            o_min = con.execute("SELECT MIN(opened) FROM trades WHERE strategy LIKE 'orphan%' AND status='closed'").fetchone()[0]
+            con.close()
+            starts = [pd.Timestamp(r["opened"]) for r in rows] + ([pd.Timestamp(o_min)] if o_min else [])
+            since = min(starts) - pd.Timedelta(days=1)
             closed = await fetch_trades(client, since, "CLOSED")
             open_ = await fetch_trades(client, since, "OPEN")
             fx = await fx_table(client, since)
@@ -153,7 +193,9 @@ async def run(cfg, do_apply: bool, client=None, now: pd.Timestamp | None = None)
         con = sqlite3.connect(main_db); con.row_factory = sqlite3.Row
         allrows = [dict(r) for r in con.execute("SELECT * FROM trades WHERE opened >= ?", (since.isoformat(),))]
         con.close()
-        plan = plan_account(cfg, rows, closed, open_, allrows, fx)
+        merges = plan_merges(cfg, allrows, closed, fx)
+        merged = {p["id"] for p in merges}
+        plan = merges + plan_account(cfg, [r for r in rows if r["id"] not in merged], closed, open_, allrows, fx)
     else:
         plan = []
     report["books"]["live"] = {"db": main_db, "plan": plan}

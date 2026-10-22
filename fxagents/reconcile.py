@@ -253,7 +253,7 @@ def summarize(res: dict) -> dict:
 def report(res: dict, s: dict, days: int) -> str:
     L = [f"# Journal vs OANDA — last {days} days", "",
          f"Matched positions {s['matched']} ({s.get('matched_by_open_time', 0)} by instrument + open time: trades from "
-         "before the bot tagged its orders) · journal-only {s['journal_only']} · OANDA-only {s['broker_only']} · "
+         f"before the bot tagged its orders) · journal-only {s['journal_only']} · OANDA-only {s['broker_only']} · "
          f"open/closed disagree {s['state_mismatch']} · untagged OANDA trades {s['untagged']} · unit mismatches "
          f"{s['units_mismatch']}", "",
          f"Total on matched positions: journal **{s['journal_total_r']:+.2f}R**, OANDA **{s['oanda_total_r']:+.2f}R** "

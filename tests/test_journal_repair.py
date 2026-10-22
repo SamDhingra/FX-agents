@@ -76,12 +76,13 @@ def test_dry_run_plan_then_apply(tmp_path):
               _t(None, open_="2026-10-08T14:55:07Z")]
     rep = asyncio.run(JR.run(cfg, False, client=Client(trades), now=NOW))
     plan = {p["id"]: p for p in rep["books"]["live"]["plan"]}
-    assert set(plan) == {"aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "eeeeeeeeee"}
+    assert set(plan) == {"aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "eeeeeeeeee", "ffffffffff"}
     assert plan["aaaaaaaaaa"]["action"] == "close" and plan["aaaaaaaaaa"]["realized"] == 40.0     # 56 CAD / 1.40
     assert plan["aaaaaaaaaa"]["r_multiple"] == 2.0 and plan["aaaaaaaaaa"]["exit_price"] == 20040.0
     assert plan["bbbbbbbbbb"]["action"] == "keep"
-    assert plan["cccccccccc"]["action"] == "void" and plan["eeeeeeeeee"]["action"] == "void"
-    assert "duplicate" in plan["eeeeeeeeee"]["why"]
+    assert plan["cccccccccc"]["action"] == "void"
+    assert plan["eeeeeeeeee"]["action"] == "close" and "merged" in plan["eeeeeeeeee"]["why"]   # original + its orphan
+    assert plan["ffffffffff"]["action"] == "void"
     assert [p["id"] for p in rep["books"]["shadow"]["plan"]] == ["pppppppppp"]
     assert "daily_rsi2_adx2" not in rep["books"]
     con = sqlite3.connect(cfg["storage"]["db_path"])
@@ -92,7 +93,7 @@ def test_dry_run_plan_then_apply(tmp_path):
     st = dict(con.execute("SELECT id, status FROM trades").fetchall())
     con.close()
     assert st == {"aaaaaaaaaa": "closed", "bbbbbbbbbb": "open", "cccccccccc": "void", "dddddddddd": "open",
-                  "eeeeeeeeee": "void", "ffffffffff": "closed", "gggggggggg": "open"}
+                  "eeeeeeeeee": "closed", "ffffffffff": "void", "gggggggggg": "open"}
     assert glob.glob(str(tmp_path / "journal.sqlite.bak-*")) and glob.glob(str(tmp_path / "journal_shadow.sqlite.bak-*"))
     assert "APPLIED" in JR.text(rep, True)
 
@@ -102,3 +103,25 @@ def test_roll_start():
         pd.Timestamp("2026-10-21 17:00", tz="America/New_York")
     assert JR.roll_start(pd.Timestamp("2026-10-22 18:00", tz="America/New_York"), "America/New_York") == \
         pd.Timestamp("2026-10-22 17:00", tz="America/New_York")
+
+
+def test_orphan_merge_restores_the_original_position(tmp_path):
+    """The original row banked the partial and was voided by the first repair; the orphan row booked only the rest,
+    in R of a trailed stop. The merge closes the original with the whole OANDA trade, the orphan becomes void."""
+    cfg = _cfg(tmp_path)
+    _db(cfg["storage"]["db_path"], [
+        _row("cf8f0d0885", symbol="NDQ", status="void", opened="2026-10-08T10:55:06-04:00", entry=20000.0,
+             initial_stop=19980.0, qty_initial=2.0),
+        _row("9acd6396c9", strategy="orphan:unmanaged", status="closed", opened="2026-10-08T10:55:07-04:00",
+             initial_stop=20030.0, realized=40.0, r_multiple=9.0),
+    ])
+    t = _t(None, open_="2026-10-08T14:55:07Z", close="20030.0", pl="112.0")      # 112 CAD = 80 USD for 2 units
+    rep = asyncio.run(JR.run(cfg, True, client=Client([t]), now=NOW))
+    plan = {p["id"]: p for p in rep["books"]["live"]["plan"]}
+    assert plan["cf8f0d0885"]["action"] == "close" and plan["9acd6396c9"]["action"] == "void"
+    con = sqlite3.connect(cfg["storage"]["db_path"])
+    st = {r[0]: r[1:] for r in con.execute("SELECT id, status, realized, r_multiple FROM trades")}
+    con.close()
+    assert st["cf8f0d0885"] == ("closed", 80.0, 2.0) and st["9acd6396c9"][0] == "void"   # 80 / (2 × 20) = 2R
+    rep = asyncio.run(JR.run(cfg, False, client=Client([t]), now=NOW))                   # idempotent
+    assert not rep["books"]["live"]["plan"]
