@@ -343,18 +343,29 @@ def load(cfg, sym: str):
     return m1, h1
 
 
-def _signals(st: Strategy, df: pd.DataFrame, ctx: dict) -> list:
+def _signals(st: Strategy, df: pd.DataFrame, ctx: dict, offsets: int = 1) -> list:
+    """Candidate signals of a setup over a whole frame. Legacy setups are O(n × swings), so they are scanned in
+    overlapping 1400-bar chunks (each chunk keeps its second half). They are not strictly causal on a frame, so a
+    chunk can miss a signal the live trader (last 700 bars, every bar) would see, and which ones depends on where
+    the chunks fall — shifting the data's start changed ~7% of US30 sr_rejection signals (Oct 22 2026).
+    `offsets` > 1 unions chunkings shifted by 700/offsets bars: on 3 months of US30 5m, 1 → 8.3% of live signals
+    missed, 4 → 0.7%, 8 → 0.2%. Callers that need live fidelity verify each candidate with verify_live_window."""
     if getattr(st, "fast", False):
         return st._scan_full(df, ctx)
-    # legacy setups are O(n × swings): scan in overlapping 1400-bar chunks, keep each chunk's second half
-    W, out = 700, []
-    for start in range(0, len(df), W):
-        lo, hi = max(0, start - W), min(len(df), start + W)
-        sub = df.iloc[lo:hi]
-        for s in st._scan_full(sub, Strategy._context(sub)):
-            if start <= lo + s.i < start + W:
-                s.i += lo
-                out.append(s)
+    W, out, seen = 700, [], set()
+    for k in range(max(1, int(offsets))):
+        off = k * W // max(1, int(offsets))
+        for start in range(-off, len(df), W):
+            lo, hi = max(0, start - W), min(len(df), start + W)
+            if hi <= lo:
+                continue
+            sub = df.iloc[lo:hi]
+            for s in st._scan_full(sub, Strategy._context(sub)):
+                gi = lo + s.i
+                if max(start, 0) <= gi < start + W and (gi, s.side) not in seen:
+                    seen.add((gi, s.side))
+                    s.i = gi
+                    out.append(s)
     return out
 
 

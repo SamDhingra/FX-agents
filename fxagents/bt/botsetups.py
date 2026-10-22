@@ -60,7 +60,8 @@ class BotSetup(Strategy):
             return []
         ctx = BotStrategy._context(df)
         ctx["peers"] = []
-        sigs = sorted(_signals(st, df, ctx), key=lambda s: s.i)
+        # 8 chunk offsets: candidate discovery no longer depends on where the data starts (look-ahead audit, Oct 22)
+        sigs = sorted(_signals(st, df, ctx, offsets=1 if getattr(cls, "fast", False) else 8), key=lambda s: s.i)
         if not getattr(cls, "fast", False):
             sigs = [s for s in sigs if verify_live_window(st, df, s.i, s.side)]
         end = b.end.to_numpy()
