@@ -10,7 +10,7 @@ from fxagents.bt import Costs, Exits, Signal, Strategy, data, engine, stats
 from fxagents.bt.data import MIN
 from fxagents.bt.run import load_plugin, main
 
-RAW = Costs(stop_slip_frac=0, cad=False, financing_bps=0, rollover_shield=None, same_bar_check=False)
+RAW = Costs(stop_slip_frac=0, market_slip_frac=0, cad=False, financing_bps=0, rollover_shield=None, same_bar_check=False)
 
 
 def mk(bars, sp=0.2, start="2025-03-04 14:00"):
@@ -155,7 +155,7 @@ def test_parity_with_h4_donchian_module():
     T = pd.DataFrame(H.execute(a, H.find_trades(a, False), block_mask(a, 15, 15), np.random.default_rng(1))[0])
     cls, _ = load_plugin("btplugins/h4_donchian_trend_v1.py")
     s = cls(use_bias=False)
-    s.costs = Costs(stop_slip_frac=0, cad=False, same_bar_check=False)     # financing + rollover shield ON, as theirs
+    s.costs = Costs(stop_slip_frac=0, market_slip_frac=0, cad=False, same_bar_check=False)   # financing + shield ON, as theirs
     N = pd.DataFrame(engine.simulate(s, data.from_frame(df), controls=False)["trades"])
     assert len(T) == len(N) >= 3
     assert (T.exit_time.values == N.exit_time.values).all()
@@ -171,7 +171,7 @@ def test_stats_gates():
     m = mk(flat(10), start="2024-01-02 15:00")
     m.idx = idx
     out = stats.summarize({"trades": tr, "coin": coin, "funnel": {}}, m)
-    assert out["gates"]["≥ 100 trades"] and out["gates"]["beats the coin flip"]
+    assert out["gates"]["≥ 100 trades"] and out["gates"]["beats the coin flip (95% above 0)"]
     assert "PASS" in out["gates"] and len(out["by_year"]) == 1
 
 
@@ -341,7 +341,7 @@ def test_random_timing_control_exposes_timing_and_market_drift():
     seer.costs = RAW
     out = stats.summarize(engine.simulate(seer, m), m)
     assert out["timing"]["trades"] == out["stats"]["trades"] > 30
-    assert out["timing"]["avg_R"] > 0.1 and out["timing"]["ci_lo"] > 0 and out["gates"]["beats random timing"]
+    assert out["timing"]["avg_R"] > 0.1 and out["timing"]["ci_lo"] > 0 and out["gates"]["beats random timing (95% above 0)"]
     # the daily rule on a drifting random walk: whatever it makes, random long entries make about the same
     from tests.test_h4_donchian import gold
     cls, _ = load_plugin("btplugins/daily_rsi2_adx2.py")

@@ -71,6 +71,10 @@ class Exits:
 @dataclass
 class Costs:
     stop_slip_frac: float = 0.15        # intrabar stop fills pay this share of the spread (stops are market orders)
+    market_slip_frac: float = 0.10      # market entries and market exits at a minute's open (time / flat / signal
+                                        # exits) pay this share of the spread beyond the quote (Oct 22 2026: the live
+                                        # reconcile shows entries ≈ 0.01R worse than the quote; resting limit targets
+                                        # and partials pay nothing extra)
     cad: bool = True                    # OANDA Canada 1% conversion: wins × 0.99, losses × 1.01
     financing_bps: float = 1.8          # per 17:00 NY rollover, of the entry price (≈ 6.5% a year)
     triple_dow: int | None = 2          # weekday charged 3× (2 = Wednesday); None for crypto (charged every day)

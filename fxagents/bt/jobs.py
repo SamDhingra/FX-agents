@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 
 from . import data, engine, ledger, stats
-from .run import load_plugin
+from .run import engine_sha, load_plugin
 
 
 class Cancelled(Exception):
@@ -81,7 +81,9 @@ def execute(rid: str, audit: int = 10) -> dict:
             out["gates"]["no look-ahead"] = False
             out["gates"]["PASS"] = False
         out["run"] = {k: r[k] for k in ("id", "plugin", "name", "code_sha", "params", "symbol", "dataset", "role")}
-        title = f"{r['name']} ({r['symbol']}, code {r['code_sha']}, run {rid})"
+        out["engine"] = out["run"]["engine"] = engine_sha()
+        out["market_slip_frac"] = strat.costs.market_slip_frac
+        title = f"{r['name']} ({r['symbol']}, code {r['code_sha']}, engine {out['engine']}, run {rid})"
         (d / "summary.json").write_text(json.dumps(out, default=str))
         with gzip.open(d / "trades.json.gz", "wt") as fh:
             json.dump([_jsonable(t) for t in res["trades"]], fh, default=str)

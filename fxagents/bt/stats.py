@@ -44,6 +44,9 @@ def summarize(res: dict, m) -> dict:
     s = base_stats(t, days) if len(t) else {"trades": 0}
     sc = base_stats(c, days) if len(c) else {"trades": 0}
     out = {"stats": s, "coin": sc, "funnel": res["funnel"]}
+    if len(t) and len(c) == len(t):                  # paired: each real trade minus its own coin-flip twin
+        out["coin_edge"] = base_stats(t.assign(R=t.R.to_numpy() - c.R.to_numpy(),
+                                               R_2x=t.R_2x.to_numpy() - c.R_2x.to_numpy()), days)
     rd = frame(res.get("rand") or [])
     if len(rd):
         out["random"] = base_stats(rd, days)
@@ -71,10 +74,16 @@ def gates(out: dict) -> dict:
         "95% range above 0": n > 0 and s["ci_lo"] > 0,
         "positive at 2× costs": n > 0 and s["avg_R_2x"] > 0,
         "positive in both halves": n > 1 and all(x > 0 for x in out.get("halves", [-1])),
-        "beats the coin flip": n > 0 and c.get("trades", 0) > 0 and s["avg_R"] > c["avg_R"],
     }
+    # Oct 22 2026 (PS-1 execution review): a positive average difference is not evidence — the paired difference's
+    # 95% range (same day-block bootstrap as the headline) must be above 0.
+    ce = out.get("coin_edge")
+    if ce is not None:
+        g["beats the coin flip (95% above 0)"] = bool(ce.get("trades") and ce["ci_lo"] > 0)
+    else:
+        g["beats the coin flip"] = n > 0 and c.get("trades", 0) > 0 and s["avg_R"] > c["avg_R"]
     if out.get("timing"):
-        g["beats random timing"] = bool(out["timing"].get("avg_R", -1) > 0)
+        g["beats random timing (95% above 0)"] = bool(out["timing"].get("trades") and out["timing"]["ci_lo"] > 0)
     g["PASS"] = all(g.values())
     return g
 
@@ -98,9 +107,13 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
     L += [f"Trades {s['trades']}, win {s['win']:.0%}, avg {s['avg_R']:+.3f}R (95% {s['ci_lo']:+.3f} … {s['ci_hi']:+.3f}),"
           f" 2× costs {s['avg_R_2x']:+.3f}R, halves {out['halves'][0]:+.3f} / {out['halves'][1]:+.3f},"
           f" exact coin flip {c.get('avg_R', float('nan')):+.3f}R, max drawdown {out['equity']['max_dd_R']:.1f}R", ""]
+    if out.get("coin_edge"):
+        ce = out["coin_edge"]
+        L += [f"Coin-flip edge (real − its coin twin, per trade) {ce['avg_R']:+.3f}R "
+              f"(95% {ce['ci_lo']:+.3f} … {ce['ci_hi']:+.3f}).", ""]
     if out.get("timing"):
         tm, rd = out["timing"], out["random"]
-        L += [f"Random timing (same side, same time of day, random other days, same stop % and hold): "
+        L += [f"Random timing (same side, same time of day, random other days, same stop % and exits): "
               f"{rd['avg_R']:+.3f}R. Timing edge (real − random) {tm['avg_R']:+.3f}R "
               f"(95% {tm['ci_lo']:+.3f} … {tm['ci_hi']:+.3f}).", ""]
     L += ["| gate | |", "|---|---|"] + [f"| {k} | {'yes' if v else 'no'} |" for k, v in out["gates"].items()] + [""]
@@ -111,7 +124,11 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
          [f"| {r['key']} | {r['trades']} | {r['avg_R']:+.3f} |" for r in out["by_exit"]] + [""]
     for k, v in (out.get("variants") or {}).items():
         L.append(f"Variant {k}: {v.get('trades', 0)} trades" + (f", avg {v['avg_R']:+.3f}R" if v.get("trades") else ""))
+    if out.get("engine"):
+        L += [f"Engine {out['engine']} (fill-minute targets, open-first ordering, market slippage "
+              f"{out.get('market_slip_frac', 0):.0%} of spread)."]
     if audit:
-        L += [f"Look-ahead audit: {audit['checked']} signals re-run on truncated data, {audit['failed']} changed"
+        L += [f"Look-ahead audit: {audit['checked']} signals re-run on truncated data (time, side, stop, target, "
+              f"entry price and risk limits compared), {audit['failed']} changed"
               + (f" (e.g. {', '.join(audit['examples'])})" if audit["failed"] else "") + "."]
     return "\n".join(L)

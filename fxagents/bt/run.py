@@ -29,6 +29,15 @@ def code_sha(src: bytes) -> str:
     return h.hexdigest()[:12]
 
 
+def engine_sha() -> str:
+    """The backtester's own version (engine, statistics, cost defaults, data loading) — shown on every report, kept
+    out of the plugin fingerprint so an engine correction never reopens a strategy's once-only vault."""
+    h = hashlib.sha256()
+    for f in ("engine.py", "stats.py", "api.py", "data.py"):
+        h.update((PKG / "bt" / f).read_bytes())
+    return h.hexdigest()[:12]
+
+
 def load_plugin(path: str | Path) -> tuple[type[Strategy], str]:
     path = Path(path)
     src = path.read_bytes()
