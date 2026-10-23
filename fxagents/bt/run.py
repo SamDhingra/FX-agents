@@ -22,6 +22,9 @@ def code_sha(src: bytes) -> str:
     """A plugin's code fingerprint. Plugins that run the bot's own setups also cover the bridge and the setup code
     they call, so editing any of it counts as a different strategy (tries, and the once-only vault)."""
     h = hashlib.sha256(src)
+    if b"fxagents.bt.htf_poi" in src:                    # Sam's HTF point-of-interest models: helper + level map
+        for f in [PKG / "bt" / "htf_poi.py", PKG / "liquidity.py", PKG / "bt" / "ind.py", PKG / "bias.py"]:
+            h.update(f.read_bytes())
     if b"fxagents.bt.botsetups" in src:
         for f in [PKG / "bt" / "botsetups.py", PKG / "bias.py", PKG / "structure.py", PKG / "indicators.py",
                   *sorted((PKG / "strategies").glob("*.py"))]:

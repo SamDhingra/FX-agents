@@ -1,0 +1,21 @@
+"""htf_a_4h_fvg_m15_mss — Sam's model A (Oct 23 2026): 4H FVG → 15m FVG + MSS → resting-liquidity target.
+
+Rules fixed before any run: see fxagents/bt/htf_poi.py (its text, the level map in fxagents/liquidity.py and the
+helpers are part of this plugin's fingerprint). Param `entry`: "market" (confirmation close) or "limit_mid" (limit at
+the confirmation FVG's midpoint) — both are run and judged together. Instruments: NDQ, US30.
+"""
+from fxagents.bt import Exits, Strategy
+from fxagents.bt.htf_poi import MODELS
+
+
+class HtfA4HFvgM15Mss(Strategy):
+    name = "htf_a_4h_fvg_m15_mss"
+    symbol = "NDQ"
+    description = "Model A: 4H FVG → 15m FVG + MSS → nearest untaken liquidity ≥ 1R."
+    params = {"entry": "market"}
+    exits = Exits(flat_at=950)
+    entry_windows = [(510, 690), (810, 930)]
+    max_per_day = 2
+
+    def signals(self, m):
+        return MODELS["A"](m, self.params)

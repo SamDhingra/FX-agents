@@ -121,7 +121,8 @@ class Sparse:
 class Liquidity:
     """Answers, for a decision at time t: which levels were untaken, which were just swept, how much room is left."""
 
-    def __init__(self, m1: pd.DataFrame, h1: pd.DataFrame) -> None:
+    def __init__(self, m1: pd.DataFrame, h1: pd.DataFrame, min_weight: int = MIN_WEIGHT) -> None:
+        self.min_weight = min_weight
         self.m1, self.h1 = m1, h1
         self.h1_ns = _ns(h1.index)
         self.h1_end = self.h1_ns + 3_600_000_000_000
@@ -134,7 +135,7 @@ class Liquidity:
         self.set_levels(level_map(h1))
 
     def set_levels(self, lv: pd.DataFrame) -> None:
-        self.lv = lv[lv.weight >= MIN_WEIGHT].sort_values("known", kind="stable").reset_index(drop=True)
+        self.lv = lv[lv.weight >= getattr(self, "min_weight", MIN_WEIGHT)].sort_values("known", kind="stable").reset_index(drop=True)
         self.lk = _ns(pd.DatetimeIndex(self.lv["known"]))
         self.lp = self.lv["price"].to_numpy(float)
         self.ls = self.lv["side"].to_numpy(int)

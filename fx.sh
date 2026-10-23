@@ -267,6 +267,12 @@ case "${1:-help}" in
              for tf_ in $tfs_; do for st_ in $sts_; do
                $DC exec -T fxbt python -m fxagents.bt run "btplugins/$st_.py" --queue --symbol "$sym_" --set "tf=\"$tf_\"" </dev/null
              done; done ;;
+  bthtf)     # Sam's three HTF point-of-interest models (fxagents/bt/htf_poi.py) × both entries × NDQ + US30 → 12 runs
+             # queued for the fxbt worker on the seen data; results on the Backtest page
+             $DC up -d fxbt >/dev/null 2>&1
+             for sym_ in NDQ US30; do for p_ in htf_a_4h_fvg_m15_mss htf_b_daily_h1_cisd htf_c_h1_sweep_fvg; do for e_ in market limit_mid; do
+               $DC exec -T fxbt python -m fxagents.bt run "btplugins/$p_.py" --queue --symbol "$sym_" --set "entry=\"$e_\"" </dev/null
+             done; done; done ;;
   candles)   # candles for ChatGPT & co: refresh and push once now (the fxcandles container does it every 5 minutes)
              $DC exec -T fxcandles python -m fxagents.candles_publish --once ;;
   btcancel)  # cancel every queued backtest (and stop the one running)
@@ -384,7 +390,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
