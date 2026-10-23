@@ -1,0 +1,230 @@
+{
+ "checks": {
+  "trap": {
+   "check": "trap",
+   "n": 16456,
+   "removed": 458,
+   "removed_avg": -0.04,
+   "kept_avg": -0.091,
+   "all_avg": -0.09,
+   "diff": -0.052,
+   "diff_ci": [
+    -0.168,
+    0.055
+   ],
+   "halves": [
+    -0.039,
+    -0.071
+   ],
+   "random_p": 0.8645,
+   "pass": false
+  },
+  "no_room": {
+   "check": "no_room",
+   "n": 16456,
+   "removed": 501,
+   "removed_avg": -0.083,
+   "kept_avg": -0.09,
+   "all_avg": -0.09,
+   "diff": -0.007,
+   "diff_ci": [
+    -0.115,
+    0.101
+   ],
+   "halves": [
+    -0.005,
+    -0.013
+   ],
+   "random_p": 0.5495,
+   "pass": false
+  },
+  "either": {
+   "check": "either",
+   "n": 16456,
+   "removed": 950,
+   "removed_avg": -0.054,
+   "kept_avg": -0.092,
+   "all_avg": -0.09,
+   "diff": -0.038,
+   "diff_ci": [
+    -0.115,
+    0.045
+   ],
+   "halves": [
+    -0.03,
+    -0.052
+   ],
+   "random_p": 0.8795,
+   "pass": false
+  }
+ },
+ "by_cell": [
+  {
+   "cell": "dtfx_close_fib_15m_pb-us30-b988",
+   "n": 789,
+   "trap": 46,
+   "trap_avg": -0.095,
+   "no_room": 20,
+   "no_room_avg": -0.311,
+   "clean_avg": -0.09
+  },
+  {
+   "cell": "dtfx_close_fib_15m_pb-us30-b988-trend",
+   "n": 764,
+   "trap": 45,
+   "trap_avg": -0.165,
+   "no_room": 20,
+   "no_room_avg": -0.401,
+   "clean_avg": -0.075
+  },
+  {
+   "cell": "dtfx_close_fib_3m_pb-xau-4a8c",
+   "n": 790,
+   "trap": 18,
+   "trap_avg": 0.049,
+   "no_room": 30,
+   "no_room_avg": -0.069,
+   "clean_avg": -0.089
+  },
+  {
+   "cell": "dtfx_close_fib_3m_pb-xau-4a8c-scalp",
+   "n": 812,
+   "trap": 19,
+   "trap_avg": -0.014,
+   "no_room": 30,
+   "no_room_avg": -0.142,
+   "clean_avg": -0.118
+  },
+  {
+   "cell": "dtfx_wick_fib_15m_pb-ndq-b988",
+   "n": 919,
+   "trap": 48,
+   "trap_avg": -0.177,
+   "no_room": 27,
+   "no_room_avg": 0.099,
+   "clean_avg": -0.04
+  },
+  {
+   "cell": "dtfx_wick_fib_3m_pb-xau-2ca4",
+   "n": 730,
+   "trap": 15,
+   "trap_avg": 0.113,
+   "no_room": 17,
+   "no_room_avg": -0.093,
+   "clean_avg": -0.126
+  },
+  {
+   "cell": "dtfx_wick_fib_5m_pb-ndq-4a8c-scalp",
+   "n": 728,
+   "trap": 21,
+   "trap_avg": -0.089,
+   "no_room": 33,
+   "no_room_avg": -0.016,
+   "clean_avg": -0.079
+  },
+  {
+   "cell": "ict_2022_3m_pb-xau-504f",
+   "n": 781,
+   "trap": 22,
+   "trap_avg": 0.059,
+   "no_room": 13,
+   "no_room_avg": 0.036,
+   "clean_avg": -0.156
+  },
+  {
+   "cell": "ict_amd_3m_pb-us30-013f",
+   "n": 937,
+   "trap": 7,
+   "trap_avg": -0.024,
+   "no_room": 33,
+   "no_room_avg": 0.013,
+   "clean_avg": -0.124
+  },
+  {
+   "cell": "ict_turtle_soup_15m_pb-xau-6062",
+   "n": 922,
+   "trap": 5,
+   "trap_avg": -0.313,
+   "no_room": 0,
+   "no_room_avg": null,
+   "clean_avg": -0.135
+  },
+  {
+   "cell": "ict_turtle_soup_15m_pb-xau-6062-trend",
+   "n": 922,
+   "trap": 5,
+   "trap_avg": -0.397,
+   "no_room": 0,
+   "no_room_avg": null,
+   "clean_avg": -0.114
+  },
+  {
+   "cell": "ict_turtle_soup_5m_pb-xau-285e",
+   "n": 780,
+   "trap": 7,
+   "trap_avg": 0.087,
+   "no_room": 14,
+   "no_room_avg": -0.385,
+   "clean_avg": -0.076
+  },
+  {
+   "cell": "macd_cross_5m_pb-ndq-d",
+   "n": 1134,
+   "trap": 3,
+   "trap_avg": 0.719,
+   "no_room": 30,
+   "no_room_avg": -0.139,
+   "clean_avg": 0.055
+  },
+  {
+   "cell": "smc_bos_retest_5m_pb-xau-392f",
+   "n": 1671,
+   "trap": 72,
+   "trap_avg": 0.116,
+   "no_room": 147,
+   "no_room_avg": -0.051,
+   "clean_avg": -0.094
+  },
+  {
+   "cell": "smc_displacement_3m_pb-xau-d",
+   "n": 1278,
+   "trap": 95,
+   "trap_avg": -0.063,
+   "no_room": 36,
+   "no_room_avg": -0.202,
+   "clean_avg": -0.191
+  },
+  {
+   "cell": "smc_mss_3m_pb-xau-d",
+   "n": 1083,
+   "trap": 9,
+   "trap_avg": -0.405,
+   "no_room": 22,
+   "no_room_avg": 0.031,
+   "clean_avg": -0.11
+  },
+  {
+   "cell": "smt_divergence_15m_pb-ndq-06e2-trend",
+   "n": 731,
+   "trap": 11,
+   "trap_avg": -0.151,
+   "no_room": 9,
+   "no_room_avg": -0.004,
+   "clean_avg": -0.009
+  },
+  {
+   "cell": "sr_rejection_30m_pb-us30-d-trend",
+   "n": 685,
+   "trap": 10,
+   "trap_avg": 0.436,
+   "no_room": 20,
+   "no_room_avg": 0.061,
+   "clean_avg": -0.07
+  }
+ ],
+ "params": {
+  "window_min": 60,
+  "min_weight": 2,
+  "room_atr": 0.5
+ }
+}
