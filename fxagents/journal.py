@@ -42,6 +42,10 @@ class Journal:
         if "draw" not in cols:                           # added Oct 2026: the setup's drawing for the trade chart
             self.db.execute("ALTER TABLE trades ADD COLUMN draw TEXT")
             self.db.commit()
+        dcols = {r[1] for r in self.db.execute("PRAGMA table_info(decisions)")}
+        if "error" not in dcols:                         # added Oct 2026: why a Jev call fell back (failure / unreadable)
+            self.db.execute("ALTER TABLE decisions ADD COLUMN error TEXT")
+            self.db.commit()
 
     # ── writes ────────────────────────────────────────────────────────────
     def upsert_trade(self, pos, mult: float, exit_price: float | None = None) -> None:
@@ -66,9 +70,11 @@ class Journal:
         self.db.commit()
 
     def add_decision(self, d: dict) -> None:
-        self.db.execute("INSERT INTO decisions(ts,kind,source,symbol,strategy,latency_ms,inputs,outputs) VALUES(?,?,?,?,?,?,?,?)",
+        self.db.execute("INSERT INTO decisions(ts,kind,source,symbol,strategy,latency_ms,inputs,outputs,error) "
+                        "VALUES(?,?,?,?,?,?,?,?,?)",
                         (d.get("ts"), d.get("kind"), d.get("source"), d.get("symbol"), d.get("strategy"),
-                         d.get("latency_ms"), json.dumps(d.get("inputs"), default=str), json.dumps(d.get("outputs"), default=str)))
+                         d.get("latency_ms"), json.dumps(d.get("inputs"), default=str), json.dumps(d.get("outputs"), default=str),
+                         d.get("jev_error")))
         self.db.commit()
 
     def add_signal(self, s: dict) -> None:

@@ -20,6 +20,7 @@ import pandas as pd
 from .. import units
 from . import biasgrid, extras, ghosts, insights
 from .ask import Asker
+from .lessons import LessonWriter
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
@@ -162,11 +163,14 @@ def build_app(ctx) -> FastAPI:
                         pass
                 await asyncio.sleep(300)
         task = asyncio.create_task(run()) if getattr(ctx, "journal", None) is not None else None
+        lw = LessonWriter(ctx) if getattr(ctx, "journal", None) is not None else None
+        ltask = asyncio.create_task(lw.run()) if lw is not None and lw.on else None
         try:
             yield
         finally:
-            if task:
-                task.cancel()
+            for t in (task, ltask):
+                if t:
+                    t.cancel()
 
     app = FastAPI(title="FX-Agents", docs_url=None, redoc_url=None, lifespan=lifespan)
     for c in books():

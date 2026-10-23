@@ -5,6 +5,13 @@ so the dashboard can show the lineage of each trade.
 
 If TYPESAFE_API_KEY is missing or the API errors/times out, a transparent local heuristic answers
 instead and the decision is tagged source="heuristic" — trading never blocks on the network.
+
+An answer Jev did send but that can't be read (a question missing from the reply, a score with no level
+probabilities, a value that isn't a number between 0 and 1) is treated exactly like a failed call (Oct 2026, after
+TradingAgents' "REVIEW, not Hold" rule): the whole call falls back, is flagged (fallback=True, jev_error says
+"unreadable: …"), and never quietly passes as Jev's judgement. Before this, a missing key was filled from the
+heuristic one question at a time while the call still said source="jev", and a score with no probabilities read
+as 0.0 — a silent "very poor" grade.
 """
 from __future__ import annotations
 
@@ -33,13 +40,56 @@ def _sig(x: float) -> float:
     return 1 / (1 + math.exp(-x))
 
 
-def norm_score(ans: Any) -> float:
-    """Map a ScoreAnswer to 0..1 using its probability distribution over the levels."""
+def norm_score(ans: Any) -> float | None:
+    """Map a ScoreAnswer to 0..1 using its probability distribution over the levels; None when it can't be read
+    (no probabilities). The bare `score` is a level index, not 0..1, so it is not a stand-in."""
     probs = getattr(ans, "probabilities", None) or {}
-    if probs:
-        k = max(int(x) for x in probs)
-        return sum(int(i) * p for i, p in probs.items()) / k if k else 0.0
-    return float(getattr(ans, "score", 0.0))
+    if not probs:
+        return None
+    k = max(int(x) for x in probs)
+    return sum(int(i) * p for i, p in probs.items()) / k if k else None
+
+
+def _unit(x: Any) -> float | None:
+    """A finite number in 0..1, else None."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) and 0.0 <= v <= 1.0 else None
+
+
+class Unreadable(ValueError):
+    """Jev replied, but not with an answer the bot can use."""
+
+
+def read_answers(resp: Any, questions: dict) -> dict:
+    """Every asked question → {"value", "confidence"}; raises Unreadable naming what is missing or malformed."""
+    got = getattr(resp, "answers", None) or {}
+    out, bad = {}, []
+    for k in questions:
+        ans = got.get(k)
+        t = getattr(ans, "type", None)
+        if ans is None:
+            bad.append(f"{k} missing"); continue
+        if t == "score":
+            v, c = norm_score(ans), _unit(getattr(ans, "confidence", None))
+            v = _unit(v)
+        elif t == "noul":
+            v = _unit(getattr(ans, "noul", None))
+            c = round(abs(v - 0.5) * 2, 4) if v is not None else None
+        elif t == "choice":
+            v = getattr(ans, "choice", None)
+            v = v if isinstance(v, str) and v else None
+            c = _unit(getattr(ans, "confidence", None))
+        else:
+            bad.append(f"{k} type {t!r}"); continue
+        if v is None or c is None:
+            bad.append(f"{k} {'value' if v is None else 'confidence'} unreadable"); continue
+        out[k] = {"value": round(v, 4) if isinstance(v, float) else v, "confidence": round(c, 4)}
+    if bad:
+        raise Unreadable("; ".join(bad))
+    return out
 
 
 class JevScorer:
@@ -49,7 +99,8 @@ class JevScorer:
         self.live = bool(self.cfg.get("enabled", True) and self.key and HAVE_SDK)
         self.client = AsyncTypeSafeClient(api_key=self.key, model=self.cfg.get("model") or None,
                                           timeout=self.cfg.get("timeout_s", 6)) if self.live else None
-        self.calls = self.failures = 0
+        self.calls = self.failures = self.unreadable = 0
+        self._warned: dict[str, float] = {}
 
     @property
     def source(self) -> str:
@@ -63,30 +114,43 @@ class JevScorer:
                 self.calls += 1
                 resp = await asyncio.wait_for(self.client.system_one(state=state, questions=questions),
                                               timeout=self.cfg.get("timeout_s", 6) + 1)
-                out = {}
-                for k, ans in resp.answers.items():
-                    if ans.type == "score":
-                        out[k] = {"value": round(norm_score(ans), 4), "confidence": round(ans.confidence, 4)}
-                    elif ans.type == "noul":
-                        out[k] = {"value": round(ans.noul, 4), "confidence": round(abs(ans.noul - 0.5) * 2, 4)}
-                    else:
-                        out[k] = {"value": ans.choice, "confidence": round(ans.confidence, 4)}
+                out = read_answers(resp, questions)
                 source = "jev"
                 meta = {**meta, "model": getattr(resp, "model", None) or self.cfg.get("model") or "account-default",
                         "levels": {k: {str(i): round(float(p), 4) for i, p in (getattr(a, "probabilities", None) or {}).items()}
                                    for k, a in resp.answers.items() if a.type == "score"}}
                 usage = getattr(resp, "usage", None)
                 usage = usage.model_dump() if hasattr(usage, "model_dump") else None
+            except Unreadable as e:   # Jev answered, but not readably → same as a failure, and flagged as such
+                self.failures += 1; self.unreadable += 1
+                out, source = fallback, "heuristic"
+                log.warning("Jev %s unreadable (%s) — using heuristic", kind, e)
+                meta = {**meta, "jev_error": f"unreadable: {e}"[:160]}
             except Exception as e:  # network, auth, rate-limit… fall back, never block trading
                 self.failures += 1
+                out, source = fallback, "heuristic"
                 log.warning("Jev %s failed (%s) — using heuristic", kind, e)
-                meta = {**meta, "jev_error": str(e)[:160]}
+                meta = {**meta, "jev_error": f"{type(e).__name__}: {e}"[:160]}
         decision = {"ts": (self.state.now.isoformat(timespec="seconds") if self.state.now else None),
                     "kind": kind, "source": source, "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
                     "inputs": state, "outputs": out, "usage": usage, **meta}
         self.state.decisions.appendleft(decision)
         await self.bus.publish("decision", decision)
-        return {"answers": out, "source": source, "fallback": bool(self.live and source != "jev")}
+        fb = bool(self.live and source != "jev")
+        if fb:
+            self._warn(kind, meta)
+        return {"answers": out, "source": source, "fallback": fb, "error": meta.get("jev_error")}
+
+    def _warn(self, kind: str, meta: dict) -> None:
+        """One alert per kind per 30 minutes, so an outage is visible without flooding the alert list."""
+        now = time.time()
+        last = self._warned.get(kind, 0.0)
+        if now - last < 1800 or not hasattr(self.state, "alert"):
+            return
+        self._warned[kind] = now
+        sym = f" {meta['symbol']}" if meta.get("symbol") else ""
+        self.state.alert("warn", f"Jev {kind}{sym}: {meta.get('jev_error', 'no answer')} — fell back to the rule-based "
+                                 "stand-in; flagged, and it never passes a Jev gate.")
 
     # ── 1. which strategy for this symbol, this hour ──────────────────────
     async def rate_strategies(self, symbol: str, hour: int, regime: dict, cands: dict[str, dict]) -> dict:
@@ -110,7 +174,7 @@ class JevScorer:
         res = await self._ask("strategy_rating", state, questions, fb, {"symbol": symbol})
         ans = res["answers"]
         return {"by_strategy": {sid: ans.get(k, fb[k]) for k, sid in keys.items()},
-                "trade_ok": ans.get("trade_ok", fb["trade_ok"]), "source": res["source"]}
+                "trade_ok": ans.get("trade_ok", fb["trade_ok"]), "source": res["source"], "fallback": res["fallback"]}
 
     @staticmethod
     def _h_strategy(c: dict) -> dict:
@@ -137,7 +201,7 @@ class JevScorer:
         q = a.get("quality", fb["quality"])
         return {"quality": q["value"], "confidence": q["confidence"],
                 "htf_aligned": a.get("htf_aligned", fb["htf_aligned"])["value"], "source": res["source"],
-                "fallback": res["fallback"]}
+                "fallback": res["fallback"], "error": res["error"]}
 
     @staticmethod
     def _h_signal(s: dict) -> dict:
@@ -166,7 +230,7 @@ class JevScorer:
         fb = {"choppy": {"value": round(v, 4), "confidence": 0.3}}
         res = await self._ask("market_regime", info, questions, fb, {"symbol": info.get("symbol")})
         a = res["answers"].get("choppy", fb["choppy"])
-        return {"chop_prob": a["value"], "confidence": a["confidence"], "source": res["source"]}
+        return {"chop_prob": a["value"], "confidence": a["confidence"], "source": res["source"], "fallback": res["fallback"]}
 
     # ── 2c. range breakout: will it follow through (gold_breakout book, logged only) ─
     async def breakout_follow(self, info: dict) -> dict:
@@ -186,7 +250,7 @@ class JevScorer:
         res = await self._ask("breakout_follow", info, questions, fb, {"symbol": info.get("symbol"),
                                                                       "strategy": info.get("strategy")})
         a = res["answers"].get("follow", fb["follow"])
-        return {"prob": a["value"], "confidence": a["confidence"], "source": res["source"]}
+        return {"prob": a["value"], "confidence": a["confidence"], "source": res["source"], "fallback": res["fallback"]}
 
     # ── 3. pyramid add: is continuation likely ────────────────────────────
     async def continuation(self, info: dict) -> dict:
@@ -198,7 +262,8 @@ class JevScorer:
         mom = info.get("momentum_aligned", 0)
         fb = {"continue": {"value": 0.62 if mom > 0 else 0.4, "confidence": 0.3}}
         res = await self._ask("pyramid_continuation", info, questions, fb, {"symbol": info["symbol"]})
-        return {"prob": res["answers"].get("continue", fb["continue"])["value"], "source": res["source"]}
+        return {"prob": res["answers"].get("continue", fb["continue"])["value"], "source": res["source"],
+                "fallback": res["fallback"], "error": res["error"]}
 
     # ── 4. bias safeguards ────────────────────────────────────────────────
     async def bias_audit(self, info: dict) -> dict:
@@ -216,7 +281,8 @@ class JevScorer:
                 v -= 0.12
         fb = {"valid": {"value": round(v, 4), "confidence": 0.35}}
         res = await self._ask("bias_audit", info, questions, fb, {"symbol": info["symbol"]})
-        return {"prob": res["answers"].get("valid", fb["valid"])["value"], "source": res["source"]}
+        return {"prob": res["answers"].get("valid", fb["valid"])["value"], "source": res["source"],
+                "fallback": res["fallback"], "error": res["error"]}
 
     async def reversal(self, info: dict) -> dict:
         """Counter-bias exception: is this a genuine reversal after a liquidity raid?"""
@@ -234,7 +300,8 @@ class JevScorer:
         fb = {"reversal": {"value": round(min(v, 0.9), 4), "confidence": 0.35}}
         res = await self._ask("reversal_exception", info, questions, fb, {"symbol": info["symbol"],
                                                                           "strategy": info.get("strategy")})
-        return {"prob": res["answers"].get("reversal", fb["reversal"])["value"], "source": res["source"]}
+        return {"prob": res["answers"].get("reversal", fb["reversal"])["value"], "source": res["source"],
+                "fallback": res["fallback"], "error": res["error"]}
 
     # ── 4b. open-trade management advice (scored, never acted on) ─────────
     async def manage_trade(self, info: dict) -> dict:
@@ -260,7 +327,7 @@ class JevScorer:
         a = res["answers"]
         w, e = a.get("worse", fb["worse"]), a.get("extend", fb["extend"])
         return {"p_worse": w["value"], "conf_worse": w["confidence"], "p_extend": e["value"],
-                "conf_extend": e["confidence"], "source": res["source"]}
+                "conf_extend": e["confidence"], "source": res["source"], "fallback": res["fallback"]}
 
     # ── 5. learner: is a candidate's improvement real ────────────────────
     async def rate_candidate(self, info: dict) -> dict:
@@ -274,7 +341,7 @@ class JevScorer:
         v = _sig(4 * gain) * min(1.0, oos["n"] / 40)
         fb = {"robust": {"value": round(v, 4), "confidence": 0.4}}
         res = await self._ask("candidate_review", info, questions, fb, {"symbol": info.get("symbol")})
-        return {"prob": res["answers"].get("robust", fb["robust"])["value"], "source": res["source"]}
+        return {"prob": res["answers"].get("robust", fb["robust"])["value"], "source": res["source"], "fallback": res["fallback"]}
 
     async def aclose(self) -> None:
         if self.client is not None:

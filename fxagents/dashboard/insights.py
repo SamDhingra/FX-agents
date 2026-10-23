@@ -241,7 +241,7 @@ def story(main, c, trade_id: str) -> dict | None:
     sig = c.journal.db.execute("SELECT * FROM signals WHERE symbol=? AND ts>=? AND ts<=? ORDER BY "
                                "CASE action WHEN 'taken' THEN 0 ELSE 1 END, ts DESC LIMIT 1",
                                (t["symbol"], lo, hi)).fetchone()
-    dec = main.journal.db.execute("SELECT ts, kind, source, symbol, strategy, latency_ms, outputs, inputs FROM decisions "
+    dec = main.journal.db.execute("SELECT ts, kind, source, symbol, strategy, latency_ms, outputs, inputs, error FROM decisions "
                                   "WHERE symbol=? AND ts>=? AND ts<=? AND kind IN ('signal_rating','breakout_follow') "
                                   "ORDER BY ts DESC LIMIT 1", (t["symbol"], lo, hi)).fetchone()
     d = None
@@ -251,7 +251,8 @@ def story(main, c, trade_id: str) -> dict | None:
         inp = json.loads(d.pop("inputs") or "null") or {}
         d["question"] = inp.get("question")
         d["htf_bias"] = inp.get("htf_bias")
-    return {"trade": t, "signal": dict(sig) if sig is not None else None, "jev": d}
+    from .lessons import lesson_of
+    return {"trade": t, "signal": dict(sig) if sig is not None else None, "jev": d, "lesson": lesson_of(c.journal, trade_id)}
 
 
 # ── Replay ───────────────────────────────────────────────────────────────────────────────────────────────────────

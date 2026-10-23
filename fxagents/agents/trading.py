@@ -344,6 +344,9 @@ def jev_gate_why(g: dict, jc: dict) -> str:
     if jc.get("signal_gate", "enforce") == "advisory":
         return f"Jev quality {g['quality']:.2f} below advisory floor {jc.get('advisory_floor', 0.0):.2f}"
     if g.get("fallback") and jc.get("fallback_blocks", True):
+        err = str(g.get("error") or "")
+        if err.startswith("unreadable"):
+            return f"Jev answer {err[:90]} — flagged; a heuristic grade does not pass the gate"
         return "Jev unavailable (timeout/error) — a heuristic grade does not pass the gate"
     q_min, c_min = jc["min_signal_quality"], jc["min_signal_confidence"]
     parts = []
@@ -565,6 +568,9 @@ class RiskAgent(Agent):
                                            "side": "LONG" if sig.side > 0 else "SHORT", "bias_label": b["label"],
                                            "raided": ", ".join(raided), "h1_flipped": h1_flipped, "pd_pos": b.get("pd_pos"),
                                            "setup_grade": grade["quality"]})
+        if res.get("fallback") and self.cfg["jev"].get("fallback_blocks", True):
+            # the stand-in rates every raid + 1H shift at 0.72, above the 0.7 bar — it must not open a counter-bias trade
+            return {"reject": "counter-bias reversal needs Jev, and Jev didn't answer (fallback, flagged)"}
         if res["prob"] < sg["reversal_min_jev"]:
             return {"reject": f"counter-bias reversal not confirmed by Jev ({res['prob']:.2f})"}
         return {"mode": "reversal_exception", "risk_mult": sg["reversal_risk_mult"], "no_pyramid": True,
@@ -813,6 +819,9 @@ class PositionManagerAgent(Agent):
                 "momentum_aligned": mom, "adx": round(float(c["adx"][-1]), 1) if c is not None else None,
                 "news_next_hours": self.ctx.news.brief(self.now(), 2) if self.ctx.news else [],
                 "recent_bars_5m": df.iloc[-8:][["open", "high", "low", "close"]].round(4).to_dict("split")["data"]})
+            if res.get("fallback") and self.cfg["jev"].get("fallback_blocks", True):
+                pos.log(self.now(), "pyramid_skipped", why="Jev didn't answer (fallback, flagged)")
+                return
             if res["prob"] < pc["min_continuation_prob"]:
                 pos.log(self.now(), "pyramid_skipped", why=f"continuation {res['prob']:.2f}")
                 return

@@ -31,7 +31,10 @@ SYSTEM = (
     "risk or going live, and never invent trades, prices or reasons. R = profit or loss in units of the risk taken. "
     "A ghost trade is a setup the bot passed on, played out with a fixed yardstick exit (stop, 1.5R target or 4 hours). "
     "For 'best/worst so far' questions use record_by_instrument_and_strategy, and say how many trades stand behind a "
-    "number: under ~30 trades a result is mostly luck. Keep the whole answer under 180 words.")
+    "number: under ~30 trades a result is mostly luck. A trade's 'lesson' is a short note written after it closed; "
+    "quote it when asked why a trade went as it did, but one trade never proves a rule. 'jev_fallbacks' lists Jev "
+    "calls that failed or came back unreadable: those were answered by a rule-based stand-in, which never passes a Jev "
+    "gate — mention them when asked about Jev or about a skipped setup. Keep the whole answer under 180 words.")
 
 
 def when_of(q: str, now: pd.Timestamp) -> tuple[pd.Timestamp | None, pd.Timestamp, pd.Timestamp]:
@@ -92,6 +95,22 @@ def by_sym_strat(journal, syms: list[str]) -> list[dict]:
     return sorted(out, key=lambda x: -x["total_r"])[:40]
 
 
+def jev_fallbacks(journal, a: str, b: str) -> list[dict]:
+    """Jev calls in the window that fell back (failure or unreadable answer), by kind: count and the latest reason."""
+    try:
+        rows = journal.db.execute("SELECT kind, symbol, ts, error FROM decisions WHERE ts >= ? AND ts <= ? AND error IS NOT NULL "
+                                  "ORDER BY ts", (a, b)).fetchall()
+    except Exception:  # noqa: BLE001
+        return []
+    out: dict[str, dict] = {}
+    for kind, sym, ts, err in rows:
+        d = out.setdefault(kind, {"kind": kind, "count": 0, "unreadable": 0})
+        d["count"] += 1
+        d["unreadable"] += str(err).startswith("unreadable")
+        d.update(last_ts=ts, last_symbol=sym, last_error=err)
+    return list(out.values())
+
+
 def gather(main, question: str) -> dict:
     from . import ghosts, insights
     st = main.state
@@ -115,7 +134,7 @@ def gather(main, question: str) -> dict:
         if syms:
             q += f" AND symbol IN ({','.join('?' * len(syms))})"; args += syms
         sig = [dict(r) for r in c.journal.db.execute(q + " ORDER BY ts LIMIT 80", args)]
-        q = "SELECT symbol, strategy, side, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason FROM trades WHERE opened >= ? AND opened <= ?"
+        q = "SELECT id, symbol, strategy, side, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason FROM trades WHERE opened >= ? AND opened <= ?"
         args = [sa, sb]
         if syms:
             q += f" AND symbol IN ({','.join('?' * len(syms))})"; args += syms
@@ -136,12 +155,21 @@ def gather(main, question: str) -> dict:
             "filter_scorecard": ({"taken": sc["taken"], "filters": sc["filters"][:8]} if sc else None),
             # always there, whatever the window: "the last NDQ trade", "how did this week go"
             "latest_trades": [dict(r) for r in c.journal.db.execute(
-                "SELECT symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes "
+                "SELECT id, symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes "
                 "FROM trades WHERE status='closed'" + (f" AND symbol IN ({','.join('?' * len(syms))})" if syms else "")
                 + " ORDER BY closed DESC LIMIT 8", syms or [])],
             "last_7_days": [{"date": d, **v} for d, v in list(c.journal.daily().items())[-7:]],
             "record_by_instrument_and_strategy": by_sym_strat(c.journal, syms)}
+    if "live" in per_book:                   # lessons exist for the practice account only
+        from .lessons import lessons_for
+        L = per_book["live"]
+        ids = [t["id"] for t in L["trades_in_window"] + L["latest_trades"] if t.get("id")]
+        got = lessons_for(main.journal, ids)
+        for t in L["trades_in_window"] + L["latest_trades"]:
+            if t.get("id") in got:
+                t["lesson"] = got[t["id"]]
     facts["books"] = per_book
+    facts["jev_fallbacks"] = jev_fallbacks(main.journal, sa, sb)
     facts["live_state"] = {"entries_enabled": st.trading_enabled, "halt_reason": st.halt_reason or None,
                            "news_blackout": st.news_block, "bias": {s: {k: (st.bias.get(s) or {}).get(k) for k in ("state", "score", "d", "h4", "h1")}
                                                                      for s in (syms or list(main.cfg["instruments"]))},

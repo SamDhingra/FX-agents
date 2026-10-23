@@ -106,8 +106,12 @@ class BiasAgent(Agent):
             res = await self.ctx.jev.bias_audit({
                 "symbol": sym, **b, "recent_h1": h1.round(4).to_dict("split")["data"],
                 "news": self.ctx.news.brief(now) if self.ctx.news else []})
-            g["audit_p"], g["audit_hour"] = round(res["prob"], 3), now.isoformat(timespec="minutes")
-            g["in_doubt"] = res["prob"] < self.sg["audit_doubt_below"]
+            if res.get("fallback"):
+                g["audit_src"] = "jev unavailable"     # keep the last real audit; a stand-in doesn't change the call
+            else:
+                g["audit_p"], g["audit_hour"] = round(res["prob"], 3), now.isoformat(timespec="minutes")
+                g["in_doubt"] = res["prob"] < self.sg["audit_doubt_below"]
+                g["audit_src"] = res.get("source")
         elif b["label"] == "NEUTRAL":
             g["in_doubt"] = False
         # safeguard 6: accuracy — did the bias call the next N hours?
@@ -122,7 +126,7 @@ class BiasAgent(Agent):
         acc = round(sum(hits) / len(hits), 3) if hits else None
         state = "SUSPENDED" if g["suspended"] else ("IN DOUBT" if g["in_doubt"] else b["label"])
         self.state.bias[sym] = b | {"state": state, "suspended": g["suspended"], "in_doubt": g["in_doubt"],
-                                    "audit_p": g["audit_p"], "aligned_losses": g["aligned_losses"],
+                                    "audit_p": g["audit_p"], "audit_src": g.get("audit_src"), "aligned_losses": g["aligned_losses"],
                                     "accuracy": acc, "accuracy_n": len(hits), "updated": now.isoformat(timespec="minutes")}
 
     async def on_closed(self, ev):

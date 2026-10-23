@@ -323,6 +323,9 @@ class StrategistAgent(Agent):
                     "symbol": "ALL", "kind": pr["kind"], "parent": pr["parent"], "change": pr["change"],
                     "candidate_is": _slim(pr["is"]), "candidate_oos": _slim(pr["oos"]),
                     "incumbent_oos": _slim(pr["incumbent_oos"])})
+                if review.get("fallback"):        # a stand-in can't vouch for a candidate; it is retried next pass
+                    self._note(ts, f"held {pr['kind']} of {pr['parent']}: Jev didn't answer (fallback, flagged)", pr["change"])
+                    continue
                 if review["prob"] < 0.55:
                     self._note(ts, f"rejected {pr['kind']} of {pr['parent']} (Jev robust {review['prob']:.2f})", pr["change"])
                     continue
