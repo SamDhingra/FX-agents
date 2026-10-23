@@ -14,6 +14,11 @@ Common
   * Target ("resting liquidity"): the nearest level on the trade's side that is still untaken at the decision —
     1H / 4H / daily / weekly swings, day and week highs & lows, Asia & London session highs & lows
     (fxagents/liquidity.level_map, each known only once confirmed) — and at least 1R from the entry price.
+    AMENDMENT Oct 23 2026, after the first 12 runs and BEFORE judging them: only levels that became known within the
+    last 60 days count. The first runs failed the look-ahead audit on 3 of 12 because a target could be an untaken
+    level formed years earlier, which the audit's re-run on recent data cannot see, so the strategy depended on
+    unbounded history. 60 days was chosen for that reason alone, not from any result; every run is redone. The
+    plugins' audit warm-up is 250 days (daily ATR(14) settles well inside that).
     No such level → no trade. Out at 15:50 NY at the latest; fills only 08:30–11:30 and 13:30–15:30 NY;
     one trade at a time, at most 2 a day.
 
@@ -44,6 +49,7 @@ from .api import Signal
 
 HOUR = 3600 * 10 ** 9
 MIN = 60 * 10 ** 9
+MAX_LEVEL_AGE = 60 * 24 * HOUR          # targets: levels known within the last 60 days (amendment, see the docstring)
 
 
 # ── shared pieces ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -88,7 +94,8 @@ class Targets:
 
     def pick(self, t: int, side: int, ref: float, risk: float, min_r: float = 1.0) -> tuple[float, str] | None:
         L = self.lq
-        ok = (L.lk <= t) & (L.taken > t) & (L.ls == side) & ((L.lp - ref) * side >= min_r * risk)
+        ok = ((L.lk <= t) & (L.lk >= t - MAX_LEVEL_AGE) & (L.taken > t) & (L.ls == side)
+              & ((L.lp - ref) * side >= min_r * risk))
         ix = np.flatnonzero(ok)
         if not len(ix):
             return None
@@ -149,10 +156,11 @@ def model_a(m, P) -> list[Signal]:
     out = []
     for k4, side, lo, hi in fvgs(b4, a4):
         t_known = e4[k4]
-        t_dead = e4[min(k4 + 30, len(e4) - 1)]
         j = int(np.searchsorted(e15, t_known, "right"))           # first 15m candle ending after the FVG is known
         touch = None
-        while j < len(e15) and e15[j] <= t_dead:
+        # alive for 30 4H candles, counted as they COMPLETE (Oct 23 fix: looking up the 30th candle's end used data
+        # past the decision and, on truncated data, fell back to the last candle — a look-ahead difference)
+        while j < len(e15) and int(np.searchsorted(e4, e15[j], "right")) - 1 - k4 < 30:
             if (c15[j] < lo) if side > 0 else (c15[j] > hi):
                 break                                                # closed beyond the far edge: FVG dead
             if touch is None and ((l15[j] <= hi) if side > 0 else (h15[j] >= lo)):
@@ -196,17 +204,18 @@ def model_b(m, P) -> list[Signal]:
             t = e1[j]
             while fi < len(d_fv) and ed[d_fv[fi][0]] <= t - HOUR:   # known before this hour started
                 kk = d_fv[fi][0]
-                alive.append({"until": ed[min(kk + 20, len(ed) - 1)], "lo": d_fv[fi][2], "hi": d_fv[fi][3]})
+                alive.append({"k": kk, "tapped": False, "lo": d_fv[fi][2], "hi": d_fv[fi][3]})
                 fi += 1
-            alive = [a for a in alive if a["until"] > t]
             kd = int(np.searchsorted(ed, t - HOUR, "right")) - 1     # last daily candle complete before this hour
+            # alive for 20 daily candles counted as they complete (Oct 23 fix — see model A)
+            alive = [a for a in alive if not a["tapped"] and kd - a["k"] < 20]
             day = kd + 1
             if event is None and kd >= 0 and (day, side) not in done:
                 hit = (l1[j] < ld[kd]) if side > 0 else (h1[j] > hd[kd])
                 for a in alive:
                     if (l1[j] <= a["hi"]) if side > 0 else (h1[j] >= a["lo"]):
                         hit = True
-                        a["until"] = 0                               # tapped: no longer "unfilled"
+                        a["tapped"] = True                           # tapped: no longer "unfilled"
                 if hit:
                     event = {"j": j, "x": j, "day": day}
             if event is None:

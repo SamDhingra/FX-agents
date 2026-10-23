@@ -16,6 +16,7 @@ class HtfBDailyH1Cisd(Strategy):
     exits = Exits(flat_at=950)
     entry_windows = [(510, 690), (810, 930)]
     max_per_day = 2
+    warmup_days = 250                 # 60-day target levels + daily ATR settle well inside this (audit re-runs)
 
     def signals(self, m):
         return MODELS["B"](m, self.params)

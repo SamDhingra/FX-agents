@@ -55,3 +55,31 @@ def test_fingerprint_covers_the_shared_rules(tmp_path, monkeypatch):
     (fake / "bt/htf_poi.py").write_bytes((run.PKG / "bt/htf_poi.py").read_bytes() + b"\n# changed\n")
     monkeypatch.setattr(run, "PKG", fake)
     assert code_sha(src) != a
+
+
+@pytest.mark.parametrize("plugin", PLUGINS)
+@pytest.mark.parametrize("entry", ["market", "limit_mid"])
+def test_every_signal_is_the_same_on_data_cut_at_its_decision(m, plugin, entry):
+    """Stronger than the engine's 10-signal sample: cut the data at many points; every signal known by a cut must come
+    out identical from the truncated data (this caught the gap-expiry look-ahead in models A and B)."""
+    cls, _ = load_plugin(f"btplugins/{plugin}.py")
+    s = cls(entry=entry)
+    full = s.signals(m)
+    key = lambda x: (x.t, x.side, round(x.stop, 6), round(x.target or 0, 6), x.entry, round(x.price or 0, 6))  # noqa: E731
+    for frac in np.linspace(0.3, 0.95, 9):
+        cut = int(len(m) * frac)
+        part = s.signals(m.slice(0, cut))
+        t_cut = int(m.ns[cut - 1]) + 60 * 10 ** 9
+        want = sorted(key(x) for x in full if x.t <= t_cut)
+        got = sorted(key(x) for x in part if x.t <= t_cut)
+        assert got == want, f"{plugin} {entry}: cut at {frac:.2f} differs"
+
+
+@pytest.mark.parametrize("plugin", ["htf_a_4h_fvg_m15_mss", "htf_b_daily_h1_cisd"])
+def test_audit_with_recent_history_only(plugin):
+    """Targets can't hang on levels older than the warm-up (Oct 23 amendment): a 90-day re-run must agree."""
+    m = data.from_frame(frame(walk(seed=11, n_days=420)), symbol="NDQ")
+    cls, _ = load_plugin(f"btplugins/{plugin}.py")
+    s = cls()
+    a = engine.lookahead_audit(s, m, s.signals(m), 20, warm_days=90)
+    assert a["checked"] >= 15 and a["failed"] == 0, a["examples"]
