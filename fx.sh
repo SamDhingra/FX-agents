@@ -292,6 +292,18 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/analystcheck-build.log 2>&1 || { echo "build failed — see logs/analystcheck-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.exit_study --set analyst --days "${2:-365}" </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
+             # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
+             # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md
+             need_env; mkdir -p logs
+             [[ -d data/history_x/seen_2021_2026 ]] || { echo "no data/history_x/seen_2021_2026 — run ./fx.sh pbtest first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/liqtest-build.log 2>&1 || { echo "build failed — see logs/liqtest-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.liquidity test </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  liqtoday)  # the same liquidity context for the practice account's and playbook book's recent trades, from OANDA
+             #   ./fx.sh liqtoday [days=1]  → data/year_test/liquidity_today/report.md (read-only)
+             $DC exec -T fxagents python -m fxagents.liquidity today --days "${2:-1}" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   pbtest)    # playbook two-step test (fxagents/playbook_test.py): every current playbook setup, as the bot trades it, on
              # 2021→Sep 2026 bid/ask with the real spread; passers only → untouched 2016–2020 (index data exported on demand)
              need_env; mkdir -p logs
@@ -372,7 +384,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
