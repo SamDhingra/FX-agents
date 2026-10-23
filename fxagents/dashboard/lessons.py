@@ -4,6 +4,9 @@ Once a trade closes, 2–3 sentences say what happened (R, how far it went for a
 the exit or management changed the result, and the strategy's record AT THAT CLOSE — so a single trade is always
 read against its sample size. Claude writes it when ANTHROPIC_API_KEY is set; otherwise a plain rule-based line does.
 
+Every book gets them (Oct 23): the practice account's are Claude's when a key is set, the paper books' are the
+rule-based line. Newest trades first; a trade opened in the dashboard without one gets it on the spot.
+
 Reading only. Lessons are shown in the trade story and handed to Ask Claude; nothing that decides a trade (the
 strategies, Risk, Jev prompts, the learner) ever reads them. Feeding one-trade lessons back into decisions would be
 tuning on seen data, one trade at a time.
@@ -98,7 +101,9 @@ def plain(f: dict) -> str:
 
 
 class LessonWriter:
-    """Writes the missing lessons for the practice account, a few at a time. Never blocks or touches trading."""
+    """Writes the missing lessons for every book, newest trades first, a few at a time; and on demand when a trade
+    is opened in the dashboard. Claude writes the practice account's (when a key is set); the paper books get the
+    rule-based lesson, which costs nothing. Never blocks or touches trading."""
 
     def __init__(self, main) -> None:
         self.main = main
@@ -109,19 +114,24 @@ class LessonWriter:
         self.per_hour = int(cfg.get("lessons_per_hour", 20))
         self.calls: list[float] = []
         if self.on:
-            ensure(main.journal)
+            for _, c in self.books():
+                ensure(c.journal)
+
+    def books(self) -> list[tuple[str, object]]:
+        out = [("live", self.main)] + list((getattr(self.main, "shadows", None) or {}).items())
+        return [(k, c) for k, c in out if getattr(c, "journal", None) is not None]
 
     @property
     def key(self) -> str:
         return os.environ.get("ANTHROPIC_API_KEY", "")
 
-    def missing(self, limit: int = 5) -> list[dict]:
-        j = self.main.journal
+    def missing(self, journal=None, limit: int = 5) -> list[dict]:
+        j = journal if journal is not None else self.main.journal
         now = self.main.state.now
         since = (now - __import__("pandas").Timedelta(days=self.days)).isoformat() if now is not None else ""
         rows = j.db.execute("SELECT t.* FROM trades t LEFT JOIN lessons l ON l.trade_id = t.id WHERE t.status='closed' "
-                            "AND t.r_multiple IS NOT NULL AND t.closed >= ? AND l.trade_id IS NULL ORDER BY t.closed LIMIT ?",
-                            (since, limit)).fetchall()
+                            "AND t.r_multiple IS NOT NULL AND t.closed >= ? AND l.trade_id IS NULL ORDER BY t.closed DESC "
+                            "LIMIT ?", (since, limit)).fetchall()
         return [dict(r) for r in rows]
 
     async def _claude(self, f: dict) -> str | None:
@@ -131,7 +141,7 @@ class LessonWriter:
             return None
         self.calls.append(now)
         import httpx
-        async with httpx.AsyncClient(timeout=45) as cl:
+        async with httpx.AsyncClient(timeout=30) as cl:
             r = await cl.post("https://api.anthropic.com/v1/messages",
                               headers={"x-api-key": self.key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                               json={"model": self.model, "max_tokens": 1500, "system": SYSTEM,
@@ -143,31 +153,47 @@ class LessonWriter:
         text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text").strip()
         return text or None
 
-    async def write(self, trade: dict) -> dict:
-        j = self.main.journal
+    async def write(self, trade: dict, journal=None, use_claude: bool = True) -> dict:
+        j = journal if journal is not None else self.main.journal
         f = facts_of(j, trade)
         text, source, model = None, "rules", None
-        try:
-            text = await self._claude(f)
-            if text:
-                source, model = "claude", self.model
-        except Exception as e:  # noqa: BLE001 — a lesson is never worth an error anywhere else
-            log.warning("lesson %s: %s", trade["id"], e)
+        if use_claude:
+            try:
+                text = await self._claude(f)
+                if text:
+                    source, model = "claude", self.model
+            except Exception as e:  # noqa: BLE001 — a lesson is never worth an error anywhere else
+                log.warning("lesson %s: %s", trade["id"], e)
         if not text:
             text = plain(f)
         ts = self.main.state.now.isoformat(timespec="seconds") if self.main.state.now is not None else None
         j.db.execute("INSERT OR IGNORE INTO lessons(trade_id, ts, text, source, model, facts) VALUES(?,?,?,?,?,?)",
                      (trade["id"], ts, text, source, model, json.dumps(f, default=str)))
         j.db.commit()
-        return {"trade_id": trade["id"], "text": text, "source": source}
+        return lesson_of(j, trade["id"]) or {"text": text, "source": source}
+
+    async def for_trade(self, c, trade_id: str) -> dict | None:
+        """The lesson for one trade, written now if it is closed and has none (any age)."""
+        if not self.on or getattr(c, "journal", None) is None:
+            return None
+        ensure(c.journal)
+        have = lesson_of(c.journal, trade_id)
+        if have:
+            return have
+        r = c.journal.db.execute("SELECT * FROM trades WHERE id=? AND status='closed' AND r_multiple IS NOT NULL",
+                                 (trade_id,)).fetchone()
+        if r is None:
+            return None
+        return await self.write(dict(r), c.journal, use_claude=c is self.main)
 
     async def pass_once(self) -> int:
         if not self.on:
             return 0
         n = 0
-        for t in self.missing():
-            await self.write(t)
-            n += 1
+        for _, c in self.books():
+            for t in self.missing(c.journal):
+                await self.write(t, c.journal, use_claude=c is self.main)
+                n += 1
         return n
 
     async def run(self, every_s: int = 120) -> None:
@@ -182,7 +208,7 @@ class LessonWriter:
 def lesson_of(journal, trade_id: str) -> dict | None:
     try:
         r = journal.db.execute("SELECT text, source, ts FROM lessons WHERE trade_id=?", (trade_id,)).fetchone()
-    except Exception:  # noqa: BLE001 — no table yet (shadow books never get one)
+    except Exception:  # noqa: BLE001 — no table yet
         return None
     return dict(r) if r else None
 

@@ -150,6 +150,8 @@ def compare(ctx, rng: str, sh=None) -> dict:
 def build_app(ctx) -> FastAPI:
     books = lambda: [ctx, *(getattr(ctx, "shadows", None) or {}).values()]
 
+    lw = LessonWriter(ctx) if getattr(ctx, "journal", None) is not None else None
+
     @contextlib.asynccontextmanager
     async def lifespan(_app):
         """Play out passed and taken setups every 5 minutes, before the bars roll out of memory (read-only)."""
@@ -163,7 +165,6 @@ def build_app(ctx) -> FastAPI:
                         pass
                 await asyncio.sleep(300)
         task = asyncio.create_task(run()) if getattr(ctx, "journal", None) is not None else None
-        lw = LessonWriter(ctx) if getattr(ctx, "journal", None) is not None else None
         ltask = asyncio.create_task(lw.run()) if lw is not None and lw.on else None
         try:
             yield
@@ -280,9 +281,15 @@ def build_app(ctx) -> FastAPI:
     @app.get("/api/story/{trade_id}")
     async def api_story(trade_id: str, request: Request):
         need(request)
-        out = insights.story(ctx, bk(request), trade_id)
+        c = bk(request)
+        out = insights.story(ctx, c, trade_id)
         if out is None:
             raise HTTPException(404, "no such trade")
+        if out.get("lesson") is None and lw is not None:
+            try:
+                out["lesson"] = await lw.for_trade(c, trade_id)     # a closed trade without one gets it now
+            except Exception:  # noqa: BLE001 — never fail the story over a lesson
+                pass
         return JSONResponse(json.loads(json.dumps(out, default=str)))
 
     @app.get("/api/bars")

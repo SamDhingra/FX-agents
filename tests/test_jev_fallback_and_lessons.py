@@ -181,3 +181,24 @@ def test_lessons_never_reach_the_deciding_code():
     users = [p.relative_to(root).as_posix() for p in root.rglob("*.py") if "lessons" in p.read_text(encoding="utf-8")
              and p.name != "lessons.py"]
     assert sorted(users) == ["dashboard/ask.py", "dashboard/insights.py", "dashboard/server.py"]
+
+
+def test_any_closed_trade_gets_a_lesson_when_opened_and_paper_books_get_rules(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    ctx = make_ctx(tmp_path)
+    c = TestClient(build_app(ctx))
+    st = c.get("/api/story/t3").json()                               # Sept trade: outside the 14-day back-fill
+    assert st["lesson"]["source"] == "rules" and "R" in st["lesson"]["text"]
+    assert c.get("/api/story/t3").json()["lesson"]["text"] == st["lesson"]["text"]      # stored once
+    shadow = make_ctx(tmp_path / "sh")
+    ctx.shadows = {"playbook": shadow}
+    w = lessons.LessonWriter(ctx)
+
+    async def stub(f):
+        return "A Claude lesson."
+    monkeypatch.setattr(w, "_claude", stub)
+    assert asyncio.run(w.pass_once()) == 2                            # the recent trade in each book
+    assert ctx.journal.db.execute("SELECT source FROM lessons WHERE trade_id='recent'").fetchone()["source"] == "claude"
+    assert shadow.journal.db.execute("SELECT source FROM lessons WHERE trade_id='recent'").fetchone()["source"] == "rules"
+    order = [t["id"] for t in w.missing(ctx.journal, limit=50)]
+    assert order == sorted(order, key=lambda i: ctx.journal.db.execute("SELECT closed FROM trades WHERE id=?", (i,)).fetchone()[0], reverse=True)

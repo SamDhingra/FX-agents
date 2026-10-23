@@ -538,7 +538,7 @@ html[data-surface="glass"]{background:var(--bg)}
 .say .bub{background:var(--card-2);border:1px solid var(--line);border-radius:4px 12px 12px 12px;padding:8px 12px;font-size:13px;line-height:1.45}
 .say .who{font-size:11.5px;font-weight:650;color:var(--text-2);margin-bottom:2px}
 .verdict-stamp{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 4px;padding:12px 14px;border-radius:12px;border:2px dashed var(--line-2)}
-.lesson{margin-top:12px;padding:10px 12px;border:1px solid var(--line-2);border-left:3px solid var(--accent,#7090ff);border-radius:8px;font-size:13px;line-height:1.5}
+.lesson{margin:0 0 14px;padding:10px 12px;border:1px solid var(--line-2);border-left:3px solid var(--accent,#7090ff);border-radius:8px;font-size:13px;line-height:1.5}
 .lesson .l{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .lesson .mut{font-size:11px;margin-top:6px}
 .verdict-stamp .st{font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;padding:4px 10px;border-radius:8px;transform:rotate(-3deg);border:2px solid currentColor}
@@ -3112,8 +3112,9 @@ async function courtroom(t){
   const jstamp = jq == null || R == null ? `<span class="st na">no Jev grade</span>` : ((jq >= .5) === (R > 0)) ? `<span class="st ok">Jev called it</span>` : `<span class="st no">Jev missed</span>`;
   const vstamp = R == null ? `<span class="st na">still open</span>` : R > 0 ? `<span class="st ok">won ${sR(R)}</span>` : `<span class="st no">lost ${sR(R)}</span>`;
   box.innerHTML = `<h3>The case <span class="mut" style="font-weight:500;font-size:12px">how the agents decided</span></h3>${lines.join("")}
-    <div class="verdict-stamp">${vstamp}${jstamp}<span class="mut" style="font-size:12px">P&amp;L ${smoney(T.realized,2)} · best ${sR(T.mfe_r,1)}</span></div>
-    ${st && st.lesson ? `<div class="lesson"><div class="l">Lesson${st.lesson.source === "claude" ? " · written by Claude" : ""}</div>${esc(st.lesson.text)}<div class="mut">For reading only: one trade never changes the bot's rules.</div></div>` : ""}`;
+    <div class="verdict-stamp">${vstamp}${jstamp}<span class="mut" style="font-size:12px">P&amp;L ${smoney(T.realized,2)} · best ${sR(T.mfe_r,1)}</span></div>`;
+  const old = $("#lessonBox"); if(old) old.remove();
+  if(st && st.lesson) box.insertAdjacentHTML("beforebegin", `<div class="lesson" id="lessonBox"><div class="l">Lesson${st.lesson.source === "claude" ? " · written by Claude" : ""}</div>${esc(st.lesson.text)}<div class="mut">For reading only: one trade never changes the bot's rules.</div></div>`);
 }
 let RP = null;
 async function replay(t){
