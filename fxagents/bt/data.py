@@ -84,7 +84,8 @@ class Market:
     # ── candles ──
     def bars(self, tf) -> pd.DataFrame:
         """Mid candles: tf = minutes (int) or "1h", "4h" (NY 01/05/09/13/17/21 closes), "1d" (NY 17:00 close) — both on the New York wall clock all year.
-        Columns o h l c v start end (ns). Cached."""
+        Columns o h l c v n start end (ns); n = the 1-minute bars it was built from (Oct 25 2026), so a strategy can
+        skip candles with missing minutes. Cached."""
         key = str(tf)
         if key in self._bars:
             return self._bars[key]
@@ -95,8 +96,10 @@ class Market:
             from ..bias import _localize
             rule, off = ("4h", "1h") if key == "4h" else ("24h", "17h")
             wall = m.set_axis(self.idx.tz_convert(NY).tz_localize(None))
-            b = wall.resample(rule, offset=off, label="left", closed="left").agg(
-                {"o": "first", "h": "max", "l": "min", "c": "last", "v": "sum"}).dropna()
+            g = wall.resample(rule, offset=off, label="left", closed="left")
+            b = g.agg({"o": "first", "h": "max", "l": "min", "c": "last", "v": "sum"})
+            b["n"] = g["c"].count()
+            b = b.dropna()
             b["start"] = _localize(b.index, NY).tz_convert("UTC").as_unit("ns").asi8
             b["end"] = _localize(b.index + pd.Timedelta(rule), NY).tz_convert("UTC").as_unit("ns").asi8
             b.index = _localize(b.index, NY)
@@ -107,7 +110,7 @@ class Market:
             r = m.resample(f"{mins}min", label="left", closed="left")
             step = pd.Timedelta(minutes=mins)
         b = pd.DataFrame({"o": r["o"].first(), "h": r["h"].max(), "l": r["l"].min(), "c": r["c"].last(),
-                          "v": r["v"].sum()}).dropna()
+                          "v": r["v"].sum(), "n": r["c"].count()}).dropna()
         b["start"] = b.index.tz_convert("UTC").as_unit("ns").asi8
         b["end"] = (b.index + step).tz_convert("UTC").as_unit("ns").asi8
         b.index = b.index.tz_convert(NY)

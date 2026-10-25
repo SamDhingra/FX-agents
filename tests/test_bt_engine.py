@@ -124,7 +124,7 @@ def test_lookahead_audit_catches_a_peek():
     s, h = Peeker(), Honest()
     a = engine.lookahead_audit(s, m, s.signals(m), 10, warm_days=2)
     b = engine.lookahead_audit(h, m, h.signals(m), 10, warm_days=2)
-    assert a["checked"] == 10 and a["failed"] > 0
+    assert a["cuts"] >= 10 and a["failed"] > 0
     assert b["checked"] > 0 and b["failed"] == 0
 
 
@@ -272,7 +272,8 @@ def test_4h_candles_stay_on_the_new_york_grid_through_dst():
 
 def test_crypto_pays_financing_every_day_with_no_wednesday_triple():
     n = 6 * 1440                                                         # Tue 09:00 NY → Mon 09:00, 24/7
-    for sym, want in (("BTCUSD", 6), ("XAUUSD", 8)):                     # Wed..Sun 17:00 crossings = 6; gold: Wed ×3
+    # BTC: Tue..Sun 17:00 crossings = 6. Gold (Oct 25 2026): weekdays only, Wed ×3 (it books the weekend) = 1+3+1+1
+    for sym, want in (("BTCUSD", 6), ("XAUUSD", 6)):
         m = mk(flat(n, 100.0), start="2025-03-04 14:00")
         m.symbol = sym
         t = run(m, lambda m: Signal(t=int(m.ns[1]), side=1, stop=90.0),
@@ -303,7 +304,7 @@ def test_daily_rsi2_adx2_plugin_signal_exits():
     loc = pd.to_datetime(T.exit_time).dt.tz_convert("America/New_York")
     assert ((loc.dt.hour == 18) & (loc.dt.minute == 0)).mean() > 0.8        # out at the next daily open
     a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=200)
-    assert a["checked"] == 5 and a["failed"] == 0
+    assert a["cuts"] >= 5 and a["checked"] >= 5 and a["failed"] == 0
 
 
 def test_bot_setups_bridge_runs_the_bots_own_code_causally():

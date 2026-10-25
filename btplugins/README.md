@@ -23,7 +23,7 @@ class MyIdea(Strategy):
     variants = {"slow": {"ema": 100}}          # controls the rule must beat
 
     def signals(self, m):                      # m: fxagents.bt.data.Market
-        b = m.bars(15)                         # mid candles: o h l c v start end
+        b = m.bars(15)                         # mid candles: o h l c v n start end (n = minutes in the candle)
         e = ind.ema(b.c, self.p("ema"))
         return [Signal(t=int(b.end.iloc[i]), side=1, stop=float(b.l.iloc[i]))
                 for i in range(1, len(b)) if b.c.iloc[i] > e[i] and b.c.iloc[i - 1] <= e[i - 1]]
@@ -32,7 +32,7 @@ class MyIdea(Strategy):
 ## Rules
 
 - **`Signal.t` is when the decision is known.** That is usually a candle's `end`, and the signal may use only data that existed by then.
-  - The audit re-runs signals on data that stops at `t`. Any signal that disappears there fails the run.
+  - The audit re-runs signals on data cut at signal times and at random times, and compares the day before each cut both ways. A signal that disappears or changes on cut data fails the run, and so does one that appears on cut data but was skipped by the full run (a filter that used the future).
 - **Prices in a Signal are real prices** (shorts are not mirrored). `side` is `1` for long, `-1` for short.
 - **Candle sizes:** `m.bars(tf)` takes minutes (`5`, `15`, …), `"1h"`, `"4h"` or `"1d"`. 4H and daily candles follow the New York clock all year: 4H closes at 01/05/09/13/17/21, daily at 17:00.
 - **Entry types:** `entry="limit"` or `entry="stop"`, with `price` and `expire_min`. `cancel` sets a level that kills the pending order.
@@ -53,4 +53,4 @@ Add the file through git, then run `./fx.sh update`. Then either:
 - open **Backtester** in the dashboard, or
 - run `./fx.sh bt btplugins/<file>.py`.
 
-Every run is recorded with its exact code. The vault (2016–2020) opens once, and only for the identical code, parameters and instrument that passed every gate on seen data.
+Every run is recorded with its exact code. The vault (2016–2020) opens once, and only for the identical code, parameters and instrument that passed every gate on seen data. It also opens only once per strategy family per instrument: the family is the class's `family` attribute, or its `name` without a trailing `_v<number>`, so an edited copy can't reopen a spent vault.

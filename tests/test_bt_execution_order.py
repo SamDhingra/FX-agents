@@ -134,5 +134,5 @@ def test_audit_catches_a_changed_stop():
     m = mk(rising)
     s = Peeks()
     a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=0.1)
-    assert a["checked"] == 5 and a["failed"] >= 4
+    assert a["cuts"] >= 5 and a["failed"] >= 4
     assert any("stop changed" in x for x in a["examples"])

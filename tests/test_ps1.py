@@ -53,4 +53,4 @@ def test_ps1_lookahead_audit():
     s = S()
     m = _market()
     a = engine.lookahead_audit(s, m, s.signals(m), 8, warm_days=5)
-    assert a["checked"] == 8 and a["failed"] == 0, a
+    assert a["checked"] >= 8 and a["failed"] == 0, a

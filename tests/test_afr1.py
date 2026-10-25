@@ -101,4 +101,4 @@ def test_engine_report_extra_and_lookahead():
     lines = "\n".join(s.compare(m, res["trades"], v))
     assert "Per eligible day" in lines and "AFR − matched C10" in lines
     a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=2.5)
-    assert a["checked"] == 1 and a["failed"] == 0
+    assert a["checked"] >= 1 and a["failed"] == 0

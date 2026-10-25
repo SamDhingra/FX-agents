@@ -61,4 +61,4 @@ def test_engine_fills_it_and_it_passes_the_lookahead_audit():
     T = res["trades"]
     assert len(T) == 1 and T[0]["exit_reason"] == "target" and 0 < T[0]["R"] < 0.1   # a "win" is worth < 0.1R
     a = engine.lookahead_audit(s, m, s.signals(m), 5, warm_days=0.2)   # 4.8 h of history before the signal
-    assert a["checked"] == 1 and a["failed"] == 0
+    assert a["checked"] >= 1 and a["failed"] == 0

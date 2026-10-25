@@ -1,6 +1,8 @@
 """The protocol ledger: every backtest run is recorded (exact code, parameters, data, result), tries are counted, and
 the untouched vault data opens only for the IDENTICAL strategy (same code sha, same parameters, same symbol) that
-passed every gate on seen data — once.
+passed every gate on seen data — once. And once per FAMILY per symbol (Oct 25 2026): a renamed or edited copy
+("…_v2") can't open a vault its family already spent. The family is the plugin's `family` attribute, or its name
+without a trailing "_v<number>".
 
 Runs live in data/bt/ledger.sqlite; each run's files (the code that ran, summary, trades, report) in data/bt/runs/<id>/.
 Plugins are the .py files in btplugins/ (delivered by git — never uploaded through the web)."""
@@ -8,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import re
 import json
 import sqlite3
 import time
@@ -31,7 +34,14 @@ def db() -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute(SCHEMA)
+    if "family" not in {r[1] for r in con.execute("PRAGMA table_info(runs)")}:
+        con.execute("ALTER TABLE runs ADD COLUMN family TEXT")
     return con
+
+
+def family_of(name: str, declared: str | None = None) -> str:
+    """A strategy's family: declared, or its name without trailing "_v<n>" (so c10, c10_v2 and c10_v3 are one)."""
+    return declared or re.sub(r"(_v\d+)+$", "", name or "")
 
 
 def run_dir(rid: str) -> Path:
@@ -53,7 +63,7 @@ def _class_info(src: str) -> dict | None:
             for st in node.body:
                 if isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name):
                     k = st.targets[0].id
-                    if k in ("name", "symbol", "description", "params", "variants"):
+                    if k in ("name", "symbol", "description", "params", "variants", "family"):
                         try:
                             info[k] = ast.literal_eval(st.value)
                         except ValueError:
@@ -98,7 +108,7 @@ def merged_params(p: dict, overrides: dict | None) -> dict:
 
 
 # ── the protocol ──
-def vault_check(con, file: str, code_sha: str, params: str, symbol: str) -> tuple[bool, str]:
+def vault_check(con, file: str, code_sha: str, params: str, symbol: str, family: str | None = None) -> tuple[bool, str]:
     seen = con.execute("SELECT id, passed FROM runs WHERE plugin=? AND code_sha=? AND params=? AND symbol=? AND role='seen'"
                        " AND status='done' ORDER BY created DESC", (file, code_sha, params, symbol)).fetchall()
     if not any(r["passed"] for r in seen):
@@ -108,6 +118,12 @@ def vault_check(con, file: str, code_sha: str, params: str, symbol: str) -> tupl
                          f" AND status IN {LIVE}", (file, code_sha, params, symbol)).fetchone()
     if opened:
         return False, f"the vault was already opened for it (run {opened['id']})"
+    if family:
+        for r in con.execute(f"SELECT id, name, family, plugin FROM runs WHERE role='vault' AND symbol=? AND status IN {LIVE}",
+                             (symbol,)):
+            if family_of(r["name"], r["family"]) == family:
+                return False, (f"the {family} family already opened the {symbol} vault ({r['plugin']}, run {r['id']}); "
+                               f"an edited copy can't open it again")
     return True, "passed on seen data — the vault can be opened once"
 
 
@@ -129,7 +145,7 @@ def enqueue(file: str, dataset: str, symbol: str | None = None, overrides: dict 
     try:
         con.execute("BEGIN IMMEDIATE")
         if role == "vault":
-            ok, why = vault_check(con, file, p["code_sha"], params, symbol)
+            ok, why = vault_check(con, file, p["code_sha"], params, symbol, family_of(p["name"], p.get("family")))
             if not ok:
                 raise PermissionError(f"vault refused: {why}")
         rid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
@@ -137,9 +153,9 @@ def enqueue(file: str, dataset: str, symbol: str | None = None, overrides: dict 
         d.mkdir(parents=True, exist_ok=True)
         (d / "code.py").write_bytes((PLUGINS / file).read_bytes())          # the exact code that will run
         con.execute("INSERT INTO runs (id, created, plugin, name, code_sha, params, symbol, dataset, role, status, stage,"
-                    " pct, source, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)",
+                    " pct, source, note, family) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)",
                     (rid, time.time(), file, p["name"], p["code_sha"], params, symbol, dataset, role, status, status,
-                     source, note[:200]))
+                     source, note[:200], family_of(p["name"], p.get("family"))))
         con.execute("COMMIT")
         return rid
     except BaseException:
@@ -197,7 +213,8 @@ def catalog() -> dict:
             if "error" in p:
                 continue
             p["tries"] = tries(con, p["file"])
-            ok, why = vault_check(con, p["file"], p["code_sha"], canon(p["params"]), p["symbol"])
+            ok, why = vault_check(con, p["file"], p["code_sha"], canon(p["params"]), p["symbol"],
+                                  family_of(p["name"], p.get("family")))
             p["vault"] = {"eligible": ok, "why": why}
         dss = []
         for k, v in datasets().items():

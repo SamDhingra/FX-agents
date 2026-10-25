@@ -47,14 +47,22 @@ def summarize(res: dict, m) -> dict:
     if len(t) and len(c) == len(t):                  # paired: each real trade minus its own coin-flip twin
         out["coin_edge"] = base_stats(t.assign(R=t.R.to_numpy() - c.R.to_numpy(),
                                                R_2x=t.R_2x.to_numpy() - c.R_2x.to_numpy()), days)
+    out["controls"] = bool(res.get("controls", False))
     rd = frame(res.get("rand") or [])
+    out["timing_cover"] = (len(rd) / len(t)) if len(t) else 0.0
     if len(rd):
         out["random"] = base_stats(rd, days)
         out["timing"] = base_stats(rd.assign(R=rd.edge, R_2x=rd.edge), days)      # real − random twins, per trade
     if len(t):
         loc = t.entry_time.dt.tz_convert(NY)
-        half = len(t) // 2
-        out["halves"] = [float(t.R.iloc[:half].mean()) if half else float("nan"), float(t.R.iloc[half:].mean())]
+        # Oct 25 2026: halves of the PERIOD (the data's calendar midpoint), not of the trade count — a rule that
+        # trades much more in one stretch used to be split far from the middle of the test period.
+        mid = m.idx[0] + (m.idx[-1] - m.idx[0]) / 2
+        first = (t.entry_time < mid).to_numpy()
+        out["halves"] = [float(t.R[first].mean()) if first.any() else float("nan"),
+                         float(t.R[~first].mean()) if (~first).any() else float("nan")]
+        out["halves_n"] = [int(first.sum()), int((~first).sum())]
+        out["halves_split"] = mid.tz_convert(NY).date().isoformat()
         out["by_year"] = breakdown(t, loc.dt.year)
         out["by_hour"] = breakdown(t, loc.dt.hour)
         out["by_side"] = breakdown(t, t.side.map({1: "long", -1: "short"}))
@@ -73,17 +81,22 @@ def gates(out: dict) -> dict:
         "avg R > 0": n > 0 and s["avg_R"] > 0,
         "95% range above 0": n > 0 and s["ci_lo"] > 0,
         "positive at 2× costs": n > 0 and s["avg_R_2x"] > 0,
-        "positive in both halves": n > 1 and all(x > 0 for x in out.get("halves", [-1])),
+        "positive in both halves": n > 1 and all(x > 0 for x in out.get("halves", [-1])),   # nan > 0 is False
     }
+    # Oct 25 2026: a control that couldn't be computed FAILS its gate; it no longer drops out of the list.
+    controls = out.get("controls", True)
     # Oct 22 2026 (PS-1 execution review): a positive average difference is not evidence — the paired difference's
     # 95% range (same day-block bootstrap as the headline) must be above 0.
     ce = out.get("coin_edge")
-    if ce is not None:
-        g["beats the coin flip (95% above 0)"] = bool(ce.get("trades") and ce["ci_lo"] > 0)
+    if ce is not None or controls:
+        g["beats the coin flip (95% above 0)"] = bool(ce and ce.get("trades") and ce["ci_lo"] > 0)
     else:
         g["beats the coin flip"] = n > 0 and c.get("trades", 0) > 0 and s["avg_R"] > c["avg_R"]
-    if out.get("timing"):
-        g["beats random timing (95% above 0)"] = bool(out["timing"].get("trades") and out["timing"]["ci_lo"] > 0)
+    if out.get("timing") or controls:
+        tm = out.get("timing") or {}
+        # random twins must exist for at least 90% of the trades (some minutes have no matching eligible days)
+        g["beats random timing (95% above 0)"] = bool(tm.get("trades") and tm["ci_lo"] > 0
+                                                      and out.get("timing_cover", 1.0) >= 0.9)
     g["PASS"] = all(g.values())
     return g
 
@@ -105,7 +118,9 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
         L += ["No trades.", "", "Funnel: " + " → ".join(f"{k} {v}" for k, v in out["funnel"].items())]
         return "\n".join(L)
     L += [f"Trades {s['trades']}, win {s['win']:.0%}, avg {s['avg_R']:+.3f}R (95% {s['ci_lo']:+.3f} … {s['ci_hi']:+.3f}),"
-          f" 2× costs {s['avg_R_2x']:+.3f}R, halves {out['halves'][0]:+.3f} / {out['halves'][1]:+.3f},"
+          f" 2× costs {s['avg_R_2x']:+.3f}R, halves {out['halves'][0]:+.3f} / {out['halves'][1]:+.3f}"
+          + (f" ({out['halves_n'][0]} / {out['halves_n'][1]} trades, split {out['halves_split']})"
+             if out.get("halves_n") else "") + ","
           f" exact coin flip {c.get('avg_R', float('nan')):+.3f}R, max drawdown {out['equity']['max_dd_R']:.1f}R", ""]
     if out.get("coin_edge"):
         ce = out["coin_edge"]
@@ -115,7 +130,8 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
         tm, rd = out["timing"], out["random"]
         L += [f"Random timing (same side, same time of day, random other days, same stop % and exits): "
               f"{rd['avg_R']:+.3f}R. Timing edge (real − random) {tm['avg_R']:+.3f}R "
-              f"(95% {tm['ci_lo']:+.3f} … {tm['ci_hi']:+.3f}).", ""]
+              f"(95% {tm['ci_lo']:+.3f} … {tm['ci_hi']:+.3f}); twins found for {out.get('timing_cover', 1):.0%} "
+              f"of trades (twins obey the rule's entry window, news blackout, spread cap and Friday flat).", ""]
     L += ["| gate | |", "|---|---|"] + [f"| {k} | {'yes' if v else 'no'} |" for k, v in out["gates"].items()] + [""]
     L += ["Funnel: " + " → ".join(f"{k} {v}" for k, v in out["funnel"].items()), ""]
     L += ["| year | trades | avg R |", "|---|---|---|"] + \
@@ -126,9 +142,11 @@ def text(name: str, ds: str, out: dict, audit: dict | None = None) -> str:
         L.append(f"Variant {k}: {v.get('trades', 0)} trades" + (f", avg {v['avg_R']:+.3f}R" if v.get("trades") else ""))
     if out.get("engine"):
         L += [f"Engine {out['engine']} (fill-minute targets, open-first ordering, market slippage "
-              f"{out.get('market_slip_frac', 0):.0%} of spread)."]
+              f"{out.get('market_slip_frac', 0):.0%} of spread; 2× costs = every half-spread and slippage plus the "
+              f"financing charged again; halves split at the period's calendar midpoint)."]
     if audit:
-        L += [f"Look-ahead audit: {audit['checked']} signals re-run on truncated data (time, side, stop, target, "
-              f"entry price and risk limits compared), {audit['failed']} changed"
+        L += [f"Look-ahead audit: {audit.get('cuts', audit['checked'])} cuts, {audit['checked']} signals in the day "
+              f"before each cut compared both ways (missing, changed, or signalled on cut data but skipped by the "
+              f"full run), {audit['failed']} failed"
               + (f" (e.g. {', '.join(audit['examples'])})" if audit["failed"] else "") + "."]
     return "\n".join(L)

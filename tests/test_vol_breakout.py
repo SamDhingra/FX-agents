@@ -26,4 +26,4 @@ def test_entries_and_exits_follow_the_spec():
 
 def test_calendar_matches_the_authors_copy():
     import fxagents.usd_calendar as U
-    assert len(U.FOMC) == 48 and len(U.CPI) == len(U.NFP) == len(U.PPI) == 69
+    assert len(U.FOMC) == 48 + 39 and len(U.CPI) == len(U.NFP) == len(U.PPI) == 69 + 60    # 2016–2020 added Oct 25

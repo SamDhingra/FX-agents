@@ -51,6 +51,7 @@ MGMT = {
 
 class C10Mgmt(Strategy):
     name = "c10_mgmt"
+    family = "gpt_c10_afternoon_continuation"   # same entries as C10: its vault is spent
     symbol = "NDQ"
     description = "C10 v2 entries with trade-management rules (cut if not working, breakeven, partial, trail, thesis exits)."
     params = {"move_atr": 1.0, "er_n": 12, "er_min": 0.40, "stop_atr": 1.25, "mgmt": "none"}

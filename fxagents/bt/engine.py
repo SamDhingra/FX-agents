@@ -6,7 +6,8 @@ data gap → out at the last price; financing at each 17:00 NY crossing; flat ti
 stop; the stop FIRST (on the mid during the 16:55–18:05 spread spike), with slippage on intrabar stop fills; then
 partials, the full target, the break-even move and trailing — and, if any of those moved the stop, a same-minute
 check that the low didn't already take it. Results in R after spread, financing and (optionally) the 1% CAD
-conversion; "2×" pays the spread and financing once more. Control: an exact coin flip — a long AND a short at the
+conversion; "2×" pays every transaction cost once more — both half-spreads (entry and exit minute) and all slippage —
+and the financing once more (Oct 25 2026; it used to add only the entry spread). Control: an exact coin flip — a long AND a short at the
 same minute, same stop distance and exits, averaged.
 """
 from __future__ import annotations
@@ -112,6 +113,7 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
     be_done = False
     mover = "stop"                                                  # which rule last moved the stop (exit label)
     rollovers = 0
+    xcost = 0.0                                                     # exit costs paid vs the mid (half-spread + slip)
     events = []
     trail = _Trail(m, ex.trail, side, t_sig) if ex.trail else None
     t_flat = None
@@ -128,19 +130,25 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
     close_after = (ex.trail or {}).get("after_close_r")
     close_ok = close_after is None
 
-    def out(k, px, why):
+    def out(k, px, why, sl=0.0):
+        nonlocal xcost
+        xcost += frac * (0.5 * float(m.spread[k]) + sl)
         pts = banked + frac * (px - e)
         b_, w_ = max(best, (px - e) / R), min(worst, (px - e) / R)
         return {"jx": int(k), "pts": float(pts), "why": why, "rollovers": rollovers, "mfe_r": float(b_),
-                "mae_r": float(w_), "events": events, "exit_px": float(px), "stop_final": float(stop)}
+                "mae_r": float(w_), "events": events, "exit_px": float(px), "stop_final": float(stop), "xcost": float(xcost)}
+
+    def msl(k):
+        return costs.market_slip_frac * float(m.spread[k])
 
     def mkt(k):                                                     # a market exit at minute k's open
-        return M["ex_o"][k] - costs.market_slip_frac * float(m.spread[k])
+        return M["ex_o"][k] - msl(k)
 
     def take_part(k, i, px):
-        nonlocal banked, frac, stop, moved, mover, best
+        nonlocal banked, frac, stop, moved, mover, best, xcost
         r, f, nsr = parts[i]
         take = min(f, frac)
+        xcost += take * 0.5 * float(m.spread[k])                    # a resting limit: half the spread, no slip
         banked += take * (px - e)
         frac -= take
         done_parts[i] = True
@@ -161,18 +169,18 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
     while k < n:
         if k > j and ns[k] - ns[k - 1] > gap * MIN:
             return out(k - 1, M["ex_c"][k - 1], "data_gap")
-        if k > j and mod[k - 1] < 1020 and (mod[k] >= 1020 or day[k] != day[k - 1]):
-            rollovers += 3 if dow[k - 1] == costs.triple_dow else 1
+        if k > j and (day[k] != day[k - 1] or (mod[k - 1] < 1020 <= mod[k])):
+            rollovers += _rollovers(int(day[k - 1]), int(mod[k - 1]), int(day[k]), int(mod[k]), costs.triple_dow)
         if k > j and t_flat is not None and ns[k] >= t_flat:
-            return out(k, mkt(k), "flat")
+            return out(k, mkt(k), "flat", msl(k))
         if k > j and ex.friday_flat_at is not None and dow[k] == 4 and mod[k] >= ex.friday_flat_at:
-            return out(k, mkt(k), "friday_flat")
+            return out(k, mkt(k), "friday_flat", msl(k))
         if k > j and ex.max_hold_min is not None and ns[k] - ns[j] >= ex.max_hold_min * MIN:
-            return out(k, mkt(k), "max_hold")
+            return out(k, mkt(k), "max_hold", msl(k))
         if k > j and k >= k_exit:
-            return out(k, mkt(k), "signal_exit")
+            return out(k, mkt(k), "signal_exit", msl(k))
         if k == k_time and (M["ex_o"][k] - e) < ex.time_stop[1] * R:
-            return out(k, mkt(k), "time_stop")
+            return out(k, mkt(k), "time_stop", msl(k))
         moved = False
         o_k = M["ex_o"][k]
         if k > j and o_k > stop:
@@ -188,14 +196,12 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
         in_shield = shield is not None and shield[0] <= mod[k] <= shield[1]
         hit = (M["mid_l"][k] <= stop) if in_shield else (M["ex_l"][k] <= stop)
         if hit:
-            if k == j:
-                px = stop - slip(k)
-            elif M["ex_o"][k] <= stop:
-                px = M["ex_o"][k]                                   # gapped through: fills at the open
+            if k > j and M["ex_o"][k] <= stop:
+                px, sl = M["ex_o"][k], 0.0                          # gapped through: fills at the open
             else:
-                px = stop - slip(k)
+                px, sl = stop - slip(k), slip(k)
             why = "stop" if stop == st0 else f"{mover}_stop"
-            return out(k, px, why)
+            return out(k, px, why, sl)
         hi = M["ex_h"][k]
         if k > j or at_open:
             # 2) partials, then the full target
@@ -238,16 +244,40 @@ def manage(m: Market, M: dict, side: int, j: int, e: float, st0: float, ex: Exit
                 stop, moved, mover = side * ns_, True, "adjust"
                 events.append({"k": int(k), "kind": "stop_moved", "px": float(ns_)})
         if moved and costs.same_bar_check and M["ex_l"][k] <= stop:
-            return out(k, stop - slip(k), "stop_same_bar")
+            return out(k, stop - slip(k), "stop_same_bar", slip(k))
         k += 1
     k = n - 1
     return out(k, M["ex_c"][k], "end")
 
 
-def _r(pts: float, R: float, fin: float, spread: float, cad: bool) -> tuple[float, float]:
+def _rollovers(d0: int, m0: int, d1: int, m1: int, triple_dow: int | None) -> int:
+    """Financing charges for the 17:00 NY rollovers crossed between minute (d0, m0) and minute (d1, m1) (NY day
+    numbers / minutes of day). Every weekday rollover counts, so a holiday gap of several days pays each of them
+    (Oct 25 2026; it used to count one). With a triple day (Wednesday, the FX convention that books the weekend)
+    Saturday and Sunday aren't charged and Wednesday is 3×; without one (crypto) every day counts."""
+    n = 0
+    for d in range(d0, d1 + 1):
+        if (d == d0 and m0 >= 1020) or (d == d1 and m1 < 1020):
+            continue
+        wd = (d + 3) % 7                                              # NY day number 0 = 1970-01-01, a Thursday
+        if triple_dow is None:
+            n += 1
+        elif wd < 5:
+            n += 3 if wd == triple_dow else 1
+    return n
+
+
+def _entry_cost(spread: float, market: bool, costs: Costs) -> float:
+    """What an entry pays vs the mid: half the spread, plus slippage for a market order."""
+    return spread * (0.5 + (costs.market_slip_frac if market else 0.0))
+
+
+def _r(pts: float, R: float, fin: float, tc: float, cad: bool) -> tuple[float, float]:
+    """R after costs, and at 2× costs: `tc` = every transaction cost the trade paid vs the mid (both half-spreads and
+    all slippage), charged once more, and the financing once more."""
     def conv(x):
         return (x * 0.99 if x >= 0 else x * 1.01) if cad else x
-    return conv((pts - fin) / R), conv((pts - fin - spread - fin) / R)
+    return conv((pts - fin) / R), conv((pts - fin - tc - fin) / R)
 
 
 def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, controls: bool = True,
@@ -325,12 +355,13 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
         at_open = s.entry == "market" or e == float(M["in_o"][j])         # filled at the minute's open
         o = manage(m, M, side, j, e, st_m, ex, costs, s.t, tgt_m, adj, s.exit_t, at_open=at_open)
         fin = o["rollovers"] * costs.financing_bps / 1e4 * abs(e)
-        r1, r2 = _r(o["pts"], R, fin, spread, costs.cad)
+        tc = _entry_cost(spread, s.entry == "market", costs) + o["xcost"]
+        r1, r2 = _r(o["pts"], R, fin, tc, costs.cad)
         trades.append({
             "entry_time": m.idx[j], "exit_time": m.idx[o["jx"]], "side": side, "entry": side * e, "stop": s.stop,
             "target": s.target if s.target is not None else (side * (e + ex.target_r * R) if ex.target_r else None),
             "exit": side * o["exit_px"], "stop_final": side * o["stop_final"], "spread": spread, "risk": R, "atr": R, "points": o["pts"] - fin, "R": r1, "R_2x": r2,
-            "cost_R": (spread + fin) / R, "fin_R": fin / R, "exit_reason": o["why"],
+            "cost_R": (tc + fin) / R, "tc_R": tc / R, "fin_R": fin / R, "exit_reason": o["why"],
             "hold_min": (m.ns[o["jx"]] - m.ns[j]) / 60e9, "overnight": o["rollovers"] > 0,
             "rollovers": o["rollovers"], "mfe_r": o["mfe_r"], "mae_r": o["mae_r"], "tag": s.tag, "draw": s.draw,
             "events": [{**ev, "ts": m.idx[ev["k"]].isoformat()} for ev in o["events"]],
@@ -349,18 +380,36 @@ def simulate(strat: Strategy, m: Market, signals: list[Signal] | None = None, co
                 co = manage(m, C, cs, j, ce, ce - R, ex, costs, s.t, None if dist is None else ce + dist,
                             exit_ns=s.exit_t)
                 cfin = co["rollovers"] * costs.financing_bps / 1e4 * abs(ce)
-                a, b = _r(co["pts"], R, cfin, spread, costs.cad)
+                a, b = _r(co["pts"], R, cfin, _entry_cost(spread, True, costs) + co["xcost"], costs.cad)
                 rr.append(a)
                 rr2.append(b)
             coin.append({"entry_time": m.idx[j], "exit_time": m.idx[o["jx"]], "side": 0, "R": float(np.mean(rr)),
                          "R_2x": float(np.mean(rr2)), "cost_R": spread / R, "hold_min": trades[-1]["hold_min"],
                          "overnight": False, "points": 0.0, "atr": R, "exit_reason": "exact_coin"})
-    rand = random_timing(m, MS, trades, sigs_by_t, strat, costs, n_draw) if controls and n_draw else []
-    return {"trades": trades, "coin": coin, "rand": rand, "funnel": f}
+    rand = random_timing(m, MS, trades, sigs_by_t, strat, costs, n_draw, blocked=blocked) if controls and n_draw else []
+    return {"trades": trades, "coin": coin, "rand": rand, "funnel": f, "controls": bool(controls and n_draw)}
+
+
+def twin_ok(m: Market, k: int, risk: float, ex: Exits, strat: Strategy, costs: Costs, blocked) -> bool:
+    """Could the strategy itself have entered at minute k? The random-timing twins obey the same entry rules as real
+    fills (Oct 25 2026): entry window, news blackout, the spread cap, and no entry once the Friday-flat time has passed
+    (that twin would be closed a minute later). Without this the twins landed on minutes the rule would have skipped
+    (wide spreads, releases), which made them worse and the rule look better."""
+    if risk <= 0:
+        return False
+    if strat.entry_windows and not any(a <= m.mod[k] < b for a, b in strat.entry_windows):
+        return False
+    if blocked is not None and blocked[k]:
+        return False
+    if costs.max_spread_frac is not None and float(m.spread[k]) > costs.max_spread_frac * risk:
+        return False
+    if ex.friday_flat_at is not None and m.dow[k] == 4 and m.mod[k] >= ex.friday_flat_at:
+        return False
+    return True
 
 
 def random_timing(m: Market, MS: dict, trades: list[dict], sigs_by_t: dict, strat: Strategy, costs: Costs,
-                  n_draw: int = 10, seed: int = 11) -> list[dict]:
+                  n_draw: int = 10, seed: int = 11, blocked=None) -> list[dict]:
     """The timing control: each real trade is repeated on `n_draw` randomly chosen OTHER days at the same NY time
     of day and on the same side, with the same stop distance as a share of price and the same exit rules (Oct 22 2026:
     no longer forced out at the real trade's realised holding time — that tied the control to the real outcome; only
@@ -391,10 +440,12 @@ def random_timing(m: Market, MS: dict, trades: list[dict], sigs_by_t: dict, stra
                 continue
             ce = float(M["in_o"][k]) + costs.market_slip_frac * float(m.spread[k])
             cR = frac * abs(ce)
+            if not twin_ok(m, k, cR, ex, strat, costs, blocked):
+                continue
             co = manage(m, M, side, k, ce, ce - cR, ex, costs, int(m.ns[k]), None if tgt is None else ce + tgt * abs(ce),
                         exit_ns=None if s.exit_t is None else int(m.ns[k]) + int(s.exit_t - m.ns[j]))
             fin = co["rollovers"] * costs.financing_bps / 1e4 * abs(ce)
-            r1, r2 = _r(co["pts"], cR, fin, float(m.spread[k]), costs.cad)
+            r1, r2 = _r(co["pts"], cR, fin, _entry_cost(float(m.spread[k]), True, costs) + co["xcost"], costs.cad)
             rr.append(r1)
             rr2.append(r2)
         if rr:
@@ -407,7 +458,8 @@ def random_timing(m: Market, MS: dict, trades: list[dict], sigs_by_t: dict, stra
 
 def _same(a: Signal, b: Signal, ref: float) -> str | None:
     """Why two signals for the same time and side differ (None if they match). Prices within 2% of the signal's
-    stop distance count as equal — indicators warmed up on a shorter slice can differ in the last digits."""
+    stop distance count as equal — indicators warmed up on a shorter slice can differ in the last digits; 2% of the
+    risk is far too small to be worth cheating for. Everything that changes how the trade runs is compared."""
     tol = max(0.02 * ref, 1e-9)
     for f in ("stop", "target", "price", "cancel", "risk_max", "risk_min"):
         x, y = getattr(a, f), getattr(b, f)
@@ -415,30 +467,64 @@ def _same(a: Signal, b: Signal, ref: float) -> str | None:
             return f
     if a.entry != b.entry:
         return "entry"
+    if abs(float(a.expire_min or 0) - float(b.expire_min or 0)) > 1e-9:
+        return "expire_min"
+    if (a.exits or {}) != (b.exits or {}):
+        return "exits"
     return None                          # exit_t is decided after the signal by design, so it isn't compared
 
 
+AUDIT_WINDOW_MIN = 24 * 60               # signals compared in the day before each cut (both directions)
+
+
 def lookahead_audit(strat: Strategy, m: Market, sigs: list[Signal], n_check: int = 10, warm_days: int = 90) -> dict:
-    """Re-run the strategy on data that ENDS at each sampled signal's time; a signal that disappears, changes side,
-    or changes its stop / target / entry price / risk limits there used information from after its own time."""
-    if not sigs:
-        return {"checked": 0, "failed": 0, "examples": []}
+    """Re-run the strategy on data that ENDS at a cut time and compare everything it signals in the day before the
+    cut with the full run, both ways (Oct 25 2026):
+      · a full-run signal that disappears or changes (side, stop, target, entry, price, risk limits, expiry,
+        per-signal exits) on the cut data used information from after its own time;
+      · a signal the cut data produces but the full run doesn't means the full run used the future to SKIP it — a
+        filter like "only if the next hour goes my way". The old audit checked only the first direction, and a rule
+        that cheated this way passed it 30 of 30 at +0.71R.
+    Cuts: n_check signal times, plus n_check evenly spaced times that aren't signal times. Each re-run gets
+    warm_days of history before the compared day (or the data from its start, the same history the full run had),
+    so every compared signal had its full warm-up."""
+    if not len(m):
+        return {"checked": 0, "failed": 0, "examples": [], "cuts": 0}
     sigs = sorted(sigs, key=lambda s: s.t)
+    W = AUDIT_WINDOW_MIN * MIN
     start = m.ns[0] + warm_days * 1440 * MIN
     pool = [s for s in sigs if s.t > start]
-    pick = [pool[i] for i in np.linspace(0, len(pool) - 1, min(n_check, len(pool))).astype(int)] if pool else []
-    bad = []
-    for s in pick:
-        i1 = int(np.searchsorted(m.ns, s.t))
-        i0 = int(np.searchsorted(m.ns, s.t - warm_days * 1440 * MIN))
+    cuts = [int(pool[i].t) for i in np.linspace(0, len(pool) - 1, min(n_check, len(pool))).astype(int)] if pool else []
+    if m.ns[-1] > start and n_check:
+        grid = np.linspace(start, int(m.ns[-1]), n_check + 2)[1:-1].astype(np.int64)
+        cuts += [int(m.ns[min(int(np.searchsorted(m.ns, g)), len(m) - 1)]) for g in grid]
+    cuts = sorted(set(cuts))
+    by_key: dict = {}
+    for s in sigs:
+        by_key.setdefault((int(s.t), int(s.side)), []).append(s)
+    bad, checked = [], 0
+    for cut in cuts:
+        i1 = int(np.searchsorted(m.ns, cut))
+        i0 = int(np.searchsorted(m.ns, cut - W - warm_days * 1440 * MIN))
         sub = m.slice(i0, i1)
-        again = [x for x in strat.signals(sub) if x.t == s.t and x.side == s.side]
-        when = pd.Timestamp(s.t, tz="UTC").tz_convert(NY).isoformat()
-        if not again:
-            bad.append(when)
-            continue
-        ref = abs(float(m.c[max(i1 - 1, 0)]) - float(s.stop))
-        diffs = [_same(s, x, ref) for x in again]
-        if all(d is not None for d in diffs):
-            bad.append(f"{when} ({diffs[0]} changed)")
-    return {"checked": len(pick), "failed": len(bad), "examples": bad[:5]}
+        lo = cut - W
+        again = [x for x in strat.signals(sub) if lo < x.t <= cut]
+        full = [x for x in sigs if lo < x.t <= cut]
+        checked += len(full)
+        ref_px = float(m.c[max(i1 - 1, 0)])
+        when = pd.Timestamp(cut, tz="UTC").tz_convert(NY).isoformat()
+        for s in full:
+            twins = [x for x in again if x.t == s.t and x.side == s.side]
+            sw = pd.Timestamp(s.t, tz="UTC").tz_convert(NY).isoformat()
+            if not twins:
+                bad.append(f"{sw} (disappears on data cut at {when})")
+                continue
+            ref = abs(ref_px - float(s.stop)) or abs(float(s.stop)) * 1e-3
+            diffs = [_same(s, x, ref) for x in twins]
+            if all(d is not None for d in diffs):
+                bad.append(f"{sw} ({diffs[0]} changed)")
+        for x in again:
+            if (int(x.t), int(x.side)) not in by_key:
+                xw = pd.Timestamp(x.t, tz="UTC").tz_convert(NY).isoformat()
+                bad.append(f"{xw} (signalled on data cut at {when}, skipped by the full run)")
+    return {"checked": checked, "failed": len(bad), "examples": bad[:5], "cuts": len(cuts)}
