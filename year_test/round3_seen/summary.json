@@ -1,0 +1,90 @@
+{
+ "m15_live": {
+  "check": "m15_live",
+  "period": "seen",
+  "n": 10713,
+  "coverage": 0.999,
+  "flagged": 2569,
+  "flagged_avg": -0.15,
+  "kept_avg": -0.0774,
+  "all_avg": -0.0948,
+  "halves": [
+   0.101,
+   0.0418
+  ],
+  "half_counts": [
+   [
+    1341,
+    4285
+   ],
+   [
+    1228,
+    3859
+   ]
+  ],
+  "split": "2023-11-17",
+  "diff": 0.0725,
+  "diff_ci": [
+   0.0227,
+   0.1223
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.13629,
+  "pass": false,
+  "why": "gates not met"
+ },
+ "A1_opposing_path_v1": {
+  "check": "A1_opposing_path_v1",
+  "period": "seen",
+  "n": 7817,
+  "coverage": 0.7289,
+  "flagged": 9,
+  "flagged_avg": 0.114,
+  "kept_avg": -0.0751,
+  "all_avg": -0.0749,
+  "halves": [
+   -0.4856,
+   0.1766
+  ],
+  "half_counts": [
+   [
+    5,
+    3671
+   ],
+   [
+    4,
+    4137
+   ]
+  ],
+  "split": "2023-11-17",
+  "pass": false,
+  "why": "coverage 73% < 90% (inconclusive); fewer than 30 flagged or kept trades in a half"
+ },
+ "A2_two_way_chop_v1": {
+  "check": "A2_two_way_chop_v1",
+  "period": "seen",
+  "n": 7817,
+  "coverage": 0.7289,
+  "flagged": 4522,
+  "flagged_avg": -0.0966,
+  "kept_avg": -0.045,
+  "all_avg": -0.0749,
+  "halves": [
+   0.0078,
+   0.092
+  ],
+  "half_counts": [
+   [
+    2088,
+    1588
+   ],
+   [
+    2434,
+    1707
+   ]
+  ],
+  "split": "2023-11-17",
+  "pass": false,
+  "why": "coverage 73% < 90% (inconclusive)"
+ }
+}
