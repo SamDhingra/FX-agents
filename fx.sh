@@ -305,6 +305,13 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/weekly-build.log 2>&1 || { echo "build failed — see logs/weekly-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.weekly_rules --years "${2:-5}" --placebo "${3:-200}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  mtfwhatif) # what-if: was the 15m / 1H moving against the trade at entry? Four checks fixed in fxagents/mtf_whatif.py,
+             # on the playbook's 2021→Sep 2026 trades from ./fx.sh pbtest → data/year_test/mtf_whatif/report.md
+             need_env; mkdir -p logs
+             [[ -d data/history_x/seen_2021_2026 ]] || { echo "no data/history_x/seen_2021_2026 — run ./fx.sh pbtest first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/mtf-build.log 2>&1 || { echo "build failed — see logs/mtf-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.mtf_whatif </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md
