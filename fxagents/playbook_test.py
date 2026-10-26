@@ -81,23 +81,37 @@ def build_history(cfg, sets: list[str], syms: set[str], dest: Path) -> list[str]
     return have
 
 
-def run_cells(cfg, cells: list[dict], hist: Path, workers: int) -> dict[str, pd.DataFrame]:
-    jobs = []
+def run_cells(cfg, cells: list[dict], hist: Path, workers: int, done=None) -> dict[str, pd.DataFrame]:
+    """Replay each cell. Cells that differ only in trade management (e.g. a "-scalp" twin) share the same signals, and
+    one replay simulates every management profile, so they share one job (Oct 26 2026). `done(cell, trades)` is called
+    as each cell finishes (in order), so a caller can save it at once."""
+    groups: dict = {}
     for c in cells:
+        key = (c["sym"], str(c["tf"]), c["setup"], json.dumps(c.get("params") or {}, sort_keys=True))
+        groups.setdefault(key, []).append(c)
+    jobs = []
+    for cs in groups.values():
+        c = cs[0]
         cc = copy.deepcopy(cfg)
         cc["history_dir"] = str(hist)
         cc.setdefault("research", {})["only_params"] = {c["setup"]: c.get("params") or {}}
         cc["research"].pop("exit_study", None)
         jobs.append((cc, c["sym"], c["tf"], [c["setup"]]))
+    if len(jobs) < len(cells):
+        print(f"  {len(cells)} cells → {len(jobs)} replays (cells sharing signals run once)", flush=True)
     out = {}
     with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
                              max_tasks_per_child=1) as ex:
-        for c, part in zip(cells, ex.map(run_job_frame, jobs)):
-            if len(part):
-                part = part[(part.tf == c["tf"]) & (part.variant == vkey(c.get("params") or {})) & (part.mgmt == c["mgmt"])]
-                part = own_trades(part)
-            out[c["id"]] = part
-            print(f"  {c['id']}: {len(part)} trades", flush=True)
+        for cs, full in zip(groups.values(), ex.map(run_job_frame, jobs)):
+            for c in cs:
+                part = full
+                if len(part):
+                    part = part[(part.tf == c["tf"]) & (part.variant == vkey(c.get("params") or {})) & (part.mgmt == c["mgmt"])]
+                    part = own_trades(part)
+                out[c["id"]] = part
+                print(f"  {c['id']}: {len(part)} trades", flush=True)
+                if done is not None:
+                    done(c, part)
     return out
 
 
@@ -172,7 +186,23 @@ def judge_only(cfg, cells: list[dict], pb: dict, a) -> None:
         judge_sets.append(f"{OLD_IDX}_{sym}")
     hist = Path("data/history_x/old_2016_2020")
     have = build_history(cfg, judge_sets, need, hist)
-    res = run_cells(cfg, [c for c in cells if c["sym"] in have], hist, a.workers)
+    fname = lambda c: a.out / f"trades_old_{c['id'].replace(':', '_').replace('@', '_')}.csv.gz"
+    res, todo = {}, []
+    for c in cells:                               # resume: a cell whose trades were saved by an earlier, stopped run
+        if c["sym"] in have and fname(c).exists():
+            t0 = pd.read_csv(fname(c))
+            for col in ("ts", "exit_ts"):                 # saved as text with offsets: back to New York datetimes
+                if col in t0:
+                    t0[col] = pd.to_datetime(t0[col], utc=True).dt.tz_convert(cfg["timezone"])
+            res[c["id"]] = t0
+            print(f"  {c['id']}: {len(res[c['id']])} trades (saved earlier)", flush=True)
+        elif c["sym"] in have:
+            todo.append(c)
+
+    def save(c, t):
+        if len(t):
+            t.to_csv(fname(c), index=False)
+    res.update(run_cells(cfg, todo, hist, a.workers, done=save))
     md = [f"# Pre-registered follow-up — judged once on untouched 2016 → 2020 (frozen {sha})", "",
           f"Cells: {', '.join(c['id'] for c in cells)} — taken unchanged from {pb.get('asof')}. "
           + (getattr(a, "why", "") or "Chosen after the playbook "
@@ -189,7 +219,8 @@ def judge_only(cfg, cells: list[dict], pb: dict, a) -> None:
         rows[c["id"]] = st
         md.append(fmt_row(c["id"], st, False))
         if len(t):
-            t.to_csv(a.out / f"trades_old_{c['id'].replace(':', '_').replace('@', '_')}.csv.gz", index=False)
+            if not fname(c).exists():
+                t.to_csv(fname(c), index=False)
             yr = pd.to_datetime(t.ts).dt.year
             md += ["", "By year: " + " · ".join(f"{y} {g.r.mean():+.3f} ({len(g)})" for y, g in t.groupby(yr))]
     missing = [c["id"] for c in cells if c["sym"] not in have]

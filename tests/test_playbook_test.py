@@ -70,3 +70,30 @@ def test_judge_only_runs_the_frozen_cell_once_on_old_data(tmp_path, monkeypatch)
     P.main()
     md = Path("o/report.md").read_text()
     assert "judged once on untouched 2016 → 2020" in md and "smc_bos_retest:5m@t" in md and "| other |" not in md
+
+
+def test_cells_sharing_signals_run_once_and_each_is_saved_as_it_finishes(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_job(job):
+        cc, sym, tf, setups = job
+        calls.append((sym, tf, setups[0]))
+        ts = pd.date_range("2017-03-01 10:00", periods=4, freq="1D", tz="America/New_York")
+        return pd.DataFrame({"tf": tf, "variant": P.vkey({}), "mgmt": ["standard", "scalp"] * 2, "ts": ts, "r": [1.0, -1.0, 0.5, 0.2],
+                             "busy_self": False, "sym": sym, "setup": setups[0]})
+
+    class Pool:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def map(self, f, jobs): return [f(j) for j in jobs]
+    monkeypatch.setattr(P, "run_job_frame", fake_job)
+    monkeypatch.setattr(P, "ProcessPoolExecutor", Pool)
+    monkeypatch.setattr(P, "own_trades", lambda t: t)
+    cells = [{"id": "x:3m@a", "sym": "XAUUSD", "tf": "3min", "setup": "x", "mgmt": "standard"},
+             {"id": "x:3m@a-scalp", "sym": "XAUUSD", "tf": "3min", "setup": "x", "mgmt": "scalp"},
+             {"id": "y:5m@b", "sym": "NDQ", "tf": "5min", "setup": "y", "mgmt": "standard"}]
+    saved = []
+    out = P.run_cells({"research": {}}, cells, tmp_path, 1, done=lambda c, t: saved.append((c["id"], len(t))))
+    assert len(calls) == 2                                            # the scalp twin shares the x replay
+    assert saved == [("x:3m@a", 2), ("x:3m@a-scalp", 2), ("y:5m@b", 2)] and set(out) == {c["id"] for c in cells}
