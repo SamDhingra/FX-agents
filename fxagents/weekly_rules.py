@@ -38,7 +38,11 @@ SRC = ROOT / "research" / "weekly_rules" / "weekly_rules_backtest.py"
 OUT = ROOT / "data" / "year_test" / "weekly_rules"
 FX = ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD")
 SWAP_BPS = {"fx": 0.6, "cfd": 1.8}                      # per calendar day, of price
-VARIANTS = ("WK", "WK0", "DY1", "DY2", "DY3")
+VARIANTS = ("WK", "WK0", "DY1", "DY2", "DY3", "WK_e21", "WK0_e21", "DY1_e21", "DY3_e21")
+# Oct 26 2026: his later version exits on the EMA21 instead of the EMA18 (chosen after seeing the EMA18 result on
+# these same five years, so it is a second try, not independent evidence). His own functions take the exit EMA as
+# an argument, so these are his code with the EMA21 passed as the exit line.
+EXIT21 = {"WK_e21", "WK0_e21", "DY1_e21", "DY3_e21"}
 N_TWINS = 20
 
 
@@ -140,7 +144,11 @@ def run(years: float, markets: list[str], placebo: int, mod=None) -> tuple[str, 
                     "WK0": lambda: mod.run_wk(X, wc, rsi_w, ew18, ew21, widx, "WK0", start_k),
                     "DY1": lambda rw=rsi_w, rdd=rsi_d: mod.run_dy(X, rdd, rw, widx, ed18, ed21, 42, False, start_k),
                     "DY2": lambda: mod.run_dy(X, rsi_d, rsi_w, widx, ed18, ed21, 42, True, start_k),
-                    "DY3": lambda: mod.run_dy(X, rsi_d, rsi_w, widx, ed18, ed21, 40, False, start_k)}
+                    "DY3": lambda: mod.run_dy(X, rsi_d, rsi_w, widx, ed18, ed21, 40, False, start_k),
+                    "WK_e21": lambda: mod.run_wk(X, wc, rsi_w, ew21, ew21, widx, "WK", start_k),
+                    "WK0_e21": lambda: mod.run_wk(X, wc, rsi_w, ew21, ew21, widx, "WK0", start_k),
+                    "DY1_e21": lambda: mod.run_dy(X, rsi_d, rsi_w, widx, ed21, ed21, 42, False, start_k),
+                    "DY3_e21": lambda: mod.run_dy(X, rsi_d, rsi_w, widx, ed21, ed21, 40, False, start_k)}
             new_week = np.r_[False, np.diff(widx) != 0]
             wk_days = np.flatnonzero(new_week & (np.arange(n) >= start_k) & (np.arange(n) < n - 2))
             dy_days = np.arange(max(start_k, 30), n - 2)
@@ -148,7 +156,8 @@ def run(years: float, markets: list[str], placebo: int, mod=None) -> tuple[str, 
                 tr = fn()
                 expo[(v, mk)] = sum(t["k_out"] - t["k_in"] for t in tr) / max(span, 1)
                 weekly = v.startswith("WK")
-                ex = (lambda k, s: wk_exit(X, wc, ew18, widx, k, s)) if weekly else (lambda k, s: dy_exit(X, ed18, k, s))
+                we, de = (ew21, ed21) if v in EXIT21 else (ew18, ed18)
+                ex = (lambda k, s, we=we: wk_exit(X, wc, we, widx, k, s)) if weekly else (lambda k, s, de=de: dy_exit(X, de, k, s))
                 pool = wk_days if weekly else dy_days
                 for t in tr:
                     k_in, k_out, side = t["k_in"], t["k_out"], t["side"]
@@ -232,6 +241,7 @@ def ours(T: pd.DataFrame, plc: dict, placebo: int) -> list[str]:
          "Swap: CFDs 1.8 bps of price per calendar day long or short (our engine's figure), forex 0.6 bps a day; "
          "forex interest-rate carry is NOT modelled. **u** = % per trade ÷ the market's average daily range (%) at entry, "
          "so every market counts alike. 95% ranges resample calendar months of entry across all markets.\n",
+         "_e21 = his later version: exit on the EMA21 instead of the EMA18 (a second try on the same five years)._\n",
          "| Rule | Trades | Win | Avg % (no swap) | Avg % after swap | **Avg u after swap (95%)** | 2× costs u | "
          "Halves u (by date) | Coin-flip edge u (95%) | Random-timing edge u (95%) | Avg days |",
          "|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -259,11 +269,11 @@ def ours(T: pd.DataFrame, plc: dict, placebo: int) -> list[str]:
     L.append("| PASS | " + " | ".join("**yes**" if all(verdict[v].values()) else "no" for v in verdict) + " |")
     L.append("\nA pooled pass across markets is weaker evidence than our per-instrument gates: markets move together "
              "(USD, risk-off), and each single market has too few trades for a test of its own.\n")
-    L += ["### By market (WK and DY1, avg u after swap; trades)\n",
-          "| Market | WK | WK0 | DY1 | Group |", "|---|---|---|---|---|"]
+    L += ["### By market (avg u after swap; trades)\n",
+          "| Market | WK | WK0 | DY1 | WK_e21 | WK0_e21 | DY1_e21 | Group |", "|---|---|---|---|---|---|---|---|"]
     for mk in sorted(T.market.unique()):
         cells = []
-        for v in ("WK", "WK0", "DY1"):
+        for v in ("WK", "WK0", "DY1", "WK_e21", "WK0_e21", "DY1_e21"):
             x = T[(T.variant == v) & (T.market == mk)]
             cells.append(f"{x.u.mean():+.2f} ({len(x)})" if len(x) else "–")
         grp = "looked at before" if mk in ("XAUUSD", "NDQ", "US30") else ("forex" if mk in FX else "other CFD")
