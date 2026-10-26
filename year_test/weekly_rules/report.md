@@ -1,6 +1,6 @@
 # Weekly and daily rule books (a friend's rules), with our controls
 
-Generated 2026-10-26 16:44 UTC. OANDA daily bid/ask, 5 years (entries from 2021-10-27), markets XAUUSD,NDQ,US30,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCAD,XAGUSD,SPX500,DE30,UK100,WTI. Rules and his tables exactly as his script; our checks are the first section.
+Generated 2026-10-26 16:53 UTC. OANDA daily bid/ask, 5 years (entries from 2021-10-27), markets XAUUSD,NDQ,US30,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCAD,XAGUSD,SPX500,DE30,UK100,WTI. Rules and his tables exactly as his script; our checks are the first section.
 
 Reference, simply holding each market over the same period: XAUUSD +122%, NDQ +86%, US30 +47%, EURUSD -3%, GBPUSD -3%, USDJPY +38%, AUDUSD -6%, USDCAD +13%, XAGUSD +124%, SPX500 +68%, DE30 +60%, UK100 +47%, WTI +27%
 
@@ -8,44 +8,50 @@ Reference, simply holding each market over the same period: XAUUSD +122%, NDQ +8
 
 Swap: CFDs 1.8 bps of price per calendar day long or short (our engine's figure), forex 0.6 bps a day; forex interest-rate carry is NOT modelled. **u** = % per trade ÷ the market's average daily range (%) at entry, so every market counts alike. 95% ranges resample calendar months of entry across all markets.
 
+_e21 = his later version: exit on the EMA21 instead of the EMA18 (a second try on the same five years)._
+
 | Rule | Trades | Win | Avg % (no swap) | Avg % after swap | **Avg u after swap (95%)** | 2× costs u | Halves u (by date) | Coin-flip edge u (95%) | Random-timing edge u (95%) | Avg days |
 |---|---|---|---|---|---|---|---|---|---|---|
-| WK | 176 | 22% | -0.58 | -1.64 | **-1.214** (-1.964 … -0.322) | -2.174 | -1.288 / -1.131 | -0.631 (-1.011 … -0.194) | -0.925 (-1.661 … -0.057) | 55 |
-| WK0 | 402 | 23% | +0.11 | -0.55 | **-0.635** (-0.966 … -0.282) | -1.243 | -0.590 / -0.693 | -0.315 (-0.502 … -0.117) | -0.298 (-0.639 … +0.066) | 35 |
-| DY1 | 283 | 29% | -0.07 | -0.30 | **-0.062** (-0.375 … +0.256) | -0.334 | -0.149 / +0.009 | +0.001 (-0.178 … +0.175) | +0.032 (-0.290 … +0.346) | 12 |
-| DY2 | 283 | 29% | -0.07 | -0.30 | **-0.062** (-0.375 … +0.256) | -0.334 | -0.149 / +0.009 | +0.001 (-0.178 … +0.175) | +0.036 (-0.282 … +0.356) | 12 |
-| DY3 | 272 | 31% | -0.03 | -0.26 | **-0.054** (-0.357 … +0.264) | -0.330 | -0.154 / +0.024 | +0.015 (-0.161 … +0.190) | +0.023 (-0.286 … +0.343) | 12 |
+| WK | 176 | 22% | -0.58 | -1.64 | **-1.214** (-1.964 … -0.322) | -2.174 | -1.288 / -1.131 | -0.631 (-1.011 … -0.194) | -0.878 (-1.656 … +0.015) | 55 |
+| WK0 | 402 | 23% | +0.11 | -0.55 | **-0.635** (-0.966 … -0.282) | -1.243 | -0.590 / -0.693 | -0.315 (-0.502 … -0.117) | -0.190 (-0.530 … +0.170) | 35 |
+| DY1 | 283 | 29% | -0.07 | -0.30 | **-0.062** (-0.375 … +0.256) | -0.334 | -0.149 / +0.009 | +0.001 (-0.178 … +0.175) | +0.019 (-0.297 … +0.336) | 12 |
+| DY2 | 283 | 29% | -0.07 | -0.30 | **-0.062** (-0.375 … +0.256) | -0.334 | -0.149 / +0.009 | +0.001 (-0.178 … +0.175) | +0.046 (-0.268 … +0.357) | 12 |
+| DY3 | 272 | 31% | -0.03 | -0.26 | **-0.054** (-0.357 … +0.264) | -0.330 | -0.154 / +0.024 | +0.015 (-0.161 … +0.190) | +0.019 (-0.290 … +0.334) | 12 |
+| WK_e21 | 159 | 23% | -0.20 | -1.42 | **-1.004** (-2.097 … +0.251) | -2.119 | -0.377 / -1.782 | -0.529 (-1.083 … +0.107) | -1.285 (-2.582 … +0.104) | 63 |
+| WK0_e21 | 432 | 22% | +0.38 | -0.33 | **-0.421** (-0.921 … +0.286) | -1.068 | -0.242 / -0.643 | -0.209 (-0.480 … +0.158) | -0.408 (-0.967 … +0.253) | 37 |
+| DY1_e21 | 263 | 29% | -0.10 | -0.36 | **-0.111** (-0.460 … +0.247) | -0.407 | -0.208 / -0.035 | -0.018 (-0.211 … +0.176) | +0.003 (-0.355 … +0.368) | 13 |
+| DY3_e21 | 253 | 30% | -0.04 | -0.30 | **-0.095** (-0.439 … +0.267) | -0.396 | -0.222 / +0.003 | -0.006 (-0.192 … +0.188) | +0.033 (-0.304 … +0.394) | 14 |
 
-| Gate (pooled, our bar) | WK | WK0 | DY1 | DY2 | DY3 |
-|---|---|---|---|---|---|
-| ≥ 100 trades (all markets) | yes | yes | yes | yes | yes |
-| avg > 0 after swap | no | no | no | no | no |
-| 95% range above 0 | no | no | no | no | no |
-| positive at 2× costs | no | no | no | no | no |
-| positive in both halves | no | no | no | no | no |
-| beats the coin flip (95%) | no | no | no | no | no |
-| beats random timing (95%) | no | no | no | no | no |
-| PASS | no | no | no | no | no |
+| Gate (pooled, our bar) | WK | WK0 | DY1 | DY2 | DY3 | WK_e21 | WK0_e21 | DY1_e21 | DY3_e21 |
+|---|---|---|---|---|---|---|---|---|---|
+| ≥ 100 trades (all markets) | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| avg > 0 after swap | no | no | no | no | no | no | no | no | no |
+| 95% range above 0 | no | no | no | no | no | no | no | no | no |
+| positive at 2× costs | no | no | no | no | no | no | no | no | no |
+| positive in both halves | no | no | no | no | no | no | no | no | no |
+| beats the coin flip (95%) | no | no | no | no | no | no | no | no | no |
+| beats random timing (95%) | no | no | no | no | no | no | no | no | no |
+| PASS | no | no | no | no | no | no | no | no | no |
 
 A pooled pass across markets is weaker evidence than our per-instrument gates: markets move together (USD, risk-off), and each single market has too few trades for a test of its own.
 
-### By market (WK and DY1, avg u after swap; trades)
+### By market (avg u after swap; trades)
 
-| Market | WK | WK0 | DY1 | Group |
-|---|---|---|---|---|
-| AUDUSD | -2.18 (14) | -0.63 (36) | -0.67 (8) | forex |
-| DE30 | -2.26 (17) | -1.34 (31) | -0.11 (27) | other CFD |
-| EURUSD | -1.62 (16) | -1.06 (28) | -0.05 (24) | forex |
-| GBPUSD | -0.25 (9) | -0.34 (31) | +0.51 (20) | forex |
-| NDQ | -0.04 (14) | +0.51 (23) | -0.04 (29) | looked at before |
-| SPX500 | -0.68 (15) | +0.41 (17) | -0.09 (29) | other CFD |
-| UK100 | -3.50 (12) | -1.86 (41) | -0.05 (18) | other CFD |
-| US30 | -2.34 (14) | -0.80 (28) | -0.53 (25) | looked at before |
-| USDCAD | -2.77 (18) | -1.11 (43) | -0.46 (14) | forex |
-| USDJPY | +0.10 (13) | -0.36 (21) | -0.38 (26) | forex |
-| WTI | -2.25 (12) | +0.00 (31) | -0.20 (15) | other CFD |
-| XAGUSD | +0.95 (13) | -0.62 (45) | +0.56 (18) | other CFD |
-| XAUUSD | +3.55 (9) | +0.48 (27) | +0.32 (30) | looked at before |
+| Market | WK | WK0 | DY1 | WK_e21 | WK0_e21 | DY1_e21 | Group |
+|---|---|---|---|---|---|---|---|
+| AUDUSD | -2.18 (14) | -0.63 (36) | -0.67 (8) | -2.20 (13) | -0.67 (39) | -0.67 (8) | forex |
+| DE30 | -2.26 (17) | -1.34 (31) | -0.11 (27) | -2.59 (13) | -1.16 (34) | -0.10 (24) | other CFD |
+| EURUSD | -1.62 (16) | -1.06 (28) | -0.05 (24) | -1.19 (14) | -1.12 (28) | -0.00 (22) | forex |
+| GBPUSD | -0.25 (9) | -0.34 (31) | +0.51 (20) | -0.39 (9) | -0.36 (34) | +0.45 (18) | forex |
+| NDQ | -0.04 (14) | +0.51 (23) | -0.04 (29) | -0.08 (13) | +0.36 (25) | -0.10 (28) | looked at before |
+| SPX500 | -0.68 (15) | +0.41 (17) | -0.09 (29) | -0.05 (11) | +0.60 (20) | -0.16 (27) | other CFD |
+| UK100 | -3.50 (12) | -1.86 (41) | -0.05 (18) | -3.85 (12) | -1.98 (42) | -0.19 (17) | other CFD |
+| US30 | -2.34 (14) | -0.80 (28) | -0.53 (25) | -2.33 (12) | -0.64 (30) | -0.64 (23) | looked at before |
+| USDCAD | -2.77 (18) | -1.11 (43) | -0.46 (14) | -2.97 (17) | -1.17 (45) | -0.68 (12) | forex |
+| USDJPY | +0.10 (13) | -0.36 (21) | -0.38 (26) | +0.07 (13) | -0.38 (25) | -0.46 (24) | forex |
+| WTI | -2.25 (12) | +0.00 (31) | -0.20 (15) | -2.21 (12) | -0.11 (34) | -0.29 (15) | other CFD |
+| XAGUSD | +0.95 (13) | -0.62 (45) | +0.56 (18) | +1.21 (12) | -0.56 (49) | +0.61 (17) | other CFD |
+| XAUUSD | +3.55 (9) | +0.48 (27) | +0.32 (30) | +7.52 (8) | +3.76 (27) | +0.32 (28) | looked at before |
 
 ### Does the RSI add anything? (WK against WK0, same markets)
 
