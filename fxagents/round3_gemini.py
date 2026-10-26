@@ -35,6 +35,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "research" / "round3" / "gemini"
 CHECKS = ("m15_impulse_leg", "ltf_swing_structure_against", "stop_inside_15m_noise", "chasing_exhausted_leg")
 VAULT_OK = ("chasing_exhausted_leg",)
+# Registered Oct 26 2026 after the seen run, BEFORE any 2016–2020 look: the stop check passed only through its spread
+# half (spread > 8% of the stop at entry; the noise half failed the stratified test). That half alone — Gemini's exact
+# formula, look-ahead free — is judged once on the 2016–2020 trades. It is the rule behind the live bot's existing
+# (log-only) cost cap, so its confirmation decides whether that cap is switched on.
+VAULT_SPREAD = "stop_spread_part"
 LOW = {"3m": "3m", "3min": "3m", "5m": "5m", "5min": "5m"}
 TFMIN = {"3m": 3, "5m": 5}
 DAY = pd.Timedelta(days=1)
@@ -131,8 +136,10 @@ def run(period: str, src: Path, hist: Path, out: Path) -> dict:
         p = Path("data/year_test/round3_gemini_seen/summary.json")
         seen = json.loads(p.read_text()) if p.exists() else {}
         names = [n for n in VAULT_OK if seen.get(n, {}).get("pass")]
+        if seen.get("info", {}).get(VAULT_SPREAD, {}).get("pass"):
+            names.append("stop_inside_15m_noise")              # computed for its spread half (the registered check)
         if not names:
-            raise SystemExit("nothing registered for the vault: chasing_exhausted_leg did not pass on seen (or no seen run)")
+            raise SystemExit("nothing registered for the vault (no seen run, or nothing passed)")
     parts = []
     for sym, g in t.groupby("sym"):
         f = hist / f"{sym}.pkl"
@@ -145,10 +152,13 @@ def run(period: str, src: Path, hist: Path, out: Path) -> dict:
     a = pd.concat(parts, ignore_index=True)
     res = {}
     for k in names:
+        if period == "vault" and k == "stop_inside_15m_noise":
+            k = VAULT_SPREAD
+            a[k] = a["stop_spread_part"]
         ok = np.isfinite(a[k].to_numpy(float))
         res[k] = J.judge(a[ok].assign(**{k: a.loc[ok, k].astype(bool)}), k, period, intended)
     info = {}
-    if "stop_inside_15m_noise" in names:
+    if "stop_inside_15m_noise" in names and period == "seen":
         for k in ("stop_spread_part", "stop_noise_part"):
             ok = np.isfinite(a[k].to_numpy(float))
             info[k] = J.judge(a[ok].assign(**{k: a.loc[ok, k].astype(bool)}), k, period, intended)
@@ -164,22 +174,28 @@ def run(period: str, src: Path, hist: Path, out: Path) -> dict:
           "skipping within cell × side × hour × half, ≥ 30 per group per half, ≥ 90% coverage.", "",
           f"Cohort: {intended:,} trades on 3m / 5m, {t.r.mean():+.3f}R average.", "", J.HEAD]
     md += [J.fmt(res[k]) for k in res]
+    if period == "vault":
+        md += ["", "Registered for 2016–2020: **stop_spread_part** (spread > 8% of the stop at entry) — the half of "
+               "stop_inside_15m_noise that passed on seen. **Verdict: "
+               + ("CONFIRMED" if res.get(VAULT_SPREAD, {}).get("pass") else "NOT CONFIRMED") + ".**"]
     if info:
         md += ["", "### stop_inside_15m_noise, its two halves separately (information only)", "", J.HEAD]
         md += [J.fmt(j) for j in info.values()]
+    shown = [VAULT_SPREAD if (period == "vault" and n == "stop_inside_15m_noise") else n for n in names]
     md += ["", "## By cell (descriptive)", "",
-           "| cell | trades | avg R | " + " | ".join(f"{k} flagged (avg R) / kept (avg R)" for k in names) + " |",
-           "|---|---|---|" + "---|" * len(names)]
+           "| cell | trades | avg R | " + " | ".join(f"{k} flagged (avg R) / kept (avg R)" for k in shown) + " |",
+           "|---|---|---|" + "---|" * len(shown)]
     for cell, g in a.groupby("cell"):
         cells = []
-        for k in names:
+        for k in shown:
             v = g[np.isfinite(g[k].to_numpy(float))]
             fl, kp = v[v[k] == 1], v[v[k] == 0]
             cells.append(f"{len(fl)} ({fl.r.mean():+.2f}) / {len(kp)} ({kp.r.mean():+.2f})" if len(v) else "—")
         md.append(f"| {cell} | {len(g)} | {g.r.mean():+.3f} | " + " | ".join(cells) + " |")
     md += ["", "Families: m15_impulse_leg and ltf_swing_structure_against belong to the 'against the higher timeframe' "
            "family (its 2016–2020 test was m15_live's) → a pass earns a shadow tag only. chasing_exhausted_leg, if it "
-           "passes here, is judged once on 2016–2020 (./fx.sh round3g vault). stop_inside_15m_noise is seen-only."]
+           "passes here, is judged once on 2016–2020 (./fx.sh round3g vault). Of stop_inside_15m_noise only its spread half "
+           "(spread > 8% of the stop) is judged on 2016–2020, registered after it alone passed on seen."]
     (out / "report.md").write_text("\n".join(md) + "\n")
     (out / "summary.json").write_text(json.dumps({**res, "info": info}, indent=1, default=str))
     return res
