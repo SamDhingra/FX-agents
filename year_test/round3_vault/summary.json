@@ -1,0 +1,36 @@
+{
+ "m15_live": {
+  "check": "m15_live",
+  "period": "vault",
+  "n": 9070,
+  "coverage": 0.9945,
+  "flagged": 2248,
+  "flagged_avg": -0.2167,
+  "kept_avg": -0.1255,
+  "all_avg": -0.1481,
+  "halves": [
+   0.0285,
+   0.1475
+  ],
+  "half_counts": [
+   [
+    1050,
+    3299
+   ],
+   [
+    1198,
+    3523
+   ]
+  ],
+  "split": "2018-07-02",
+  "diff": 0.0912,
+  "diff_ci": [
+   0.039,
+   0.1421
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.0412,
+  "pass": true,
+  "why": ""
+ }
+}
