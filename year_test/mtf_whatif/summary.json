@@ -1,0 +1,158 @@
+{
+ "low_tf": {
+  "m15_live": {
+   "check": "m15_live",
+   "n": 10713,
+   "removed": 2569,
+   "removed_avg": -0.15,
+   "kept_avg": -0.077,
+   "all_avg": -0.095,
+   "diff": 0.073,
+   "diff_ci": [
+    0.021,
+    0.123
+   ],
+   "halves": [
+    0.109,
+    0.037
+   ],
+   "random_p": 0.001,
+   "pass": true
+  },
+  "m15_closed": {
+   "check": "m15_closed",
+   "n": 10713,
+   "removed": 2799,
+   "removed_avg": -0.1,
+   "kept_avg": -0.093,
+   "all_avg": -0.095,
+   "diff": 0.007,
+   "diff_ci": [
+    -0.046,
+    0.06
+   ],
+   "halves": [
+    -0.033,
+    0.045
+   ],
+   "random_p": 0.364,
+   "pass": false
+  },
+  "m15_trend": {
+   "check": "m15_trend",
+   "n": 10713,
+   "removed": 4213,
+   "removed_avg": -0.096,
+   "kept_avg": -0.094,
+   "all_avg": -0.095,
+   "diff": 0.002,
+   "diff_ci": [
+    -0.045,
+    0.048
+   ],
+   "halves": [
+    -0.001,
+    0.003
+   ],
+   "random_p": 0.455,
+   "pass": false
+  },
+  "h1_live": {
+   "check": "h1_live",
+   "n": 10713,
+   "removed": 1725,
+   "removed_avg": -0.11,
+   "kept_avg": -0.092,
+   "all_avg": -0.095,
+   "diff": 0.018,
+   "diff_ci": [
+    -0.047,
+    0.08
+   ],
+   "halves": [
+    0.012,
+    0.021
+   ],
+   "random_p": 0.2335,
+   "pass": false
+  }
+ },
+ "15m_plus": {
+  "m15_live": {
+   "check": "m15_live",
+   "n": 5711,
+   "removed": 64,
+   "removed_avg": -0.091,
+   "kept_avg": -0.082,
+   "all_avg": -0.082,
+   "diff": 0.01,
+   "diff_ci": [
+    -0.354,
+    0.319
+   ],
+   "halves": [
+    0.083,
+    -0.078
+   ],
+   "random_p": 0.5045,
+   "pass": false
+  },
+  "m15_closed": {
+   "check": "m15_closed",
+   "n": 5711,
+   "removed": 64,
+   "removed_avg": -0.091,
+   "kept_avg": -0.082,
+   "all_avg": -0.082,
+   "diff": 0.01,
+   "diff_ci": [
+    -0.354,
+    0.319
+   ],
+   "halves": [
+    0.083,
+    -0.078
+   ],
+   "random_p": 0.5045,
+   "pass": false
+  },
+  "m15_trend": {
+   "check": "m15_trend",
+   "n": 5711,
+   "removed": 2999,
+   "removed_avg": -0.086,
+   "kept_avg": -0.077,
+   "all_avg": -0.082,
+   "diff": 0.009,
+   "diff_ci": [
+    -0.063,
+    0.084
+   ],
+   "halves": [
+    0.022,
+    -0.004
+   ],
+   "random_p": 0.3885,
+   "pass": false
+  },
+  "h1_live": {
+   "check": "h1_live",
+   "n": 5711,
+   "removed": 2045,
+   "removed_avg": -0.092,
+   "kept_avg": -0.076,
+   "all_avg": -0.082,
+   "diff": 0.016,
+   "diff_ci": [
+    -0.058,
+    0.089
+   ],
+   "halves": [
+    0.054,
+    -0.021
+   ],
+   "random_p": 0.2935,
+   "pass": false
+  }
+ }
+}
