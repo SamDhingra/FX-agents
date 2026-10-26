@@ -1,0 +1,37 @@
+{
+ "stop_spread_part": {
+  "check": "stop_spread_part",
+  "period": "vault",
+  "n": 9120,
+  "coverage": 1.0,
+  "flagged": 7315,
+  "flagged_avg": -0.1743,
+  "kept_avg": -0.0382,
+  "all_avg": -0.1474,
+  "halves": [
+   0.0879,
+   0.1709
+  ],
+  "half_counts": [
+   [
+    3640,
+    730
+   ],
+   [
+    3675,
+    1075
+   ]
+  ],
+  "split": "2018-07-02",
+  "diff": 0.1361,
+  "diff_ci": [
+   0.0869,
+   0.187
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.0184,
+  "pass": true,
+  "why": ""
+ },
+ "info": {}
+}
