@@ -331,6 +331,13 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/round3-build.log 2>&1 || { echo "build failed — see logs/round3-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.round3 --period "$p_" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  round3g)   # round-3, Gemini's four what-if checks (research/round3/gemini, unchanged) on the playbook's 3m/5m entries,
+             # stricter judge. ./fx.sh round3g [seen|vault] → data/year_test/round3_gemini_<period>/report.md
+             # (vault: only chasing_exhausted_leg, and only if it passed on seen)
+             need_env; mkdir -p logs; p_="${2:-seen}"
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/round3g-build.log 2>&1 || { echo "build failed — see logs/round3g-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.round3_gemini --period "$p_" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md

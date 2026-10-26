@@ -125,7 +125,9 @@ def judge(t: pd.DataFrame, flag_col: str, period: str, intended: int | None = No
         why.append(f"coverage {cover:.0%} < 90% (inconclusive)")
     if any(a < MIN_N or b < MIN_N for a, b in counts):
         why.append("fewer than 30 flagged or kept trades in a half")
-    if why and ("coverage" in why[0] or len(t) == 0):
+    if not f.any() or f.all():
+        why.append("no flagged trades" if not f.any() else "every trade flagged")
+    if why and ("coverage" in why[0] or len(t) == 0 or not f.any() or f.all()):
         return {**res, "pass": False, "why": "; ".join(why)}
     lo, hi, valid = boot_diff(t, f, period)
     p = perm_p(t, f, period)
