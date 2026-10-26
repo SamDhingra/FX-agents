@@ -185,10 +185,10 @@ def test_f7_cap_does_not_touch_other_instruments(tmp_path):
 
 def test_f6_entry_logs_its_cost_in_r_and_flags_the_cap(tmp_path):
     q = (19998.0, 20002.0)                                               # 4-point spread, 100-point stop → 0.04R
-    ra, st, br, ctx = _risk(tmp_path, quote=q)
+    ra, st, br, ctx = _risk(tmp_path, quote=q, cost_cap_r=0.10, cost_cap_enforce=False)
     row = _ask(ra, st, "NDQ")
     assert row["action"] == "taken" and "cost 0.04R" in row["why"] and "over the" not in row["why"]
-    ra, st, br, ctx = _risk(tmp_path, quote=(19990.0, 20010.0))          # 20-point spread vs a 110-point stop from the ask → 0.18R, over the 0.10R cap
+    ra, st, br, ctx = _risk(tmp_path, quote=(19990.0, 20010.0), cost_cap_r=0.10, cost_cap_enforce=False)   # log-only mode; 20-point spread vs a 110-point stop from the ask → 0.18R, over the 0.10R cap
     row = _ask(ra, st, "NDQ")
     assert row["action"] == "taken" and "over the 0.10R cap — log only" in row["why"]
     ev = next(iter(st.positions.values())).events[-1]
@@ -196,9 +196,13 @@ def test_f6_entry_logs_its_cost_in_r_and_flags_the_cap(tmp_path):
 
 
 def test_f6_enforce_blocks_when_switched_on(tmp_path):
-    ra, st, br, ctx = _risk(tmp_path, quote=(19990.0, 20010.0), cost_cap_enforce=True)
+    ra, st, br, ctx = _risk(tmp_path, quote=(19990.0, 20010.0))   # shipped defaults: 8% cap, enforced (Oct 26 2026)
     row = _ask(ra, st, "NDQ")
-    assert row["action"] == "rejected" and "cap 0.10R" in row["why"] and not br.opened
+    assert row["action"] == "rejected" and "cap 0.08R" in row["why"] and not br.opened
+
+
+def test_f6_shipped_defaults_are_8pct_enforced():
+    assert CFG["risk"]["cost_cap_r"] == 0.08 and CFG["risk"]["cost_cap_enforce"] is True
 
 
 def test_f7_opposite_direction_index_trade_is_allowed(tmp_path):

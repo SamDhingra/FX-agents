@@ -114,8 +114,8 @@ risk:
   index_group_max: 1                 # … so at most one index position per DIRECTION (long NDQ blocks long US30, not short US30)
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak
-  cost_cap_r: 0.10                   # spread ÷ stop distance above this = friction eats >10% of every R (Oct 2026 audit F6)
-  cost_cap_enforce: false            # false: only LOG it (entries note cost_r / over_cost_cap) so we can see what it would have blocked
+  cost_cap_r: 0.08                   # spread ÷ stop distance above this = friction eats >8% of every R (Oct 2026 audit F6); 8% confirmed Oct 26 2026 on the 3m/5m playbook trades: 2021–2026 kept −0.016R vs flagged −0.160R, untouched 2016–2020 −0.038R vs −0.174R (whatif_judge, research/round3/gemini)
+  cost_cap_enforce: true             # true (Oct 26 2026): entries above the cap are rejected; false would only LOG it (cost_r / over_cost_cap on the entry)
   min_stop_atr: 0.5                  # stops tighter than 0.5 ATR are widened (noise protection)
   max_entry_slippage_frac_of_risk: 0.1   # OANDA priceBound: entry may fill at most 0.1 × stop distance worse (sized for it)
   post_fill_risk_tolerance: 0.1      # after the fill, risk > budget × 1.1 → the excess units are closed at once

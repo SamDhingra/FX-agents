@@ -546,6 +546,7 @@ class _QuoteBroker:
 def _risk(broker):
     from fxagents.agents.trading import RiskAgent
     cfg = copy.deepcopy(BASE); cfg["mode"] = "paper"
+    cfg["risk"]["cost_cap_enforce"] = False                      # these tests are about sizing, not the 8% cost cap (Oct 26 2026)
     cfg["instruments"]["XAUUSD"].update(multiplier=1, tick_size=0.01, qty_step=1, min_units=1, max_units=1e6, margin_rate=0)
     st = LiveState(mode="paper"); st.now = pd.Timestamp("2026-10-08 09:00", tz=TZ)
     st.equity = 100000.0

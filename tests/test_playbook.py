@@ -152,6 +152,7 @@ class Jev:
 def make_ctx(tmp_path, cells, bias=1.0):
     cfg = copy.deepcopy(CFG)
     cfg["mode"] = "paper"
+    cfg["risk"]["cost_cap_enforce"] = False        # these tests are about management/sizing, not the 8% cost cap (Oct 26 2026)
     st = LiveState(mode="paper")
     st.now, st.equity = NOW, 70000.0
     for s in cfg["instruments"]:
