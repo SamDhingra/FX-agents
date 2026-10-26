@@ -174,9 +174,10 @@ def judge_only(cfg, cells: list[dict], pb: dict, a) -> None:
     have = build_history(cfg, judge_sets, need, hist)
     res = run_cells(cfg, [c for c in cells if c["sym"] in have], hist, a.workers)
     md = [f"# Pre-registered follow-up — judged once on untouched 2016 → 2020 (frozen {sha})", "",
-          f"Cells: {', '.join(c['id'] for c in cells)} — taken unchanged from {pb.get('asof')}. Chosen after the playbook "
+          f"Cells: {', '.join(c['id'] for c in cells)} — taken unchanged from {pb.get('asof')}. "
+          + (getattr(a, "why", "") or "Chosen after the playbook "
           "test (Oct 20 2026) as the only setup positive in every 2021–2026 piece; it failed step 1 narrowly (95% range "
-          "touching zero, negative at 2× costs), so this run is a stricter-than-usual check, not a rescue: same engine, "
+          "touching zero, negative at 2× costs), so this run is a stricter-than-usual check, not a rescue:") + " Same engine, "
           "same live filters and position manager, real per-minute bid/ask spread, same gates (≥ 100 trades, avg R > 0, "
           "95% day-block range above 0, avg R > 0 at 2× costs, positive in both halves).", "",
           "| Cell | Verdict | Trades | Win | Avg R | 95% range | 2× costs | 1st half | 2nd half | Spread / risk |",
@@ -207,6 +208,8 @@ def main():
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--cells-file", type=Path, default=None, help="use this frozen cell list instead of the playbook")
     ap.add_argument("--only", default="", help="comma-separated cell ids to run")
+    ap.add_argument("--tfs", default="", help="comma-separated entry timeframes to keep (e.g. 3m,5m)")
+    ap.add_argument("--why", default="", help="judge-only: the reason for this follow-up, printed in the report")
     ap.add_argument("--judge-only", action="store_true",
                     help="pre-registered follow-up: skip step 1 and judge the chosen cells once on --judge")
     a = ap.parse_args()
@@ -222,6 +225,11 @@ def main():
         cells = [c for c in cells if c["id"] in want]
         if not cells:
             raise SystemExit(f"no such cell: {a.only}")
+    if a.tfs:
+        norm = lambda x: str(x).replace("min", "m")                       # "3min" and "3m" are the same timeframe
+        cells = [c for c in cells if norm(c["tf"]) in {norm(x) for x in a.tfs.split(",")}]
+        if not cells:
+            raise SystemExit(f"no cells on {a.tfs}")
     if a.judge_only:
         return judge_only(cfg, cells, pb, a)
     frozen = json.dumps(cells, sort_keys=True)

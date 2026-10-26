@@ -312,6 +312,18 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/mtf-build.log 2>&1 || { echo "build failed — see logs/mtf-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.mtf_whatif </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  mtfvault)  # registered confirmation of the 'm15_live' what-if: the eleven 3m/5m playbook cells (frozen in pbtest), run ONCE on
+             # untouched 2016–2020, then m15_live judged on those trades → data/year_test/mtf_whatif_2016_2020/report.md
+             need_env; mkdir -p logs
+             f=data/year_test/playbook_test/cells_frozen.json
+             [[ -f "$f" ]] || { echo "no $f — run ./fx.sh pbtest first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/mtfvault-build.log 2>&1 || { echo "build failed — see logs/mtfvault-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.playbook_test --cells-file "$f" \
+               --tfs 3m,5m --judge-only --judge old_m1 --out data/year_test/mtf_vault_trades --workers "${2:-2}" \
+               --why "Run for the registered confirmation of the m15_live what-if check (Oct 26 2026); the cells' own verdicts here are incidental." </dev/null
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.mtf_whatif --src data/year_test/mtf_vault_trades \
+               --pattern trades_old_ --hist data/history_x/old_2016_2020 --confirm --out data/year_test/mtf_whatif_2016_2020 </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md

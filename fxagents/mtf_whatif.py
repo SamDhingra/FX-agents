@@ -19,6 +19,15 @@ paper filter on the scorecard, then the untouched 2016–2020 data once — not 
 The primary test is Sam's case, entries on 3m and 5m. 15m+ entries are shown for comparison only.
 
     python -m fxagents.mtf_whatif   → data/year_test/mtf_whatif/report.md
+
+CONFIRMATION (registered Oct 26 2026, after m15_live — and only m15_live — passed on 2021 → Sep 2026): the same eleven
+3m/5m playbook cells, unchanged, run once on the untouched 2016–2020 data (./fx.sh mtfvault), and m15_live judged on
+those trades with exactly the same pass rule. Only m15_live counts there; the other three are printed for information.
+macd_cross 5m NDQ's own 2016–2020 trades were already looked at (Oct 2026, its own test), so the result is also shown
+without that cell.
+
+    python -m fxagents.mtf_whatif --src data/year_test/mtf_vault_trades --pattern trades_old_ \
+        --hist data/history_x/old_2016_2020 --confirm --out data/year_test/mtf_whatif_2016_2020
 """
 from __future__ import annotations
 
@@ -71,19 +80,21 @@ def annotate(t: pd.DataFrame, m1: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load(src: Path) -> pd.DataFrame:
-    files = sorted(src.glob("trades_seen_*.csv.gz"))
+def load(src: Path, pattern: str = "trades_seen_") -> pd.DataFrame:
+    files = sorted(src.glob(f"{pattern}*.csv.gz"))
     if not files:
-        raise SystemExit(f"no trades_seen_*.csv.gz in {src} — run ./fx.sh pbtest first")
-    t = pd.concat([pd.read_csv(f).assign(cell=f.name[12:-7]) for f in files], ignore_index=True)
+        raise SystemExit(f"no {pattern}*.csv.gz in {src} — run ./fx.sh pbtest (or ./fx.sh mtfvault) first")
+    t = pd.concat([pd.read_csv(f).assign(cell=f.name[len(pattern):-7]) for f in files], ignore_index=True)
     t["ts"] = pd.to_datetime(t["ts"], utc=True).dt.tz_convert("America/New_York")
     t["day"] = t["day"].astype(str)
     t["tf"] = t["tf"].astype(str)
     return t
 
 
-def run(src: Path, hist: Path, out: Path) -> dict:
-    t = load(src)
+def run(src: Path, hist: Path, out: Path, pattern: str = "trades_seen_", confirm: bool = False) -> dict:
+    t = load(src, pattern)
+    if confirm:
+        return confirm_run(t, hist, out)
     parts = []
     for sym, g in t.groupby("sym"):
         f = hist / f"{sym}.pkl"
@@ -134,6 +145,56 @@ def run(src: Path, hist: Path, out: Path) -> dict:
     return res
 
 
+def flag_all(t: pd.DataFrame, hist: Path) -> tuple[pd.DataFrame, int]:
+    parts = []
+    for sym, g in t.groupby("sym"):
+        f = hist / f"{sym}.pkl"
+        if not f.exists():
+            print(f"  no history for {sym} — skipped {len(g)} trades", flush=True)
+            continue
+        m1, _ = pd.read_pickle(f)
+        parts.append(annotate(g.reset_index(drop=True), m1))
+        print(f"  {sym}: {len(g)} trades", flush=True)
+    a = pd.concat(parts, ignore_index=True)
+    dropped = int((~a.ok).sum())
+    return a[a.ok].reset_index(drop=True), dropped
+
+
+def confirm_run(t: pd.DataFrame, hist: Path, out: Path) -> dict:
+    """The registered confirmation: m15_live on 3m/5m trades, judged once."""
+    a, dropped = flag_all(t, hist)
+    low = a[a.tf.isin(LOW_TF)]
+    out.mkdir(parents=True, exist_ok=True)
+    a.drop(columns=["ok"]).to_csv(out / "trades_flagged.csv.gz", index=False)
+    main = judge(low, "m15_live")
+    no_macd = low[~low.cell.str.startswith("macd_cross")]
+    side = judge(no_macd, "m15_live")
+    info = {k: judge(low, k) for k in CHECKS if k != "m15_live"}
+    head = "| check | flagged | flagged avg R | kept avg R | kept − flagged (95% range) | halves | random p | pass |"
+    md = ["# Confirmation on untouched 2016 → 2020: the 15m candle in progress against a 3m / 5m entry", "",
+          "Registered Oct 26 2026 after **m15_live** passed on 2021 → Sep 2026 (+0.073R, 95% +0.021 to +0.123, both "
+          "halves, random p 0.001): the same eleven 3m/5m playbook cells, unchanged, run once on 2016–2020 with the live "
+          "filters and position manager and the real per-minute spread; m15_live judged with the same rule (kept − "
+          "flagged day-block 95% range above 0, positive in both halves, better than skipping as many at random, p < 0.05).",
+          "", f"{len(low):,} trades on 3m / 5m, {low.r.mean():+.3f}R average ({dropped} skipped for price gaps).", "",
+          "## The registered check", "", head, "|---|---|---|---|---|---|---|---|", _fmt(main), "",
+          f"**Verdict: {'CONFIRMED' if main.get('pass') else 'NOT CONFIRMED'}.**", "",
+          "Without macd_cross 5m NDQ (its own 2016–2020 trades were looked at before):", "", head,
+          "|---|---|---|---|---|---|---|---|", _fmt(side), "",
+          "## For information only (not registered, can't confirm anything)", "", head, "|---|---|---|---|---|---|---|---|"]
+    md += [_fmt(j) for j in info.values()]
+    md += ["", "## By cell", "", "| cell | trades | avg R | m15_live flagged (avg R) / kept (avg R) |", "|---|---|---|---|"]
+    for cell, g in low.groupby("cell"):
+        f_, k_ = g[g.m15_live], g[~g.m15_live]
+        md.append(f"| {cell} | {len(g)} | {g.r.mean():+.3f} | {len(f_)} ({f_.r.mean():+.2f}) / {len(k_)} ({k_.r.mean():+.2f}) |")
+    md += ["", "A confirmed check that leaves the kept trades below zero still leaves a losing playbook: it earns a "
+           "shadow tag on the practice account and the 'wait for the 15m to turn' test, not a live change."]
+    (out / "report.md").write_text("\n".join(md) + "\n")
+    res = {"m15_live": main, "m15_live_without_macd": side, "info": info}
+    (out / "summary.json").write_text(json.dumps(res, indent=1, default=str))
+    return res
+
+
 def _fmt(j: dict) -> str:
     if "diff" not in j:
         return (f"| {j['check']} | {j['removed']} of {j['n']} | {j['removed_avg']} | {j['kept_avg']} | — | — | — | "
@@ -149,8 +210,10 @@ def main(argv=None):
     ap.add_argument("--src", type=Path, default=Path("data/year_test/playbook_test"))
     ap.add_argument("--hist", type=Path, default=Path("data/history_x/seen_2021_2026"))
     ap.add_argument("--out", type=Path, default=Path("data/year_test/mtf_whatif"))
+    ap.add_argument("--pattern", default="trades_seen_")
+    ap.add_argument("--confirm", action="store_true", help="the registered 2016–2020 confirmation (m15_live only)")
     a = ap.parse_args(argv)
-    run(a.src, a.hist, a.out)
+    run(a.src, a.hist, a.out, a.pattern, a.confirm)
     print((a.out / "report.md").read_text())
 
 

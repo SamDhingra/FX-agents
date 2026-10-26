@@ -51,3 +51,21 @@ def test_run_writes_a_report(tmp_path):
     res = W.run(src, hist, tmp_path / "out")
     assert set(res["low_tf"]) == set(W.CHECKS) and (tmp_path / "out/report.md").exists()
     assert "Sam's case" in (tmp_path / "out/report.md").read_text()
+
+
+def test_confirmation_judges_only_m15_live_and_shows_it_without_macd(tmp_path):
+    rng = np.random.default_rng(2)
+    n = 60 * 24 * 40
+    m1 = m1_from(1000 + np.cumsum(rng.normal(0, 1, n)), start="2017-01-02 00:00")
+    hist = tmp_path / "hist"; hist.mkdir()
+    pd.to_pickle((m1, None), hist / "XAUUSD.pkl")
+    src = tmp_path / "src"; src.mkdir()
+    for cell in ("smc_displacement_3m_pb-xau-d", "macd_cross_5m_pb-ndq-d"):
+        ts = m1.index[rng.choice(np.arange(2000, n - 10), 400, replace=False)]
+        pd.DataFrame({"sym": "XAUUSD", "tf": cell.split("_")[-2], "ts": ts.astype(str), "side": rng.choice([1, -1], len(ts)),
+                      "r": rng.normal(-0.05, 1, len(ts)), "day": ts.date.astype(str)}).to_csv(
+            src / f"trades_old_{cell}.csv.gz", index=False)
+    res = W.run(src, hist, tmp_path / "out", pattern="trades_old_", confirm=True)
+    assert res["m15_live"]["check"] == "m15_live" and res["m15_live_without_macd"]["n"] == 400
+    txt = (tmp_path / "out/report.md").read_text()
+    assert "Verdict:" in txt and "For information only" in txt and "macd_cross_5m_pb-ndq-d" in txt
