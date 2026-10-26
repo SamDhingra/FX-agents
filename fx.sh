@@ -298,6 +298,13 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/analystcheck-build.log 2>&1 || { echo "build failed — see logs/analystcheck-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.exit_study --set analyst --days "${2:-365}" </dev/null | grep -v "^  "
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  weekly)    # a friend's weekly/daily rule books (research/weekly_rules, unchanged) on OANDA daily bid/ask, 13 markets incl.
+             # the 5 main forex pairs, plus our controls (swap, 2x costs, coin flip, random timing, month-block 95% range).
+             # ./fx.sh weekly [years=5] [placebo=200] → data/year_test/weekly_rules/report.md (5 years keeps 2016–2020 untouched)
+             need_env; mkdir -p logs data/year_test/weekly_rules
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/weekly-build.log 2>&1 || { echo "build failed — see logs/weekly-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.weekly_rules --years "${2:-5}" --placebo "${3:-200}" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md
