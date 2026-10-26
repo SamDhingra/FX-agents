@@ -263,7 +263,7 @@ class TraderAgent(Agent):
     def bias_precheck(self, sig: Signal) -> str | None:
         """Cheap hard-rule check BEFORE spending a Jev call (Risk re-checks everything)."""
         bc = self.cfg["bias"]
-        b = self.state.bias.get(sig.symbol)
+        b = self.state.bias_for(sig.symbol)               # this book's own loss guard (Oct 26 2026)
         if not b:
             return "bias not ready"
         if b["suspended"]:
@@ -534,9 +534,19 @@ class RiskAgent(Agent):
     async def bias_gate(self, sig: Signal, grade: dict, now) -> dict:
         bc = self.cfg["bias"]
         sg = bc["safeguards"]
-        b = self.state.bias.get(sig.symbol)
+        b = self.state.bias_for(sig.symbol)               # shared reading + THIS book's own loss guard (Oct 26 2026)
         if not b:
             return {"reject": "bias not ready (need hourly history)"}
+        # stale bias (Oct 26 2026): the reading is refreshed hourly; if the refresh stopped (no data, errors) an
+        # old "aligned" reading must not keep opening trades. A reading with no timestamp is not judged.
+        max_age = float(bc.get("max_age_min", 150))
+        if max_age > 0 and b.get("updated"):
+            try:
+                age = (pd.Timestamp(now) - pd.Timestamp(b["updated"])).total_seconds() / 60
+            except (TypeError, ValueError):
+                age = 0.0
+            if age > max_age:
+                return {"reject": f"bias stale: last updated {int(age) // 60}h{int(age) % 60:02d}m ago (max {max_age:.0f} min)"}
         if b["suspended"]:
             return {"reject": f"bias suspended after {b['aligned_losses']} aligned losses — waiting for fresh 1H break"}
         mode = rule_check(sig.side, b["score"], bc["min_align"])

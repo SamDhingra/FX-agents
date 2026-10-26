@@ -210,6 +210,22 @@ class ShadowState(LiveState):
         object.__setattr__(self, k, v)
 
 
+    def bias_for(self, sym: str):
+        """The shared structural reading with THIS book's own loss guard laid over it (Oct 26 2026): label, score and
+        timeframes are the practice account's, but a suspension comes only from this book's own losses."""
+        b = object.__getattribute__(self, "_main").bias.get(sym)
+        if not b:
+            return b
+        g = self.guards.get(sym) or {}
+        susp = bool(g.get("suspended"))
+        state = b.get("state")
+        if susp:
+            state = "SUSPENDED"
+        elif state == "SUSPENDED":                       # suspended on the practice account only
+            state = "IN DOUBT" if b.get("in_doubt") else b.get("label")
+        return b | {"suspended": susp, "aligned_losses": int(g.get("aligned_losses", 0)), "state": state}
+
+
 class ShadowBroker(PaperBroker):
     """Virtual fills at the live price ± an estimated half-spread (OANDA charges the spread, not commission)."""
 
@@ -386,8 +402,9 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
         trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)
     from .analyst import TradeAnalystAgent
     from .jev_advisor import JevAdvisorAgent
+    from .context import BookGuardAgent
     agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), TradeAnalystAgent(sctx), JournalAgent(sctx),
-              MonitorAgent(sctx), JevAdvisorAgent(sctx)]     # the adviser switches itself off outside jev_advisor.books
+              MonitorAgent(sctx), JevAdvisorAgent(sctx), BookGuardAgent(sctx)]     # the adviser switches itself off outside jev_advisor.books
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
     sctx.book_key = mode

@@ -69,6 +69,8 @@ timeframes:
 # ── Higher-timeframe bias: HARD RULE for every strategy, with safeguards for when it is wrong ──
 bias:
   weights: {d: 0.40, h4: 0.35, h1: 0.25}   # composite score in [-1, 1]
+  max_age_min: 150         # entries are refused when the bias reading is older than this (hourly refresh + grace + slack)
+  audit_ttl_min: 180       # a Jev bias audit stops counting ("in doubt" clears) after this long or when the bias label changes
   min_align: 0.25          # trade only in the bias direction: side × score ≥ 0.25
   neutral_policy: skip     # skip | reduced   (TFs disagree → no trades, or half size + no pyramiding)
   safeguards:

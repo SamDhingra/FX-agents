@@ -39,6 +39,16 @@ class LiveState:
     news: list[dict] = field(default_factory=list)                   # upcoming events
     news_source: str = ""
     news_block: dict | None = None
+    # Loss guards (Oct 26 2026): per symbol {aligned_losses, suspended, suspended_h1, …}. Owned by THIS book (the
+    # practice account's BiasAgent, or a paper book's BookGuardAgent), saved in runtime_state.json so a restart keeps
+    # a suspension; guard_day = trading day of the streak; guard_closed = recent closed position ids (dedupe).
+    guards: dict[str, dict] = field(default_factory=dict)
+    guard_day: str = ""
+    guard_closed: list = field(default_factory=list)
+
+    def bias_for(self, sym: str):
+        """The bias reading this book's entries are gated on. Practice account: the shared dict as is."""
+        return self.bias.get(sym)
 
     def beat(self, agent: str) -> None:
         self.heartbeats[agent] = time.time()
@@ -106,10 +116,16 @@ class RuntimeStore:
             # the transient startup gate is never a real halt: keep whatever halt the file already holds
             prev = self.load() or {}
             enabled, reason = prev.get("trading_enabled", True), prev.get("halt_reason", "")
+            keep_guard = prev.get("bias_guard")      # …and the saved loss guards (not restored yet at this point)
+        else:
+            keep_guard = None
         d = {"saved": datetime.now().isoformat(timespec="seconds"), "trading_enabled": enabled, "halt_reason": reason,
              "trading_day": st.trading_day, "day_start_equity": st.day_start_equity, "equity_peak": st.equity_peak,
              "realized_today": st.realized_today,
+             "bias_guard": {"day": st.guard_day, "symbols": st.guards, "closed": list(st.guard_closed)[-200:]},
              "positions": [pos_to_dict(p) for p in st.positions.values() if p.status == "open"]}
+        if keep_guard is not None:
+            d["bias_guard"] = keep_guard
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(d, indent=1))
@@ -134,10 +150,31 @@ class RuntimeStore:
             st.trading_day = today
             st.day_start_equity = float(d.get("day_start_equity") or st.day_start_equity)
             st.realized_today = float(d.get("realized_today") or 0.0)
+        self._restore_guards(st, d.get("bias_guard"), now)
         halt = "" if d.get("trading_enabled", True) else (d.get("halt_reason") or "halted before the restart")
         if halt and not (d.get("trading_day") == today or halt.startswith("max drawdown")):
             halt = ""
         return halt, [pos_from_dict(x) for x in d.get("positions", [])]
+
+    @staticmethod
+    def _restore_guards(st: LiveState, bg, now) -> None:
+        """Loss guards back in place (Oct 26 2026): suspensions always survive; a streak (aligned_losses) only if
+        it was saved on the same 17:00-NY trading day, else it resets exactly as the roll would have. Updates
+        the dicts in place — the BiasAgent already holds them."""
+        if not isinstance(bg, dict):
+            return
+        from .structure import trading_day as _tday
+        import pandas as pd
+        today = str(_tday(pd.Timestamp(now)).date())
+        for sym, g in (bg.get("symbols") or {}).items():
+            if isinstance(g, dict):
+                st.guards.setdefault(sym, {}).update(g)
+        st.guard_closed = list(bg.get("closed") or [])[-200:]
+        st.guard_day = bg.get("day") or ""
+        if st.guard_day != today:
+            for g in st.guards.values():
+                g["aligned_losses"] = 0
+            st.guard_day = today
 
 
 async def startup_reconcile(st: LiveState, broker, store: RuntimeStore, now) -> dict:
