@@ -324,6 +324,13 @@ case "${1:-help}" in
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.mtf_whatif --src data/year_test/mtf_vault_trades \
                --pattern trades_old_ --hist data/history_x/old_2016_2020 --confirm --out data/year_test/mtf_whatif_2016_2020 </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  round3)    # round-3 context checks (A1 opposing path, A2 two-way chop — ChatGPT's code in research/round3 — and m15_live)
+             # on the playbook's 3m/5m entries with the stricter judge (fxagents/whatif_judge.py).
+             # ./fx.sh round3 [seen|vault] → data/year_test/round3_<period>/report.md  (vault needs ./fx.sh mtfvault first)
+             need_env; mkdir -p logs; p_="${2:-seen}"
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/round3-build.log 2>&1 || { echo "build failed — see logs/round3-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.round3 --period "$p_" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md
