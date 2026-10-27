@@ -466,7 +466,7 @@ def test_config_has_the_documented_keys():
     d = CFG["dynamic"]
     assert d["enabled"] is True and d["books"] == ["live", "playbook"] and d["claude_model"] == "claude-sonnet-5-5"
     assert d["openai_model"] == "" and d["deadline_s"] == 25 and d["max_concurrency"] == 4
-    assert d["daily_call_budget"] == 120 and d["prices"] == {}
+    assert d["daily_call_budget"] == 120 and d["prices"]["claude-sonnet-5-5"] == {"in_per_mtok": 2.0, "out_per_mtok": 10.0}
     assert list(PR.build_providers(d)) == ["claude"]            # empty openai_model: that arm is off
     assert list(PR.build_providers({**d, "openai_model": "x"})) == ["claude", "openai"]
 
