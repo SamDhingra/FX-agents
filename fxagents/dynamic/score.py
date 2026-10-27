@@ -57,17 +57,30 @@ def _cols(journal, table: str) -> set:
     return {r[1] for r in journal.db.execute(f"PRAGMA table_info({table})")}
 
 
-def collect(journal, cfg, book: str, version: str = PROMPT_VERSION, ex_version: str = EXCHANGE_PROMPT_VERSION) -> list[dict]:
+RETRO_TITLE = "Past trades (retrospective, not counted toward the decision rule; latency not meaningful)"
+
+
+def _source_filter(journal, source: str, alias: str = "c") -> tuple[str, tuple]:
+    """SQL fragment keeping candidates of one source. 'live' is everything not marked backfill, so milestone-1 databases
+    without the column read as all live and a backfill row can never reach the live scorecard."""
+    if "source" not in _cols(journal, "dyn_candidates"):
+        return ("AND 1=1", ()) if source == "live" else ("AND 1=0", ())
+    return f"AND COALESCE({alias}.source,'live')=?", (source,)
+
+
+def collect(journal, cfg, book: str, version: str = PROMPT_VERSION, ex_version: str = EXCHANGE_PROMPT_VERSION,
+            source: str = "live") -> list[dict]:
     """One row per closed, reviewed-or-not candidate of this prompt version: its trade result, each provider's round-1
     review (`reviews`), round-2 review (`r2`, prompt `ex_version`) and how the exchange went. Milestone-1 journals
     (no round / exchange columns) read as: round 1 only, exchange not run."""
     try:
         ccols = _cols(journal, "dyn_candidates")
+        sf, sargs = _source_filter(journal, source)
         ex = ("c.exchange_status xs, c.exchange_ms xms" if {"exchange_status", "exchange_ms"} <= ccols else "NULL xs, NULL xms")
         cands = [dict(r) for r in journal.db.execute(
             f"SELECT c.candidate_id, c.symbol, c.strategy, c.ts, t.r_multiple r, t.qty_initial q, t.entry e, t.initial_stop s, "
             f"t.realized pnl, {ex} FROM dyn_candidates c JOIN trades t ON t.id=c.candidate_id "
-            "WHERE c.prompt_version=? AND t.status='closed' AND t.r_multiple IS NOT NULL ORDER BY c.ts", (version,))]
+            f"WHERE c.prompt_version=? AND t.status='closed' AND t.r_multiple IS NOT NULL {sf} ORDER BY c.ts", (version, *sargs))]
         rc = _cols(journal, "dyn_reviews")
         chg = ("changed, why_changed" if "changed" in rc else "NULL changed, NULL why_changed") + (", changed_reported" if "changed_reported" in rc else ", NULL changed_reported")
         revs = [dict(r) for r in journal.db.execute(
@@ -94,11 +107,16 @@ def collect(journal, cfg, book: str, version: str = PROMPT_VERSION, ex_version: 
     return rows
 
 
-def spend(journal, version: str = PROMPT_VERSION) -> dict:
-    """Everything the reviewers did, closed trade or not: calls, outcomes, cost, per provider."""
+def spend(journal, version: str = PROMPT_VERSION, source: str = "live") -> dict:
+    """Everything the reviewers did, closed trade or not: calls, outcomes, cost, per provider (one source only)."""
     try:
+        if "source" in _cols(journal, "dyn_candidates"):
+            back = "candidate_id IN (SELECT candidate_id FROM dyn_candidates WHERE source='backfill')"
+            sf = back if source == "backfill" else "NOT " + back
+        else:
+            sf = "1=0" if source == "backfill" else "1=1"
         rows = [dict(r) for r in journal.db.execute(
-            "SELECT provider, model, action, called, cost_usd, tokens_in FROM dyn_reviews WHERE prompt_version=?", (version,))]
+            f"SELECT provider, model, action, called, cost_usd, tokens_in FROM dyn_reviews WHERE prompt_version=? AND {sf}", (version,))]
     except sqlite3.OperationalError:
         return {}
     out: dict[str, dict] = {}
@@ -222,7 +240,7 @@ def arm_net(rows: list[dict], arm: str) -> np.ndarray:
     return np.where(ent, 0.0, -r) - _costs(rows, arm)[1]
 
 
-def arm_metrics(rows: list[dict], arm: str, draws: int = DRAWS, share_den: int | None = None) -> dict:
+def arm_metrics(rows: list[dict], arm: str, draws: int = DRAWS, share_den: int | None = None, retro: bool = False) -> dict:
     """`share_den`: for E arms, the number of ALL candidates, so the 30-second share is not flattered by the ones where
     no exchange ran (the registered rule asks for 95% of candidates)."""
     provs = ARMS[arm]
@@ -286,6 +304,8 @@ def arm_metrics(rows: list[dict], arm: str, draws: int = DRAWS, share_den: int |
                        "net_ci_above_0": None if ci is None else bool(ci[0] > 0),
                        "share_within_30s": out["share_within_30s"], "share_ok": bool((out["share_within_30s"] or 0) >= RULE_SHARE),
                        "worth_live_trial": None if interim else bool(ci is not None and ci[0] > 0 and (out["share_within_30s"] or 0) >= RULE_SHARE)}
+        if retro:      # past trades never count toward the rule, and their latency says nothing about a live gate
+            out["latency_ms"], out["share_within_30s"], out["rule"] = None, None, None
     return out
 
 
@@ -347,7 +367,7 @@ def mind_changes(rows: list[dict]) -> dict:
     return out
 
 
-def exchange_section(rows: list[dict], draws: int = DRAWS) -> dict:
+def exchange_section(rows: list[dict], draws: int = DRAWS, retro: bool = False) -> dict:
     """Milestone 1b: E arms on the exchanged candidates only (A and D on the same subset, E3 - D paired), the
     candidates where no exchange ran, mind-change stats, full-exchange latency and the round-2 cost."""
     n_all = len(rows)
@@ -358,13 +378,13 @@ def exchange_section(rows: list[dict], draws: int = DRAWS) -> dict:
             why = r.get("exchange_status") or "skipped: no exchange recorded (milestone-1 row)"
             not_ex[why] = not_ex.get(why, 0) + 1
     out: dict = {"candidates": n_all, "exchanged": len(ex), "not_exchanged": n_all - len(ex), "not_exchanged_reasons": not_ex}
-    arms = {"A": arm_metrics(ex, "A", draws), "D": arm_metrics(ex, "D", draws)}
-    arms.update({a: arm_metrics(ex, a, draws, share_den=n_all) for a in E_ARMS})
+    arms = {"A": arm_metrics(ex, "A", draws, retro=retro), "D": arm_metrics(ex, "D", draws, retro=retro)}
+    arms.update({a: arm_metrics(ex, a, draws, share_den=n_all, retro=retro) for a in E_ARMS})
     out["arms"] = arms
     out["e3_minus_d"] = paired_diff(ex, "E3", "D", draws) if arms["E3"].get("on") and arms["D"].get("on") else {"n": 0}
     out["mind_change"] = mind_changes(ex)
     ms = [r["exchange_ms"] for r in ex if r.get("exchange_ms") is not None]
-    out["latency"] = {"n": len(ms), "p50_ms": _q(ms, 50), "p95_ms": _q(ms, 95), "max_ms": _q(ms, 100),
+    out["latency"] = None if retro else {"n": len(ms), "p50_ms": _q(ms, 50), "p95_ms": _q(ms, 95), "max_ms": _q(ms, 100),
                       "share_le_30s": round(sum(m <= LIVE_S * 1000 for m in ms) / len(ms), 4) if ms else None,
                       "share_le_45s": round(sum(m <= EXCH_S * 1000 for m in ms) / len(ms), 4) if ms else None,
                       "share_le_30s_all_candidates": round(sum(m <= LIVE_S * 1000 for m in ms) / n_all, 4) if n_all else None,
@@ -384,15 +404,16 @@ def exchange_section(rows: list[dict], draws: int = DRAWS) -> dict:
     return out
 
 
-def score(rows: list[dict], draws: int = DRAWS) -> dict:
+def score(rows: list[dict], draws: int = DRAWS, retro: bool = False) -> dict:
     """Arms A-D overall and per symbol for a set of candidate rows (closed trades only), and the exchange section
-    (arms E1-E3 on the exchanged candidates only, with A and D on the same subset)."""
-    res = {"candidates": len(rows), "arms": {a: arm_metrics(rows, a, draws) for a in BASE_ARMS}, "by_symbol": {},
-           "exchange": exchange_section(rows, draws)}
+    (arms E1-E3 on the exchanged candidates only, with A and D on the same subset). `retro` = past trades reviewed
+    after the fact: same arms and costs, but no latency figures and no decision-rule verdict."""
+    res = {"candidates": len(rows), "arms": {a: arm_metrics(rows, a, draws, retro=retro) for a in BASE_ARMS}, "by_symbol": {},
+           "exchange": exchange_section(rows, draws, retro), "retrospective": retro}
     for sym in sorted({r["symbol"] for r in rows}):
         sub = [r for r in rows if r["symbol"] == sym]
-        res["by_symbol"][sym] = {"candidates": len(sub), "arms": {a: arm_metrics(sub, a, draws) for a in BASE_ARMS},
-                                 "exchange": exchange_section(sub, draws)}
+        res["by_symbol"][sym] = {"candidates": len(sub), "arms": {a: arm_metrics(sub, a, draws, retro=retro) for a in BASE_ARMS},
+                                 "exchange": exchange_section(sub, draws, retro)}
     return res
 
 
@@ -401,7 +422,25 @@ def scorecard(journal, cfg, book: str, version: str = PROMPT_VERSION, draws: int
     out = score(rows, draws)
     out.update(book=book, prompt_version=version, spend=spend(journal, version),
                spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION))
+    out["retrospective"] = retro_scorecard(journal, cfg, book, version, draws)       # separate: never mixed into the above
     return out
+
+
+def retro_scorecard(journal, cfg, book: str, version: str = PROMPT_VERSION, draws: int = DRAWS) -> dict:
+    """The same arms on past trades reviewed after the fact (source 'backfill'); not part of the decision rule."""
+    rows = collect(journal, cfg, book, version, source="backfill")
+    out = score(rows, draws, retro=True)
+    out.update(book=book, title=RETRO_TITLE, spend=spend(journal, version, "backfill"),
+               spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION, "backfill"), reviewed_candidates=backfill_count(journal))
+    return out
+
+
+def backfill_count(journal) -> int:
+    """Every backfilled candidate (closed or not)."""
+    try:
+        return int(journal.db.execute("SELECT COUNT(*) FROM dyn_candidates WHERE source='backfill'").fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0
 
 
 def recent_reviews(journal, limit: int = 50) -> list[dict]:
@@ -409,6 +448,7 @@ def recent_reviews(journal, limit: int = 50) -> list[dict]:
     round / changed / why_changed (round 1 on milestone-1 databases)."""
     try:
         extra = ("v.round, v.changed, v.why_changed, " if "round" in _cols(journal, "dyn_reviews") else "1 round, NULL changed, NULL why_changed, ")
+        extra += ("COALESCE(c.source,'live') source, " if "source" in _cols(journal, "dyn_candidates") else "'live' source, ")
         rows = [dict(r) for r in journal.db.execute(
             "SELECT v.ts, v.candidate_id, v.provider, v.model, v.action, v.trigger_id, v.invalidation_id, v.evidence, "
             f"v.conflicting, v.latency_ms, v.cost_usd, v.error, {extra}c.symbol, c.side, c.strategy, t.status, t.r_multiple "
@@ -472,6 +512,9 @@ def diff_table(sc: dict, names: tuple = ("B", "C", "D")) -> list[str]:
         v, ru = m["vs_a"], m["rule"]
         ci = v.get("net_ci")
         rng = f"{ci[0]:+.3f} to {ci[1]:+.3f}" if ci else (v.get("ci_note") or "n/a")
+        if ru is None:                      # retrospective: no verdict, not part of the rule
+            L.append(f"| {a} {m['name']} | {m['reviewed']} | {_f(v['gross_per_candidate'], 4, True)} | {_f(v['net_per_candidate'], 4, True)} | {rng} | not counted |")
+            continue
         if ru["interim"]:
             rule = f"interim: {ru['reviewed']} of {ru['needs']} reviewed"
         else:
@@ -507,6 +550,9 @@ def exchange_md(ex: dict, heading: str = "###") -> list[str]:
                  f"{m['r_round1']:+.2f} | {m['r_round2']:+.2f} | {m['r_gain']:+.2f} |")
     L += ["", "(R of an answer = the trade's R if it said ENTER, else 0, as in arms B / C.)", ""]
     lt = ex["latency"]
+    if lt is None:                         # retrospective: latency is not meaningful, only the round-2 cost is shown
+        return L + [f"Round-2 cost: ${ex['round2_cost']['usd']:.3f} / {ex['round2_cost']['r']:.3f}R"
+                    + (f" ({ex['round2_cost']['unpriced_calls']} call(s) without a price)" if ex['round2_cost']['unpriced_calls'] else "") + ".", ""]
     L += [f"Full-exchange latency (round-1 hand-over to round-2 end): p50 {_secs(lt['p50_ms'])} s, p95 {_secs(lt['p95_ms'])} s, max {_secs(lt['max_ms'])} s; "
           f"within 30 s: {_pct(lt['share_le_30s'])} of exchanged ({_pct(lt['share_le_30s_all_candidates'])} of all candidates); within 45 s: {_pct(lt['share_le_45s'])}.",
           f"Round-2 cost: ${ex['round2_cost']['usd']:.3f} / {ex['round2_cost']['r']:.3f}R" + (f" ({ex['round2_cost']['unpriced_calls']} call(s) without a price)" if ex['round2_cost']['unpriced_calls'] else "") + ".",
@@ -515,12 +561,44 @@ def exchange_md(ex: dict, heading: str = "###") -> list[str]:
     return L
 
 
-def report_md(groups: dict[str, dict], version: str, books: list[str], notes: list[str]) -> str:
+def _spend_tables(sc: dict) -> list[str]:
+    L = []
+    for key, head in (("spend", "Everything the reviewers did (closed trades or not):"),
+                      ("spend_r2", f"Round 2 ({EXCHANGE_PROMPT_VERSION}), everything the reviewers did:")):
+        sp = sc.get(key)
+        if sp:
+            L += [head, "", "| provider | model | reviews | API calls | ENTER | WAIT | CANCEL | ABSTAIN | not reviewed | cost USD |", "|---|---|---|---|---|---|---|---|---|---|"]
+            for p, d in sp.items():
+                L.append(f"| {p} | {d['model']} | {d['reviews']} | {d['calls']} | {d['ENTER']} | {d['WAIT']} | {d['CANCEL']} | {d['ABSTAIN']} | "
+                         f"{d['NOT_REVIEWED']} | {_spend_cost(d)} |")
+            L.append("")
+    return L
+
+
+def retro_md(sc: dict | None, heading: str = "##") -> list[str]:
+    """The separate section for past trades reviewed after the fact: the same arms and costs, no latency, no verdict."""
+    L = [f"{heading} {RETRO_TITLE}", ""]
+    if not sc or not sc.get("reviewed_candidates"):
+        return L + ["No past trade has been reviewed yet (`./fx.sh dynbackfill`).", ""]
+    L += ["These trades had already closed when the reviewers saw them, rebuilt as of their entry minute from OANDA candles "
+          "(the models were not told). **They are a separate sample: never pooled with the live scorecard above and not counted toward the "
+          "decision rule.** Latency is not meaningful (calls were not made at the fill), so no latency or 30-second share is shown.", "",
+          f"{sc['reviewed_candidates']} past trade(s) reviewed, {sc['candidates']} closed and scored.", ""]
+    if not sc["candidates"]:
+        return L + ["Nothing to score yet.", ""]
+    L += arm_table(sc) + ["", "Paired difference to A (skipping a trade removes its R; the API cost is subtracted):", ""] + diff_table(sc) + [""]
+    if sc.get("exchange"):
+        L += exchange_md(sc["exchange"], heading + "#")
+    return L + _spend_tables(sc)
+
+
+def report_md(groups: dict[str, dict], version: str, books: list[str], notes: list[str], retro: dict | None = None) -> str:
     L = [f"# Shadow review gate: scorecard (prompt {version})", "",
          "Milestone 1 of the dynamic controller (docs/dynamic_controller.md). **No review changed any trade.** WAIT counts as skipped; "
          "ABSTAIN and `not_reviewed: budget` are skipped and counted separately; only closed trades are scored. "
          "Costs are USD as billed per token at the prices in `dynamic.prices` (R-equivalent uses each trade's own risk in USD; "
-         "the bot books everything in USD, so no CAD conversion is applied). Results are never pooled across prompt versions.", ""]
+         "the bot books everything in USD, so no CAD conversion is applied). Results are never pooled across prompt versions "
+         "or between live and retrospective reviews.", ""]
     L += [f"Books: {', '.join(books)}", ""] + [f"- {n}" for n in notes] + ([""] if notes else [])
     for title, sc in groups.items():
         L += [f"## {title}", "", f"{sc['candidates']} closed candidate(s).", ""]
@@ -536,23 +614,11 @@ def report_md(groups: dict[str, dict], version: str, books: list[str], notes: li
                 L += [f"**{sym}** ({s['candidates']} closed candidates)", ""] + arm_table(s) + [""]
                 if s.get("exchange", {}).get("exchanged"):
                     L += [f"{sym}, exchanged candidates only:", ""] + arm_table(s["exchange"]) + [""]
-        sp = sc.get("spend")
-        if sp:
-            L += ["Everything the reviewers did (closed trades or not):", "", "| provider | model | reviews | API calls | ENTER | WAIT | CANCEL | ABSTAIN | not reviewed | cost USD |", "|---|---|---|---|---|---|---|---|---|---|"]
-            for p, d in sp.items():
-                L.append(f"| {p} | {d['model']} | {d['reviews']} | {d['calls']} | {d['ENTER']} | {d['WAIT']} | {d['CANCEL']} | {d['ABSTAIN']} | "
-                         f"{d['NOT_REVIEWED']} | {_spend_cost(d)} |")
-            L.append("")
-        sp2 = sc.get("spend_r2")
-        if sp2:
-            L += [f"Round 2 ({EXCHANGE_PROMPT_VERSION}), everything the reviewers did:", "", "| provider | model | reviews | API calls | ENTER | WAIT | CANCEL | ABSTAIN | not reviewed | cost USD |", "|---|---|---|---|---|---|---|---|---|---|"]
-            for p, d in sp2.items():
-                L.append(f"| {p} | {d['model']} | {d['reviews']} | {d['calls']} | {d['ENTER']} | {d['WAIT']} | {d['CANCEL']} | {d['ABSTAIN']} | "
-                         f"{d['NOT_REVIEWED']} | {_spend_cost(d)} |")
-            L.append("")
+        L += _spend_tables(sc)
     L += ["Decision rule (registered): after >= 100 reviewed closed trades an arm is worth a live trial only if its paired improvement "
           "over A, after API cost, has a 95% range above 0 and its reviews arrive within 30 s for >= 95% of candidates. Otherwise it stays in shadow or is dropped. "
-          "For E arms (milestone 1b) the cost is round 1 + round 2 and the 30 s share is taken over all candidates, exchanged or not."]
+          "For E arms (milestone 1b) the cost is round 1 + round 2 and the 30 s share is taken over all candidates, exchanged or not.", ""]
+    L += retro_md(retro)
     return "\n".join(L) + "\n"
 
 
@@ -578,6 +644,7 @@ def main(argv=None) -> int:
         apply_broker(cfg)
     books = [b.strip() for b in a.books.split(",") if b.strip()]
     all_rows, notes, per_book, spends, spends2 = [], [], {}, [], []
+    retro_rows, rsp, rsp2, rcount = [], [], [], 0
     for b in books:
         path = journal_path(cfg, b)
         if not Path(path).exists():
@@ -592,16 +659,23 @@ def main(argv=None) -> int:
         spends.append(sc["spend"])
         spends2.append(sc["spend_r2"])
         per_book[b] = sc
+        retro_rows += collect(j, cfg, b, a.version, source="backfill")
+        rsp.append(spend(j, a.version, "backfill"))
+        rsp2.append(spend(j, EXCHANGE_PROMPT_VERSION, "backfill"))
+        rcount += backfill_count(j)
     pooled = score(all_rows)
     pooled["spend"] = merge_spend(spends)
     pooled["spend_r2"] = merge_spend(spends2)
     groups = {"All books": pooled}
     if len(per_book) > 1:
         groups.update({f"Book: {b}": sc for b, sc in per_book.items()})
+    retro = score(retro_rows, retro=True)
+    retro.update(title=RETRO_TITLE, spend=merge_spend(rsp), spend_r2=merge_spend(rsp2), reviewed_candidates=rcount)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "report.md").write_text(report_md(groups, a.version, books, notes))
-    (out / "summary.json").write_text(json.dumps({"prompt_version": a.version, "books": books, "groups": groups}, indent=1, default=str))
+    (out / "report.md").write_text(report_md(groups, a.version, books, notes, retro))
+    (out / "summary.json").write_text(json.dumps({"prompt_version": a.version, "books": books, "groups": groups,
+                                                  "retrospective": retro}, indent=1, default=str))
     print(f"wrote {out / 'report.md'}")
     return 0
 

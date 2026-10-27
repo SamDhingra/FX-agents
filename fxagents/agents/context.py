@@ -115,6 +115,28 @@ class BookGuardAgent(GuardMixin, Agent):
         await self._count_close(ev, notify=False)
 
 
+
+def hour_stats(idx: pd.DatetimeIndex, now: pd.Timestamp) -> tuple[int, bool]:
+    """(1-minute bars present, complete) in the hour that closed last before `now`; shared with the retrospective backfill."""
+    end = now.floor("h")
+    start = end - pd.Timedelta("1h")
+    win = idx[(idx >= start) & (idx < end)]
+    n = len(win)
+    last = bool(n) and win[-1] == end - pd.Timedelta("1min")
+    return n, bool(n == 60 or (last and n >= 55))
+
+
+def compute_bias(h1: pd.DataFrame, now: pd.Timestamp, px: float, weights: dict, min_align: float) -> dict:
+    """The bias reading at `now` from hourly bars (needs >= 48; the caller checks). BiasAgent.compute and the
+    retrospective backfill use this one function, so a past reading is the live computation on past data."""
+    b = bias_frame(h1, pd.DatetimeIndex([now]), np.array([px]), weights).iloc[-1]
+    f = lambda x: None if pd.isna(x) else round(float(x), 4)  # noqa: E731
+    return {"score": round(float(b["score"]), 3), "d": int(b["d"]), "h4": int(b["h4"]), "h1": int(b["h1"]),
+            "label": label(float(b["score"]), min_align), "pd_pos": f(b.get("pd_pos")),
+            "pdh": f(b["pdh"]), "pdl": f(b["pdl"]), "asia_hi": f(b["asia_hi"]), "asia_lo": f(b["asia_lo"]),
+            "h4_swing_hi": f(b["h4_swing_hi"]), "h4_swing_lo": f(b["h4_swing_lo"]), "price": round(px, 4)}
+
+
 class BiasAgent(GuardMixin, Agent):
     """Owns the higher-timeframe bias per symbol and the safeguards around it.
 
@@ -191,15 +213,9 @@ class BiasAgent(GuardMixin, Agent):
         """(minutes present, complete) for the hour that closed last before `now` (Oct 26 2026). Recorded only — it
         gates nothing. complete = 60 of 60, or the hour's final minute present AND at least 55 minutes."""
         try:
-            end = now.floor("h")
-            start = end - pd.Timedelta("1h")
-            idx = self.ctx.store.m1(sym).index
-            win = idx[(idx >= start) & (idx < end)]
+            return hour_stats(self.ctx.store.m1(sym).index, now)
         except Exception:  # noqa: BLE001 — a store that can't say leaves the fields empty
             return None, None
-        n = len(win)
-        last = bool(n) and win[-1] == end - pd.Timedelta("1min")
-        return n, bool(n == 60 or (last and n >= 55))
 
     async def update_all(self, now: pd.Timestamp):
         for sym in self.cfg["instruments"]:
@@ -210,12 +226,7 @@ class BiasAgent(GuardMixin, Agent):
         if len(h1) < 48:
             return None
         px = self.state.last_prices.get(sym, float(h1["close"].iloc[-1]))
-        b = bias_frame(h1, pd.DatetimeIndex([now]), np.array([px]), self.bc["weights"]).iloc[-1]
-        f = lambda x: None if pd.isna(x) else round(float(x), 4)  # noqa: E731
-        return {"score": round(float(b["score"]), 3), "d": int(b["d"]), "h4": int(b["h4"]), "h1": int(b["h1"]),
-                "label": label(float(b["score"]), self.bc["min_align"]), "pd_pos": f(b.get("pd_pos")),
-                "pdh": f(b["pdh"]), "pdl": f(b["pdl"]), "asia_hi": f(b["asia_hi"]), "asia_lo": f(b["asia_lo"]),
-                "h4_swing_hi": f(b["h4_swing_hi"]), "h4_swing_lo": f(b["h4_swing_lo"]), "price": round(px, 4)}
+        return compute_bias(h1, now, px, self.bc["weights"], self.bc["min_align"])
 
     async def update(self, sym: str, now: pd.Timestamp):
         b = self.compute(sym, now)

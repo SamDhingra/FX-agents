@@ -258,10 +258,10 @@ def story(main, c, trade_id: str) -> dict | None:
     shadow = ([{"key": "m15_live", "value": t["m15_live"],
                 "text": f"15m candle against the entry: {'yes' if t['m15_live'] else 'no'} (shadow tag, not used for decisions)"}]
               if t["m15_live"] is not None else [])
-    from ..dynamic.store import exchange_for, reviews_for
+    from ..dynamic.store import exchange_for, reviews_for, source_of
     return {"trade": t, "signal": dict(sig) if sig is not None else None, "jev": d, "lesson": lesson_of(c.journal, trade_id),
             "shadow_tags": shadow, "shadow_reviews": reviews_for(c.journal, trade_id),
-            "shadow_exchange": exchange_for(c.journal, trade_id)}
+            "shadow_exchange": exchange_for(c.journal, trade_id), "shadow_source": source_of(c.journal, trade_id)}
 
 
 # ── Replay ───────────────────────────────────────────────────────────────────────────────────────────────────────

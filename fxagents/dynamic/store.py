@@ -8,7 +8,8 @@ import json
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS dyn_candidates(
   candidate_id TEXT PRIMARY KEY, book TEXT, symbol TEXT, side TEXT, strategy TEXT, ts TEXT, packet_hash TEXT,
-  packet TEXT, status TEXT, prompt_version TEXT, exchange_status TEXT, exchange_ms REAL, exchange_decision TEXT);
+  packet TEXT, status TEXT, prompt_version TEXT, exchange_status TEXT, exchange_ms REAL, exchange_decision TEXT,
+  source TEXT DEFAULT 'live', retrospective INTEGER DEFAULT 0, reviewed_at TEXT);
 CREATE TABLE IF NOT EXISTS dyn_reviews(
   id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id TEXT, provider TEXT, model TEXT, prompt_version TEXT,
   packet_hash TEXT, action TEXT, trigger_id TEXT, invalidation_id TEXT, evidence TEXT, conflicting TEXT, missing TEXT,
@@ -23,7 +24,11 @@ CREATE INDEX IF NOT EXISTS ix_dyn_reviews_day ON dyn_reviews(provider, day);
 MIGRATIONS = (   # milestone 1b (Oct 27 2026): columns added to tables created by milestone 1; existing reviews are round 1
     ("dyn_reviews", "round", "INTEGER DEFAULT 1"), ("dyn_reviews", "changed", "INTEGER"), ("dyn_reviews", "why_changed", "TEXT"), ("dyn_reviews", "changed_reported", "INTEGER"),
     ("dyn_candidates", "exchange_status", "TEXT"), ("dyn_candidates", "exchange_ms", "REAL"),
-    ("dyn_candidates", "exchange_decision", "TEXT"))
+    ("dyn_candidates", "exchange_decision", "TEXT"),
+    # retrospective backfill (Oct 27 2026): 'live' = reviewed at the fill, 'backfill' = a past closed trade reviewed later;
+    # `retrospective` / `reviewed_at` live on the row only, never in the packet text the models see
+    ("dyn_candidates", "source", "TEXT DEFAULT 'live'"), ("dyn_candidates", "retrospective", "INTEGER DEFAULT 0"),
+    ("dyn_candidates", "reviewed_at", "TEXT"))
 
 
 def ensure_schema(journal) -> None:
@@ -34,14 +39,31 @@ def ensure_schema(journal) -> None:
     journal.db.commit()   # (an old table keeps its milestone-1 unique key; round 2 rows differ in prompt_version, so it still holds)
 
 
-def add_candidate(journal, packet: dict, status: str, prompt_version: str) -> None:
+SOURCES = ("live", "backfill")
+
+
+def add_candidate(journal, packet: dict, status: str, prompt_version: str, source: str = "live",
+                  reviewed_at: str | None = None) -> None:
+    """`source` 'backfill' = a past trade reviewed later (retrospective = 1, reviewed_at = when the review ran). Both are
+    columns of this row; the packet itself is identical to a live one."""
+    if source not in SOURCES:
+        raise ValueError(f"source must be one of {SOURCES}")
     c = packet["candidate"]
     journal.db.execute(
         "INSERT OR REPLACE INTO dyn_candidates(candidate_id,book,symbol,side,strategy,ts,packet_hash,packet,status,"
-        "prompt_version) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "prompt_version,source,retrospective,reviewed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (c["id"], c["book"], c["symbol"], c["side"], c["strategy"], c["entry_time_utc"], packet["packet_hash"],
-         json.dumps(packet, sort_keys=True), status, prompt_version))
+         json.dumps(packet, sort_keys=True), status, prompt_version, source, int(source == "backfill"), reviewed_at))
     journal.db.commit()
+
+
+def source_of(journal, trade_id: str) -> str | None:
+    """'live' / 'backfill' for a reviewed trade, None when it has no candidate row (or the column doesn't exist yet)."""
+    try:
+        r = journal.db.execute("SELECT COALESCE(source,'live') FROM dyn_candidates WHERE candidate_id=?", (trade_id,)).fetchone()
+    except Exception:  # noqa: BLE001
+        return None
+    return None if r is None else r[0]
 
 
 def set_status(journal, candidate_id: str, status: str) -> None:

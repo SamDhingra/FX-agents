@@ -119,3 +119,28 @@ exchange needs longer than 30 s, it can only ever inform slower (15m+) setups, a
   rule is taken over all candidates, so candidates where no exchange ran count as not available.
 - A round-2 row's `latency_ms` is the round-2 call itself; the full exchange time is `exchange_ms`.
 - Round 2 shows each reviewer its own and the other's round-1 answer (Oct 27 2026, before any exchange ran). `changed` is computed locally (action, trigger_id or invalidation_id differs from its round 1); the model's self-report is kept in `changed_reported`, and the stats use the local value.
+
+## Retrospective backfill (Oct 27 2026): the same review on past closed trades
+
+`./fx.sh dynbackfill [book=live] [n=10]` (= `python -m fxagents.dynamic.backfill --book live --last 10`, `--dry-run` to only estimate) runs the milestone-1/1b
+review once, by hand, on the book's last N closed trades (`r_multiple` known, newest close first) that have no `dyn_candidates` row yet. N is capped at 50
+(more is refused). It needs OANDA_API_TOKEN / OANDA_ACCOUNT_ID, the provider keys and network, so the container is started with `docker compose run` and the
+repo's `.env` (like `weekly`), not `exec` (the new code needs the rebuilt image).
+
+- **As-of inputs, from OANDA candles only (read-only).** Per trade: M1 `BA` (bid/ask) complete candles for the 5 days before entry (about 3 trading days), in
+  windows that end at the entry minute, so nothing at or after it is requested; H1 `M` candles for the 60 days before entry, keeping only hours that had closed
+  by the entry minute. The store object (`RetroStore`) refuses any frame with a candle at or after the entry minute. Spread = ask - bid of the last M1 candle
+  before entry; `cost_r` = spread / |entry - initial_stop|; entry, stop, side, strategy from the journal row (`entry`, `initial_stop`, `side`, `strategy`,
+  `opened` floored to the minute); `target_r` from the first `partial` event's R when the trade has one; the setup record from the setup's trades that had
+  closed before the entry; `m15_live` from the row's shadow tag. The bias is the live computation (`context.compute_bias`, also used by `BiasAgent.compute`) on
+  those H1 bars, with `updated` = the entry minute and `h1_minutes` / `h1_complete` counted the same way. `packet.build_packet` is used unchanged.
+- **The models are not told.** The packet text is the live format; `source = 'backfill'`, `retrospective = 1` and `reviewed_at` are columns of the
+  `dyn_candidates` row only.
+- **Same path.** `dynamic/runner.py` (`ReviewRunner`) holds the review coroutine both the live agent and the backfill use: round 1 for both providers
+  concurrently, the exchange when both are valid, same prompts, validation, budget counter (counted on the day the calls are made) and deadlines. With no OpenAI
+  model or key it runs Claude only and says so (exchange skipped, as live).
+- **Scored apart.** The live scorecard, decision rule and `/api/dynamic` top level use `source = 'live'` only. The "Past trades (retrospective, not counted toward
+  the decision rule; latency not meaningful)" section has the same arms A-D, E1-E3, exchange statistics and cost on `source = 'backfill'`, with no latency and no
+  rule verdict. The trade story labels such reviews "retrospective review". Results: `data/year_test/dynamic_backfill/report.md` (a per-trade table) and `summary.json`.
+- A past trade is a different sample from a live one (the entry already happened, the packet's `minutes_since_update` is 0, there is no latency to speak of), so it
+  can inform how the reviewers behave, never the registered live decision.
