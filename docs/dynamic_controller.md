@@ -75,3 +75,36 @@ version; results are never pooled across versions.
 - every request/response logged: provider, model, prompt + schema version, packet hash, latency, tokens, cost, error
 - models can't place, change or cancel orders, change config or risk; Risk / PositionManager remain the only route
 - missing keys → that arm is off and says so; no key ever written to the journal or prompts
+
+## Milestone 1b — one structured exchange between the reviewers (registered Oct 27 2026, before any exchange ran)
+
+Sam asked for Claude and ChatGPT to talk to each other before deciding. Added as extra shadow arms beside A–D, so the
+sealed answers stay recorded and we learn whether talking adds anything.
+
+1. **Round 1 (sealed)** — unchanged: both answer from the same packet without seeing each other.
+2. **Round 2 (exchange, once)** — only when both round-1 answers are valid (not ABSTAIN / NOT_REVIEWED). Each gets the
+   same packet plus the OTHER reviewer's round-1 answer (action, trigger/invalidation, decisive and conflicting
+   evidence, missing data) and gives a final answer in the same schema plus `changed` (bool) and `why_changed`
+   (≤ 300 chars, citing packet numbers). No new data, no further rounds; both round-2 calls run concurrently and
+   neither sees the other's round-2 answer.
+3. **Decision rule (fixed):** both ENTER after round 2 → enter; both WAIT with the same trigger → wait (skipped in
+   milestone 1 scoring, as WAIT is); still disagreeing, or any round-2 ABSTAIN → cancel.
+
+Deadline: the whole exchange (round 1 + round 2) must finish within `dynamic.exchange_deadline_s` (default 45); a late
+round 2 is ABSTAIN. Round 2 uses the same budget counter (each call counts).
+
+**New arms (scored exactly like B–D):**
+
+| arm | decision |
+|---|---|
+| E1 | Claude's round-2 answer |
+| E2 | OpenAI's round-2 answer |
+| E3 | the exchange decision rule above |
+
+Also reported: how often each reviewer changed its mind, which way (toward ENTER or away), and whether the changes
+were right (the changed answer's arm result vs its round-1 answer on those trades); latency of the full exchange
+(p50/p95, share ≤ 30 s and ≤ 45 s); cost of round 2. E3's main comparison is against D (both agree without talking).
+
+Same decision rule as the other arms: ≥ 100 reviewed closed trades, improvement over A after ALL review costs (round 1
++ round 2) with a 95% range above 0, and the full decision available within 30 s for ≥ 95% of candidates — if the
+exchange needs longer than 30 s, it can only ever inform slower (15m+) setups, and the report says so.
