@@ -3108,6 +3108,8 @@ async function courtroom(t){
     return `${w} ${esc(e.kind.replace(/_/g," "))}`;
   });
   if(mg.length) lines.push(say("pm", mg.join("<br>"), 5));
+  const sh = ((st && st.shadow_tags) || []).map(x => `<div class="mut" style="font-size:12px;margin:2px 0 0 38px">${esc(x.text)}</div>`).join("");
+  if(sh) lines.push(sh);
   const R = T.r_multiple;
   const jstamp = jq == null || R == null ? `<span class="st na">no Jev grade</span>` : ((jq >= .5) === (R > 0)) ? `<span class="st ok">Jev called it</span>` : `<span class="st no">Jev missed</span>`;
   const vstamp = R == null ? `<span class="st na">still open</span>` : R > 0 ? `<span class="st ok">won ${sR(R)}</span>` : `<span class="st no">lost ${sR(R)}</span>`;

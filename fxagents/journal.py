@@ -42,6 +42,9 @@ class Journal:
         if "draw" not in cols:                           # added Oct 2026: the setup's drawing for the trade chart
             self.db.execute("ALTER TABLE trades ADD COLUMN draw TEXT")
             self.db.commit()
+        if "m15_live" not in cols:                       # added Oct 26 2026: shadow tag, 15m candle against the entry (1/0/NULL)
+            self.db.execute("ALTER TABLE trades ADD COLUMN m15_live INTEGER")
+            self.db.commit()
         dcols = {r[1] for r in self.db.execute("PRAGMA table_info(decisions)")}
         if "error" not in dcols:                         # added Oct 2026: why a Jev call fell back (failure / unreadable)
             self.db.execute("ALTER TABLE decisions ADD COLUMN error TEXT")
@@ -62,7 +65,8 @@ class Journal:
             jev_confidence=pos.jev_confidence, jev_source=pos.jev_source, reason=pos.reason,
             events=json.dumps(pos.events, default=str), notes=None, bias_mode=pos.bias_mode,
             tf=pos.strategy.split(":")[1].split("@")[0] if ":" in pos.strategy and "@" in pos.strategy else "",
-            draw=json.dumps(pos.meta.get("draw")) if pos.meta.get("draw") else None)
+            draw=json.dumps(pos.meta.get("draw")) if pos.meta.get("draw") else None,
+            m15_live=None if pos.meta.get("m15_live") is None else int(bool(pos.meta["m15_live"])))
         cols = ",".join(row)
         q = ",".join("?" * len(row))
         upd = ",".join(f"{k}=excluded.{k}" for k in row if k not in ("id", "notes"))

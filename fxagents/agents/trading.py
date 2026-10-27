@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ from ..bias import rule_check
 from ..broker import OrderRejected
 from ..indicators import in_windows
 from ..models import Bar, Position, Signal
+from ..mtf_whatif import live_m15_against
 from ..strategies import Strategy
 from .core import Agent
 
@@ -67,6 +69,22 @@ def signal_tfs(cfg) -> list[str]:
     return tfs
 
 
+def bias_stale_reason(b: dict, bc: dict, now) -> str | None:
+    """Why a bias reading is too old to trade on, or None (Oct 26 2026). The reading is refreshed hourly; if the
+    refresh stopped (no data, errors) an old "aligned" reading must not keep opening trades. bias.max_age_min = 0
+    switches the check off; a reading with no timestamp is not judged. Shared by the trader's precheck (before a Jev
+    call is spent) and Risk's bias gate."""
+    max_age = float(bc.get("max_age_min", 150))
+    if max_age > 0 and b.get("updated"):
+        try:
+            age = (pd.Timestamp(now) - pd.Timestamp(b["updated"])).total_seconds() / 60
+        except (TypeError, ValueError):
+            age = 0.0
+        if age > max_age:
+            return f"bias stale: last updated {int(age) // 60}h{int(age) % 60:02d}m ago (max {max_age:.0f} min)"
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 class MarketDataAgent(Agent):
     """Stores bars, lets the broker check resting stops, then fans out 1m and entry-TF (5m, 15m) events."""
@@ -91,6 +109,11 @@ class MarketDataAgent(Agent):
         self.ctx.store.append(bar)
         self.state.last_prices[bar.symbol] = bar.close
         self.state.last_bar_ts[bar.symbol] = bar.ts.isoformat()
+        if bar.ts.minute == 59:
+            # This bar is the hour's final minute (Oct 26 2026): refresh the bias for THIS symbol now, before the stops,
+            # management and entry signals of this bar run, so an entry on the first bar after an hour closes is judged
+            # on the completed hour (the research engine's bias_frame does the same). The bus awaits the handler.
+            await self.bus.publish("hour_closed", {"symbol": bar.symbol, "hour": bar.ts + pd.Timedelta("1min")})
         await self.ctx.broker.on_bar(bar)                 # 1) resting stops
         await self.bus.publish("bar_1m", bar)              # 2) trade management
         mins = bar.ts.hour * 60 + bar.ts.minute + 1
@@ -266,6 +289,9 @@ class TraderAgent(Agent):
         b = self.state.bias_for(sig.symbol)               # this book's own loss guard (Oct 26 2026)
         if not b:
             return "bias not ready"
+        stale = bias_stale_reason(b, bc, self.now())      # same check as Risk, so no Jev call is spent on it (Oct 26 2026)
+        if stale:
+            return stale
         if b["suspended"]:
             return "bias suspended"
         mode = rule_check(sig.side, b["score"], bc["min_align"])
@@ -475,6 +501,7 @@ class RiskAgent(Agent):
                        jev_quality=req["grade"]["quality"], jev_confidence=req["grade"]["confidence"],
                        jev_source=req["grade"]["source"], reason=sig.reason,
                        bias_mode=gate["mode"], risk_mult=round(risk_mult, 3))
+        pos.meta["m15_live"] = self.m15_tag(sig)                         # shadow tag, never used to decide (Oct 26 2026)
         if sig.features.get("draw"):
             pos.meta["draw"] = sig.features["draw"]                      # what the setup saw, for the trade chart
         if bound:
@@ -524,12 +551,24 @@ class RiskAgent(Agent):
             qty = pos.open_qty
         pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),
                 bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3),
-                cost_r=round(cost_r, 3), over_cost_cap=over_cap)
+                cost_r=round(cost_r, 3), over_cost_cap=over_cap, m15_live=pos.meta.get("m15_live"))
         self.state.positions[pos.id] = pos
         self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}, "
                                            f"cost {cost_r:.2f}R" + (f" (over the {cap:.2f}R cap — log only)" if over_cap else "")})
         await self.bus.publish("position_opened", pos)
 
+
+    def m15_tag(self, sig: Signal) -> bool | None:
+        """Shadow tag (Oct 26 2026): is the 15m candle in progress moving against a 3m / 5m entry? Not confirmed on
+        2016–2020 (fxagents/mtf_whatif.py), so it is only recorded for the journal and the trade story. None for other
+        timeframes or when the minute bars are missing."""
+        m = re.search(r":(\d+)m@", sig.strategy or "")
+        if not m or int(m.group(1)) not in (3, 5):
+            return None
+        try:
+            return live_m15_against(self.ctx.store.m1(sig.symbol), sig.ts, sig.side, sig.entry)
+        except Exception:  # noqa: BLE001 — a tag must never stop an entry
+            return None
 
     async def bias_gate(self, sig: Signal, grade: dict, now) -> dict:
         bc = self.cfg["bias"]
@@ -537,16 +576,9 @@ class RiskAgent(Agent):
         b = self.state.bias_for(sig.symbol)               # shared reading + THIS book's own loss guard (Oct 26 2026)
         if not b:
             return {"reject": "bias not ready (need hourly history)"}
-        # stale bias (Oct 26 2026): the reading is refreshed hourly; if the refresh stopped (no data, errors) an
-        # old "aligned" reading must not keep opening trades. A reading with no timestamp is not judged.
-        max_age = float(bc.get("max_age_min", 150))
-        if max_age > 0 and b.get("updated"):
-            try:
-                age = (pd.Timestamp(now) - pd.Timestamp(b["updated"])).total_seconds() / 60
-            except (TypeError, ValueError):
-                age = 0.0
-            if age > max_age:
-                return {"reject": f"bias stale: last updated {int(age) // 60}h{int(age) % 60:02d}m ago (max {max_age:.0f} min)"}
+        stale = bias_stale_reason(b, bc, now)             # stale bias (Oct 26 2026)
+        if stale:
+            return {"reject": stale}
         if b["suspended"]:
             return {"reject": f"bias suspended after {b['aligned_losses']} aligned losses — waiting for fresh 1H break"}
         mode = rule_check(sig.side, b["score"], bc["min_align"])

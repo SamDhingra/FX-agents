@@ -34,7 +34,8 @@ SYSTEM = (
     "number: under ~30 trades a result is mostly luck. A trade's 'lesson' is a short note written after it closed; "
     "quote it when asked why a trade went as it did, but one trade never proves a rule. 'jev_fallbacks' lists Jev "
     "calls that failed or came back unreadable: those were answered by a rule-based stand-in, which never passes a Jev "
-    "gate — mention them when asked about Jev or about a skipped setup. Keep the whole answer under 180 words.")
+    "gate — mention them when asked about Jev or about a skipped setup. 'm15_candle_against_entry' (1 yes, 0 no, null unknown) "
+    "is a shadow tag only: it was not confirmed and never decides a trade. Keep the whole answer under 180 words.")
 
 
 def when_of(q: str, now: pd.Timestamp) -> tuple[pd.Timestamp | None, pd.Timestamp, pd.Timestamp]:
@@ -134,7 +135,7 @@ def gather(main, question: str) -> dict:
         if syms:
             q += f" AND symbol IN ({','.join('?' * len(syms))})"; args += syms
         sig = [dict(r) for r in c.journal.db.execute(q + " ORDER BY ts LIMIT 80", args)]
-        q = "SELECT id, symbol, strategy, side, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason FROM trades WHERE opened >= ? AND opened <= ?"
+        q = "SELECT id, symbol, strategy, side, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, m15_live AS m15_candle_against_entry FROM trades WHERE opened >= ? AND opened <= ?"
         args = [sa, sb]
         if syms:
             q += f" AND symbol IN ({','.join('?' * len(syms))})"; args += syms
@@ -155,7 +156,8 @@ def gather(main, question: str) -> dict:
             "filter_scorecard": ({"taken": sc["taken"], "filters": sc["filters"][:8]} if sc else None),
             # always there, whatever the window: "the last NDQ trade", "how did this week go"
             "latest_trades": [dict(r) for r in c.journal.db.execute(
-                "SELECT id, symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes "
+                "SELECT id, symbol, side, strategy, opened, closed, r_multiple, realized, exit_reason, jev_quality, reason, notes, "
+                "m15_live AS m15_candle_against_entry "
                 "FROM trades WHERE status='closed'" + (f" AND symbol IN ({','.join('?' * len(syms))})" if syms else "")
                 + " ORDER BY closed DESC LIMIT 8", syms or [])],
             "last_7_days": [{"date": d, **v} for d, v in list(c.journal.daily().items())[-7:]],

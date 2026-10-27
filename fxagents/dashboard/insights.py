@@ -236,6 +236,8 @@ def story(main, c, trade_id: str) -> dict | None:
     t = dict(r)
     t["events"] = json.loads(t.get("events") or "[]")
     t["draw"] = json.loads(t["draw"]) if t.get("draw") else None
+    m15 = t.get("m15_live")
+    t["m15_live"] = None if m15 is None else bool(m15)
     opened = pd.Timestamp(t["opened"])
     lo, hi = (opened - pd.Timedelta(minutes=10)).isoformat(), (opened + pd.Timedelta(minutes=2)).isoformat()
     sig = c.journal.db.execute("SELECT * FROM signals WHERE symbol=? AND ts>=? AND ts<=? ORDER BY "
@@ -252,7 +254,12 @@ def story(main, c, trade_id: str) -> dict | None:
         d["question"] = inp.get("question")
         d["htf_bias"] = inp.get("htf_bias")
     from .lessons import lesson_of
-    return {"trade": t, "signal": dict(sig) if sig is not None else None, "jev": d, "lesson": lesson_of(c.journal, trade_id)}
+    # shadow tag (Oct 26 2026): shown, never used for decisions; nothing is shown when it wasn't recorded
+    shadow = ([{"key": "m15_live", "value": t["m15_live"],
+                "text": f"15m candle against the entry: {'yes' if t['m15_live'] else 'no'} (shadow tag, not used for decisions)"}]
+              if t["m15_live"] is not None else [])
+    return {"trade": t, "signal": dict(sig) if sig is not None else None, "jev": d, "lesson": lesson_of(c.journal, trade_id),
+            "shadow_tags": shadow}
 
 
 # ── Replay ───────────────────────────────────────────────────────────────────────────────────────────────────────

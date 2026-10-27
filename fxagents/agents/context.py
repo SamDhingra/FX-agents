@@ -145,7 +145,24 @@ class BiasAgent(GuardMixin, Agent):
                           "audit_label": None, "audit_req": None})
         self.samples: dict[str, deque] = {s: deque(maxlen=200) for s in self.cfg["instruments"]}
         self.bus.subscribe("clock", self.on_clock)
+        self.bus.subscribe("hour_closed", self.on_hour_closed)
         self.bus.subscribe("position_closed", self.on_closed)
+        self.warned_short: set[tuple] = set()
+
+    async def on_hour_closed(self, ev: dict):
+        """The market-data agent stored a symbol's final minute of an hour (Oct 26 2026). Refresh that symbol's bias
+        NOW — it runs before the bar's stops, management and entry signals — so no entry on the first bar after the
+        hour is judged on the previous hour's bias. The clock tick that follows sees the hour as done and skips it.
+        Hours whose final bar never arrives still go through on_clock's grace period; a final minute that arrives
+        after the clock already did the grace update comes through here and redoes it once."""
+        sym, hour = ev["symbol"], pd.Timestamp(ev["hour"])
+        if sym not in self.cfg["instruments"]:
+            return
+        d = self.done.get(sym)
+        if d is not None and (d[0] > hour or (d[0] == hour and d[1])):
+            return                                          # already final for this hour (or a later hour was done)
+        self.done[sym] = (hour, True)
+        await self.update(sym, max(pd.Timestamp(self.now()), hour))
 
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
@@ -170,6 +187,20 @@ class BiasAgent(GuardMixin, Agent):
         m1 = self.ctx.store.m1(sym)
         return bool(len(m1)) and m1.index[-1] >= hour - pd.Timedelta("1min")
 
+    def hour_minutes(self, sym: str, now: pd.Timestamp) -> tuple[int | None, bool | None]:
+        """(minutes present, complete) for the hour that closed last before `now` (Oct 26 2026). Recorded only — it
+        gates nothing. complete = 60 of 60, or the hour's final minute present AND at least 55 minutes."""
+        try:
+            end = now.floor("h")
+            start = end - pd.Timedelta("1h")
+            idx = self.ctx.store.m1(sym).index
+            win = idx[(idx >= start) & (idx < end)]
+        except Exception:  # noqa: BLE001 — a store that can't say leaves the fields empty
+            return None, None
+        n = len(win)
+        last = bool(n) and win[-1] == end - pd.Timedelta("1min")
+        return n, bool(n == 60 or (last and n >= 55))
+
     async def update_all(self, now: pd.Timestamp):
         for sym in self.cfg["instruments"]:
             await self.update(sym, now)
@@ -190,6 +221,11 @@ class BiasAgent(GuardMixin, Agent):
         b = self.compute(sym, now)
         if b is None:
             return
+        n_min, full = self.hour_minutes(sym, now)
+        if n_min is not None and 0 < n_min < 55 and (sym, now.floor("h")) not in self.warned_short:
+            self.warned_short.add((sym, now.floor("h")))      # once per symbol-hour; an empty hour is a closed market
+            self.log.warning("%s: the hour ending %s closed with only %d of 60 one-minute bars", sym,
+                             now.floor("h").strftime("%H:%M"), n_min)
         g = self.guard[sym]
         # safeguard 3: lift suspension once the 1H structure prints a fresh break
         self._release(sym, b["h1"])
@@ -235,7 +271,8 @@ class BiasAgent(GuardMixin, Agent):
             return
         self.state.bias[sym] = b | {"state": state, "suspended": g["suspended"], "in_doubt": g["in_doubt"],
                                     "audit_p": g["audit_p"], "audit_src": g.get("audit_src"), "aligned_losses": g["aligned_losses"],
-                                    "accuracy": acc, "accuracy_n": len(hits), "updated": now.isoformat(timespec="minutes")}
+                                    "accuracy": acc, "accuracy_n": len(hits),
+                                    "h1_minutes": n_min, "h1_complete": full, "updated": now.isoformat(timespec="minutes")}
         self._persist()
 
     def _expire_audit(self, sym: str, g: dict, b: dict, now: pd.Timestamp) -> None:

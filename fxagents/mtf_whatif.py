@@ -80,6 +80,22 @@ def annotate(t: pd.DataFrame, m1: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def live_m15_against(m1: pd.DataFrame, ts, side: int, price: float) -> bool | None:
+    """The m15_live check for ONE entry from the live 1-minute store (Oct 26 2026) — shadow tag only. Same rule as
+    annotate(): the 15m candle (NY clock, left-labelled) containing the minute before `ts` has moved against the
+    trade from its open to the entry price. None when the minute bars or the price are missing."""
+    try:
+        ts = pd.Timestamp(ts)
+        last = ts - MIN
+        start = last.floor("15min")
+        if m1 is None or not len(m1) or not np.isfinite(float(price)) or last not in m1.index:
+            return None
+        o = float(m1.loc[(m1.index >= start) & (m1.index <= last), "open"].iloc[0])
+        return bool(side * (float(price) - o) < 0)
+    except (TypeError, ValueError, KeyError, IndexError):
+        return None
+
+
 def load(src: Path, pattern: str = "trades_seen_") -> pd.DataFrame:
     files = sorted(src.glob(f"{pattern}*.csv.gz"))
     if not files:
