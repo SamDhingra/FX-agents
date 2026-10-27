@@ -127,7 +127,8 @@ class DynamicReviewAgent(Agent):
                 return
             names = list(self.providers)
             others = {n: other_view(first[next(m for m in names if m != n)]) for n in names}      # each gets the OTHER's round 1
-            r2 = await asyncio.gather(*[self._one(n, self.providers[n], cid, packet, text, round_no=2, other=others[n], t_start=t_start)
+            r2 = await asyncio.gather(*[self._one(n, self.providers[n], cid, packet, text, round_no=2, other=others[n], t_start=t_start,
+                                                  own=first[n])
                                         for n in names])
             second = dict(zip(names, r2))
             ms = (time.monotonic() - t_start) * 1000
@@ -151,7 +152,7 @@ class DynamicReviewAgent(Agent):
         return True
 
     async def _one(self, name: str, prov, cid: str, packet: dict, text: str, round_no: int = 1, other: dict | None = None,
-                   t_start: float | None = None) -> dict:
+                   t_start: float | None = None, own: dict | None = None) -> dict:
         """One reviewer call (round 1, or round 2 with the other's round-1 answer); journals it and returns the result."""
         j = self.ctx.journal
         ts = packet["candidate"]["entry_time_ny"]
@@ -176,11 +177,15 @@ class DynamicReviewAgent(Agent):
                         async with self.sem:         # waiting for a slot counts against the deadline
                             if round_no == 1:
                                 return await prov.review(text, cid)
-                            return await prov.review_exchange(text, cid, other)
+                            return await prov.review_exchange(text, cid, other, other_view(own))
                     res = await asyncio.wait_for(call(), timeout=limit)
                 except asyncio.TimeoutError:
                     res = abstain(f"timeout: no valid reply within {self.deadline:g}s" if round_no == 1 else
                                   f"exchange deadline: no valid round-2 reply within the {self.exchange_deadline:g}s exchange window")
+            if round_no == 2 and res.get("action") in ACTIONS:
+                # `changed` is computed here against the reviewer's own round-1 answer; what the model said is kept apart
+                res["changed_reported"] = res.get("changed")
+                res["changed"] = any(res.get(k) != (own or {}).get(k) for k in ("action", "trigger_id", "invalidation_id"))
             if called:
                 # round 1: from the hand-over, what a live gate would wait. round 2: the round-2 call itself; the whole
                 # exchange is on the candidate (exchange_ms)

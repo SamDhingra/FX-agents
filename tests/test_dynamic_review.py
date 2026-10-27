@@ -240,7 +240,7 @@ class Stub(PR.Provider):
         self.action, self.delay, self.marker, self.has_key = action, delay, marker, key
         self.seen: list[str] = []
         self.seen2: list[tuple] = []         # round 2 calls: (packet text, candidate id, the other's round-1 answer)
-        self.action2, self.delay2, self.changed2, self.trigger2 = None, None, None, None     # round 2 defaults to the round-1 behaviour
+        self.action2, self.delay2, self.changed2, self.trigger2 = None, None, None, None     # changed2: what the model REPORTS     # round 2 defaults to the round-1 behaviour
         self.prices = {}
 
     def available(self):
@@ -253,8 +253,8 @@ class Stub(PR.Provider):
                          cost_usd=0.01, latency_ms=5.0)
 
 
-    async def review_exchange(self, packet_json, candidate_id, other_answer):
-        self.seen2.append((packet_json, candidate_id, other_answer))
+    async def review_exchange(self, packet_json, candidate_id, other_answer, own_answer=None):
+        self.seen2.append((packet_json, candidate_id, other_answer, own_answer))
         await asyncio.sleep(self.delay if self.delay2 is None else self.delay2)
         act = self.action2 or self.action
         ch = (act != self.action) if self.changed2 is None else self.changed2
@@ -692,14 +692,17 @@ def test_each_reviewer_gets_the_others_round_one_answer_and_the_same_packet(tmp_
     o.marker2 = c.marker2 = None
     ctx, ag = x_rig(tmp_path, o, c)
     drain_submit(ag)
-    (po, ido, oth_o), (pc, idc, oth_c) = o.seen2[0], c.seen2[0]
+    (po, ido, oth_o, own_o), (pc, idc, oth_c, own_c) = o.seen2[0], c.seen2[0]
     assert po == pc == o.seen[0] == c.seen[0] and ido == idc == "abc123"       # identical packet text in both rounds
     assert oth_o["action"] == "WAIT" and oth_o["decisive_evidence"] == "CLD1 evidence"       # OpenAI sees Claude's round 1
     assert oth_c["action"] == "ENTER" and oth_c["decisive_evidence"] == "OAI1 evidence"       # Claude sees OpenAI's round 1
     assert set(oth_o) == {"action", "trigger_id", "invalidation_id", "decisive_evidence", "conflicting_evidence", "missing_data"}
     blob = json.dumps([oth_o, oth_c])
     assert "round2" not in blob and "OAI1 round2" not in json.dumps(oth_c)        # nobody sees the other's round 2
-    assert "OAI1" not in json.dumps(oth_o) and "CLD1" not in json.dumps(oth_c)    # nor its own round-1 answer back
+    # each is also shown ITS OWN round-1 answer, separately from the other's (a fresh call has no memory of round 1)
+    assert own_o["action"] == "ENTER" and own_o["decisive_evidence"] == "OAI1 evidence"
+    assert own_c["action"] == "WAIT" and own_c["decisive_evidence"] == "CLD1 evidence"
+    assert "OAI1" not in json.dumps(oth_o) and "CLD1" not in json.dumps(oth_c)
     r2 = {r["provider"]: r for r in reviews(ctx.journal, 2)}
     assert {k: v["action"] for k, v in r2.items()} == {"openai": "WAIT", "claude": "ENTER"}
     assert all(v["prompt_version"] == "dyn-x1" and v["round"] == 2 and v["called"] == 1 and v["changed"] == 1 for v in r2.values())
@@ -713,6 +716,7 @@ def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_ot
     keys(monkeypatch)
     other = PR.result("WAIT", None, trigger_id="retest_of_entry", evidence="e", conflicting="c", missing=["m"], tokens_in=9, latency_ms=3)
     other["model"] = "SECRET-MODEL-NAME"
+    own = PR.result("ENTER", None, evidence="MY-OWN-EVIDENCE", conflicting="mc", missing=["mm"], tokens_in=7, latency_ms=2)
     seen = {}
     ex_obj = {**GOOD, "changed": False, "why_changed": "kept: 1.2 below the Asia low"}
 
@@ -722,7 +726,7 @@ def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_ot
             return httpx.Response(200, json=claude_reply(ex_obj) if kind == "claude" else openai_reply(ex_obj))
         return h
     for kind in ("claude", "openai"):
-        res = run(provider(kind, handler(kind)).review_exchange('{"p":1}', "abc123", other))
+        res = run(provider(kind, handler(kind)).review_exchange('{"p":1}', "abc123", other, own))
         assert res["action"] == "WAIT" and res["changed"] is False and res["why_changed"].startswith("kept")
         assert res["tokens_in"] and res["error"] is None
         body = seen[kind]
@@ -730,6 +734,10 @@ def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_ot
         assert "ROUND 2" in text and "dyn-x1" in text and "SECRET-MODEL-NAME" not in text and "tokens_in" not in text
         user = body["messages"][0]["content"] if kind == "claude" else body["messages"][1]["content"]
         assert user.startswith('PACKET:\n{"p":1}') and "retest_of_entry" in user
+        mine, theirs = user.index("YOUR ROUND-1 ANSWER:"), user.index("THE OTHER REVIEWER'S ROUND-1 ANSWER")
+        assert mine < theirs and "MY-OWN-EVIDENCE" in user[mine:theirs] and "MY-OWN-EVIDENCE" not in user[theirs:]
+        assert '"decisive_evidence": "e"' in user[theirs:] and '"missing_data": ["mm"]' in user[mine:theirs]
+        assert "tokens_in" not in user and "latency" not in user
         schema = body["tools"][0]["input_schema"] if kind == "claude" else body["response_format"]["json_schema"]["schema"]
         assert schema["properties"]["changed"] == {"type": "boolean"} and "why_changed" in schema["required"] and "changed" in schema["required"]
         if kind == "openai":
@@ -753,6 +761,7 @@ def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_ot
 def test_round_two_prompt_keeps_the_rules_and_adds_the_exchange_instructions():
     sp, xp = PR.SYSTEM_PROMPT, PR.EXCHANGE_SYSTEM_PROMPT
     assert "dyn-x1" in xp and "dyn-v1" not in xp and "Use ONLY the packet" in xp and "no authority over orders" in xp
+    assert "differs from your round-1 answer shown below" in xp
     for phrase in ("other independent reviewer", "keep or change", "do not defer", "do not hold your", "why_changed", "packet numbers"):
         assert phrase in xp.replace("\n", " ").replace("  ", " ") or phrase.lower() in xp.lower(), phrase
 
@@ -1015,3 +1024,39 @@ def test_dashboard_story_and_ask_show_round_two(tmp_path):
 
 def test_config_has_the_exchange_deadline():
     assert CFG["dynamic"]["exchange_deadline_s"] == 45
+
+
+def test_changed_is_computed_locally_and_the_models_report_is_kept_apart(tmp_path):
+    o, c = Stub("openai", "ENTER", marker="O"), Stub("claude", "WAIT", marker="C")
+    c.trigger2 = None
+    o.action2 = "CANCEL"; o.changed2 = False          # really changed, reports "no"
+    c.action2 = "WAIT"; c.changed2 = True             # really identical (WAIT, no trigger either round), reports "yes"
+    ctx, ag = x_rig(tmp_path, o, c)
+    drain_submit(ag)
+    r2 = {r["provider"]: r for r in reviews(ctx.journal, 2)}
+    assert (r2["openai"]["changed"], r2["openai"]["changed_reported"]) == (1, 0)
+    assert (r2["claude"]["changed"], r2["claude"]["changed_reported"]) == (0, 1)
+    # a changed trigger alone counts as a change
+    o2, c2 = Stub("openai", "WAIT"), Stub("claude", "WAIT")
+    o2.trigger2 = "retest_of_entry"; o2.changed2 = False
+    (tmp_path / "t").mkdir()
+    ctx2, ag2 = x_rig(tmp_path / "t", o2, c2)
+    drain_submit(ag2)
+    r = {x["provider"]: x for x in reviews(ctx2.journal, 2)}
+    assert r["openai"]["changed"] == 1 and r["claude"]["changed"] == 0
+    # round-2 ABSTAIN has no changed value
+    (tmp_path / "u").mkdir()
+    o3, c3 = Stub("openai", "ENTER"), Stub("claude", "ENTER", delay=0.0)
+    o3.delay2 = 5.0
+    ctx3, ag3 = x_rig(tmp_path / "u", o3, c3, exchange_deadline_s=0.5, deadline_s=2)
+    drain_submit(ag3)
+    ab = [x for x in reviews(ctx3.journal, 2) if x["provider"] == "openai"][0]
+    assert ab["action"] == "ABSTAIN" and ab["changed"] is None
+    # the scorecard's stats use the local value and count the misreports
+    DS.set_exchange(ctx.journal, "abc123", "done", 1000, "cancel")
+    ctx.journal.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,realized,qty_initial,entry,initial_stop,events) "
+                           "VALUES('abc123','NDQ','LONG','x','closed','2026-10-26T10:00','2026-10-26T11:00',1.0,100,100,100,99,'[]')")
+    ctx.journal.db.commit()
+    mc = S.scorecard(ctx.journal, SCFG, "live")["exchange"]["mind_change"]
+    assert mc["openai"]["changed"] == 1 and mc["openai"]["away_from_enter"] == 1 and mc["claude"]["changed"] == 0
+    assert mc["openai"]["flag_vs_action_mismatch"] == 1 and mc["claude"]["flag_vs_action_mismatch"] == 1

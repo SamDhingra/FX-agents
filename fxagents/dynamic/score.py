@@ -68,7 +68,8 @@ def collect(journal, cfg, book: str, version: str = PROMPT_VERSION, ex_version: 
             f"SELECT c.candidate_id, c.symbol, c.strategy, c.ts, t.r_multiple r, t.qty_initial q, t.entry e, t.initial_stop s, "
             f"t.realized pnl, {ex} FROM dyn_candidates c JOIN trades t ON t.id=c.candidate_id "
             "WHERE c.prompt_version=? AND t.status='closed' AND t.r_multiple IS NOT NULL ORDER BY c.ts", (version,))]
-        chg = "changed, why_changed" if "changed" in _cols(journal, "dyn_reviews") else "NULL changed, NULL why_changed"
+        rc = _cols(journal, "dyn_reviews")
+        chg = ("changed, why_changed" if "changed" in rc else "NULL changed, NULL why_changed") + (", changed_reported" if "changed_reported" in rc else ", NULL changed_reported")
         revs = [dict(r) for r in journal.db.execute(
             f"SELECT candidate_id, provider, model, action, trigger_id, latency_ms, cost_usd, tokens_in, tokens_out, called, error, "
             f"prompt_version pv, {chg} FROM dyn_reviews WHERE prompt_version IN (?,?)", (version, ex_version))]
@@ -326,9 +327,8 @@ def mind_changes(rows: list[dict]) -> dict:
             if not v2:
                 continue
             d["exchanged"] += 1
-            differs = bool(v1) and v1["action"] != v2["action"]
-            if v2.get("changed") is not None and bool(v2["changed"]) != differs and _answered(v2):
-                d["flag_vs_action_mismatch"] += 1       # said changed/unchanged, but the action says otherwise
+            if v2.get("changed_reported") is not None and v2.get("changed") is not None and bool(v2["changed_reported"]) != bool(v2["changed"]):
+                d["flag_vs_action_mismatch"] += 1       # the model's own `changed` disagreed with the local comparison; stats use the local one
             if not v2.get("changed"):
                 continue
             d["changed"] += 1

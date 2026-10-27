@@ -118,3 +118,4 @@ exchange needs longer than 30 s, it can only ever inform slower (15m+) setups, a
   that produced its decision: both reviewers' round 1 and round 2 (each answer needs the other's round 1). The 30 s share for the
   rule is taken over all candidates, so candidates where no exchange ran count as not available.
 - A round-2 row's `latency_ms` is the round-2 call itself; the full exchange time is `exchange_ms`.
+- Round 2 shows each reviewer its own and the other's round-1 answer (Oct 27 2026, before any exchange ran). `changed` is computed locally (action, trigger_id or invalidation_id differs from its round 1); the model's self-report is kept in `changed_reported`, and the stats use the local value.
