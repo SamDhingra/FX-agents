@@ -253,7 +253,9 @@ dynamic:
   deadline_s: 25                 # hard limit per review; later = ABSTAIN (the bar path never waits either way)
   max_concurrency: 4             # model calls in flight at once, per book
   daily_call_budget: 120         # per provider per NY trading day, per book; beyond it: not_reviewed: budget
-  prices: {}                     # USD per million tokens, e.g. {claude-sonnet-5-5: {in_per_mtok: 3.0, out_per_mtok: 15.0}}; unset = cost not known
+  prices:                        # USD per million tokens; a model without a price shows "price not set"
+    claude-sonnet-5-5: {in_per_mtok: 2.0, out_per_mtok: 10.0}   # platform.claude.com/docs/en/about-claude/pricing, Oct 26 2026
+    # add the OpenAI model's price here when openai_model is set
 
 tradingview:
   webhook_secret: ""           # set TV_WEBHOOK_SECRET; alerts post to /webhook/tradingview
