@@ -35,7 +35,10 @@ SYSTEM = (
     "quote it when asked why a trade went as it did, but one trade never proves a rule. 'jev_fallbacks' lists Jev "
     "calls that failed or came back unreadable: those were answered by a rule-based stand-in, which never passes a Jev "
     "gate — mention them when asked about Jev or about a skipped setup. 'm15_candle_against_entry' (1 yes, 0 no, null unknown) "
-    "is a shadow tag only: it was not confirmed and never decides a trade. Keep the whole answer under 180 words.")
+    "is a shadow tag only: it was not confirmed and never decides a trade. 'shadow_reviews' on a trade are what a Claude "
+    "and an OpenAI reviewer said (ENTER / WAIT / CANCEL, or ABSTAIN when they failed) about the entry from the data known "
+    "then; they decide nothing and are being scored, so report them as opinions, never as the reason a trade was taken. "
+    "Keep the whole answer under 180 words.")
 
 
 def when_of(q: str, now: pd.Timestamp) -> tuple[pd.Timestamp | None, pd.Timestamp, pd.Timestamp]:
@@ -170,6 +173,17 @@ def gather(main, question: str) -> dict:
         for t in L["trades_in_window"] + L["latest_trades"]:
             if t.get("id") in got:
                 t["lesson"] = got[t["id"]]
+    from ..dynamic.store import reviews_for
+    for key, c in books_of(main):               # shadow reviews of the trades listed (reading only)
+        b = per_book.get(key)
+        if not b:
+            continue
+        for t in b["trades_in_window"] + b["latest_trades"]:
+            if t.get("id"):
+                rv = reviews_for(c.journal, t["id"])
+                if rv:
+                    t["shadow_reviews"] = [{k: x.get(k) for k in ("provider", "action", "trigger_id", "evidence", "conflicting", "latency_ms", "error")}
+                                           for x in rv]
     facts["books"] = per_book
     facts["jev_fallbacks"] = jev_fallbacks(main.journal, sa, sb)
     facts["live_state"] = {"entries_enabled": st.trading_enabled, "halt_reason": st.halt_reason or None,

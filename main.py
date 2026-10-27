@@ -136,9 +136,10 @@ async def build(cfg, args):
     notifier = NotifierAgent(ctx)
     pm = PositionManagerAgent(ctx)
     from fxagents.agents.analyst import TradeAnalystAgent
+    from fxagents.agents.dynamic_review import DynamicReviewAgent
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
               trader, RiskAgent(ctx), pm, TradeAnalystAgent(ctx), JournalAgent(ctx), notifier,
-              MonitorAgent(ctx)] + ([playbook_agent] if playbook_agent else [])
+              MonitorAgent(ctx), DynamicReviewAgent(ctx)] + ([playbook_agent] if playbook_agent else [])   # shadow review gate: off outside dynamic.books
     ca = cfg.get("c10_account") or {}
     if ca.get("enabled"):
         # C10 (the one strategy that passed 2021–2026) on the account itself, frozen rules, reduced risk

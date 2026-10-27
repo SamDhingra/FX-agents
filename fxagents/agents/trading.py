@@ -555,8 +555,22 @@ class RiskAgent(Agent):
         self.state.positions[pos.id] = pos
         self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}, "
                                            f"cost {cost_r:.2f}R" + (f" (over the {cap:.2f}R cap — log only)" if over_cap else "")})
+        self.dynamic_review(sig, pos, px, spread, cost_r)
         await self.bus.publish("position_opened", pos)
 
+
+    def dynamic_review(self, sig: Signal, pos: Position, px: float, spread: float, cost_r: float) -> None:
+        """Shadow review gate hook (Oct 26 2026, docs/dynamic_controller.md): hand the entry to the reviewers AFTER it is
+        filled and registered, so it can change nothing. Synchronous and cheap (the packet is built here, the model calls
+        run as background tasks); it never raises and never waits. Placed after the fill rather than at the m15 tag so
+        an order the broker refused is not reviewed (or paid for) and the packet carries the real fill price."""
+        rv = getattr(self.ctx, "dyn_review", None)
+        if rv is None:
+            return
+        try:
+            rv.submit_entry(sig=sig, pos=pos, price=px, spread=spread, cost_r=cost_r)
+        except Exception as e:  # noqa: BLE001 — a review must never stop or delay an entry
+            self.log.warning("dynamic review hook: %r", e)
 
     def m15_tag(self, sig: Signal) -> bool | None:
         """Shadow tag (Oct 26 2026): is the 15m candle in progress moving against a 3m / 5m entry? Not confirmed on

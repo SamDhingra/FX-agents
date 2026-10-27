@@ -33,7 +33,7 @@ runs as a background task with a deadline, one per position, dropping replies fo
 - Prices and candles are rounded to 2 decimals in prompts; keep instrument precision if forex is ever added.
 - Action-level intervals resample rows independently; cluster by trade and use calendar blocks.
 
-## Dynamic trading controller (research proposal, Oct 26 2026 — not started)
+## Dynamic trading controller (research proposal, Oct 26 2026 — milestone 1 built: shadow review gate, see docs/dynamic_controller.md)
 
 ChatGPT's proposal (sections 8–14 of its bias-filter document): candidates go OBSERVE → REVIEW → WAIT/ARMED → OPEN,
 with independent OpenAI and Claude reviews (sealed, structured output: ENTER / WAIT / CANCEL from a finite set of

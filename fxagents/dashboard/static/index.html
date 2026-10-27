@@ -1578,6 +1578,7 @@ html body{font-size:13.5px}
         </div>
         <div class="card c6"><h3>Trade analyst <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">advice only · scored against how each trade finished</span></h3><div id="anlBody"><div class="empty">Loading…</div></div></div>
         <div class="card c6"><h3>Jev trade adviser <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">hold / cut / add on open trades · never acted on</span></h3><div id="jadBody"><div class="empty">Loading…</div></div></div>
+        <div class="card c6"><h3>Shadow review gate <span class="tag">shadow</span><span class="sp"></span><span class="mut heading-note">Claude / OpenAI on every entry · changes no trade</span></h3><div id="dynBody"><div class="empty">Loading…</div></div></div>
         <div class="card c12"><h3>Mission control <span class="sp"></span><span class="mcrate" id="mcRate"></span></h3><div class="mc" id="mcWrap"></div>
           <div class="mcleg"><span><i style="background:#5b9bff"></i>market data</span><span><i style="background:#f2b84b"></i>setups &amp; picks</span><span><i style="background:#b48cff"></i>Jev</span><span><i style="background:#3fd08f"></i>trades</span><span><i style="background:#ff6f6a"></i>alerts &amp; flatten</span></div>
           <div class="mcinfo" id="mcInfo"></div></div>
@@ -3110,6 +3111,8 @@ async function courtroom(t){
   if(mg.length) lines.push(say("pm", mg.join("<br>"), 5));
   const sh = ((st && st.shadow_tags) || []).map(x => `<div class="mut" style="font-size:12px;margin:2px 0 0 38px">${esc(x.text)}</div>`).join("");
   if(sh) lines.push(sh);
+  const sr = ((st && st.shadow_reviews) || []).map(x => `<div class="mut" style="font-size:12px;margin:2px 0 0 38px"><b>${esc(x.provider)}</b> ${esc(DYN_ACT[x.action] || x.action)}${x.latency_ms!=null ? " · "+(x.latency_ms/1000).toFixed(1)+" s" : ""}${x.evidence ? ": "+esc(x.evidence) : ""}${x.conflicting ? " <i>against: "+esc(x.conflicting)+"</i>" : ""}${x.error ? " ("+esc(x.error)+")" : ""}</div>`).join("");
+  if(sr) lines.push(`<div class="mut" style="font-size:11.5px;margin:8px 0 0 38px;letter-spacing:.04em;text-transform:uppercase">shadow review (not used for decisions)</div>` + sr);
   const R = T.r_multiple;
   const jstamp = jq == null || R == null ? `<span class="st na">no Jev grade</span>` : ((jq >= .5) === (R > 0)) ? `<span class="st ok">Jev called it</span>` : `<span class="st no">Jev missed</span>`;
   const vstamp = R == null ? `<span class="st na">still open</span>` : R > 0 ? `<span class="st ok">won ${sR(R)}</span>` : `<span class="st no">lost ${sR(R)}</span>`;
@@ -3307,7 +3310,7 @@ go = function(p){
   if(p === "home") loadNow(true);
   if(p === "compare") loadEvidence();
   if(p === "backtests") renderJourney();
-  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); loadAnalyst(); loadJevAdvice(); }
+  if(p === "agents"){ MC.last = 0; if(S) renderMission(S); loadAnalyst(); loadJevAdvice(); loadDynamic(); }
 };
 const _openTrade0 = openTrade;
 openTrade = function(t){
@@ -4338,7 +4341,7 @@ async function loadAnalyst(){
       : `<div class="empty">No closed trades scored yet. The analyst watches every open trade at each 5-minute close; its advice shows on the trade's timeline and on the position card.</div>`)
     + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest verdicts</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
 }
-setInterval(() => { if(page === "agents"){ loadAnalyst(); loadJevAdvice(); } }, 60000);
+setInterval(() => { if(page === "agents"){ loadAnalyst(); loadJevAdvice(); loadDynamic(); } }, 60000);
 async function loadJevAdvice(){
   const el = $("#jadBody"); if(!el) return;
   let d = null; try{ d = await api(q("api/jev_advice")); }catch(e){}
@@ -4356,6 +4359,33 @@ async function loadJevAdvice(){
       <div class="mut" style="font-size:12px;margin:8px 0 0">Positive = following Jev would have beaten holding the trade as the strategy does. For HOLD, negative is good. “Advice right” = share of calls where the advice was right (CUT and ADD: value above 0; HOLD: below 0). ${d.n_trades} closed trades, ${d.n_calls} Jev calls scored${d.n_heuristic ? ` (${d.n_heuristic} heuristic fallbacks not counted)` : ""}. Jev gets a say in real trades only with a clearly positive record here over ~40+ trades.</div>`
       : `<div class="empty">No closed trades scored yet. Jev is asked at every 15-minute close while a c10_afternoon trade is open; its calls show on the trade's timeline.</div>`)
     + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest calls</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
+}
+const DYN_ACT = {ENTER:"ENTER", WAIT:"WAIT", CANCEL:"CANCEL", ABSTAIN:"ABSTAIN", NOT_REVIEWED:"not reviewed"};
+async function loadDynamic(){
+  const el = $("#dynBody"); if(!el) return;
+  let d = null; try{ d = await api(q("api/dynamic")); }catch(e){}
+  if(!d){ el.innerHTML = `<div class="empty">Couldn't load the review gate's scorecard.</div>`; return; }
+  const C = d.config || {}, arms = d.arms || {};
+  const off = !C.enabled ? `<div class="mut" style="font-size:12px;margin:0 0 8px">Switched off in config (dynamic.enabled), or this book isn't in dynamic.books.</div>` : "";
+  const sec = v => v == null ? "—" : (v/1000).toFixed(1);
+  const rows = ["A","B","C","D"].map(k => {
+    const m = arms[k]; if(!m) return "";
+    if(m.on === false) return `<tr><td><b>${k}</b> <span class="mut">${esc(m.name)}</span></td><td class="num" colspan="7"><span class="mut">off: no reviews from this provider${k==="B" && !C.openai_model ? " (dynamic.openai_model is empty)" : ""}</span></td></tr>`;
+    const c = m.cost || {}, L = m.latency_ms, v = m.vs_a;
+    const cost = c.note === "price not set" ? `<span class="mut">price not set</span>` : `$${(c.usd||0).toFixed(3)} <span class="mut">${(c.r||0).toFixed(3)}R</span>`;
+    const ci = v && v.net_ci ? `${sR(v.net_ci[0],2)} to ${sR(v.net_ci[1],2)}` : (v ? "n/a" : "");
+    return `<tr><td><b>${k}</b> <span class="mut">${esc(m.name)}</span></td><td class="num">${m.entered}/${m.candidates}</td>
+      <td class="num"><b class="${cls(m.total_r)}">${sR(m.total_r,2)}</b></td><td class="num">${m.avoided_losers}/${m.missed_winners}</td>
+      <td class="num">${cost}</td><td class="num">${v ? `<b class="${cls(v.net_per_candidate)}">${sR(v.net_per_candidate,3)}</b> <span class="mut">${ci}</span>` : '<span class="mut">baseline</span>'}</td>
+      <td class="num">${L && L.n ? sec(L.p50)+" / "+sec(L.p95)+" / "+sec(L.max)+" s" : "—"}</td><td class="num">${m.share_within_30s != null && k !== "A" ? Math.round(m.share_within_30s*100)+"%" : "—"}</td></tr>`;
+  }).join("");
+  const rec = (d.recent || []).slice(0, 12).map(r => `<div class="fi"><span class="when">${md(r.ts)} ${hm(r.ts)}</span><div style="flex:1;min-width:0">
+      <b>${esc(r.symbol||"")}</b> <span class="mut">${esc(r.provider)}</span> <b>${esc(DYN_ACT[r.action] || r.action)}</b> <span class="mut">${esc(sname(String(r.strategy||"").split(":")[0]))}${r.latency_ms!=null ? " · "+sec(r.latency_ms)+" s" : ""}</span><br>
+      <small class="mut">${esc(r.error || r.evidence || "")}</small></div><b class="num ${cls(r.r_multiple)}">${r.r_multiple!=null ? sR(r.r_multiple,2) : (r.status==="open" ? "open" : "")}</b></div>`).join("");
+  el.innerHTML = off + (d.candidates ? `<div style="overflow-x:auto"><table class="anltab"><thead><tr><th>Arm</th><th class="num">Entered</th><th class="num">Total R</th><th class="num">Avoided losers / missed winners</th><th class="num">API cost</th><th class="num">Net vs A (R per trade)</th><th class="num">Latency p50 / p95 / max</th><th class="num">In 30 s</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="mut" style="font-size:12px;margin:8px 0 0">${d.candidates} closed trades scored (prompt ${esc(C.prompt_version||"")}). A = every entry taken; B = OpenAI, C = Claude, D = both must say ENTER. WAIT, CANCEL and ABSTAIN all count as skipped here. Net = R difference to A minus the API cost; the 95% range appears from 30 reviewed trades. Registered rule: worth a live trial only after 100+ reviewed trades with the net range above 0 and 95%+ answered within 30 s. Nothing here changes a trade.</div>`
+      : `<div class="empty">No closed trades reviewed yet. Every entry the risk gate approves is reviewed in the background; the answers show on the trade's story.</div>`)
+    + (rec ? `<h3 style="font-size:13.5px;margin:16px 0 6px">Latest reviews</h3><div class="feed" style="max-height:320px">${rec}</div>` : "");
 }
 /* ══ Backtester: plugins in btplugins/, jobs on the fxbt worker, every trade on the chart ══ */
 let BXC = null, BXR = null, bxTimer = null, bxLW = null, bxEq = null, bxSort = "time";

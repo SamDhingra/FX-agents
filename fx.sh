@@ -331,6 +331,12 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/round3-build.log 2>&1 || { echo "build failed — see logs/round3-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.round3 --period "$p_" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dynreport) # shadow review gate scorecard (fxagents/dynamic/score.py): arms A-D on closed trades, net of API cost.
+             # ./fx.sh dynreport [books=live,playbook] → data/year_test/dynamic_review/{report.md,summary.json} (reads the journals only)
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynreport-build.log 2>&1 || { echo "build failed — see logs/dynreport-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.dynamic.score --books "${2:-live,playbook}" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   round3g)   # round-3, Gemini's four what-if checks (research/round3/gemini, unchanged) on the playbook's 3m/5m entries,
              # stricter judge. ./fx.sh round3g [seen|vault] → data/year_test/round3_gemini_<period>/report.md
              # (vault: only chasing_exhausted_leg, and only if it passed on seen)

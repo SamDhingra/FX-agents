@@ -403,8 +403,10 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     from .analyst import TradeAnalystAgent
     from .jev_advisor import JevAdvisorAgent
     from .context import BookGuardAgent
+    from .dynamic_review import DynamicReviewAgent
     agents = [trader, RiskAgent(sctx), PositionManagerAgent(sctx), TradeAnalystAgent(sctx), JournalAgent(sctx),
-              MonitorAgent(sctx), JevAdvisorAgent(sctx), BookGuardAgent(sctx)]     # the adviser switches itself off outside jev_advisor.books
+              MonitorAgent(sctx), JevAdvisorAgent(sctx), BookGuardAgent(sctx),
+              DynamicReviewAgent(sctx)]     # the adviser switches itself off outside jev_advisor.books; the review gate outside dynamic.books
     feed = ShadowFeedAgent(main, sctx)
     sctx.selection_mode = mode
     sctx.book_key = mode

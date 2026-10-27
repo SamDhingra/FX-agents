@@ -414,6 +414,22 @@ def build_app(ctx) -> FastAPI:
             return JSONResponse({"n_trades": 0, "actions": [], "recent": []})
         return JSONResponse(jsc(c.journal))
 
+    @app.get("/api/dynamic")
+    async def api_dynamic(request: Request):
+        """Shadow review gate (Oct 26 2026): arms A-D scored on closed trades, plus the latest reviews. Reading only."""
+        need(request)
+        from ..dynamic import score as dscore
+        from ..dynamic.providers import PROMPT_VERSION
+        c = bk(request)
+        if getattr(c, "journal", None) is None:
+            return JSONResponse({"candidates": 0, "arms": {}, "recent": []})
+        dyn = c.cfg.get("dynamic") or {}
+        out = dscore.scorecard(c.journal, c.cfg, getattr(c, "book_key", None) or "live")
+        out["recent"] = dscore.recent_reviews(c.journal, 50)
+        out["config"] = {"enabled": bool(dyn.get("enabled")), "books": dyn.get("books"), "claude_model": dyn.get("claude_model"),
+                         "openai_model": dyn.get("openai_model") or None, "prompt_version": PROMPT_VERSION}
+        return JSONResponse(json.loads(json.dumps(out, default=str)))
+
     @app.get("/api/bias_grid")
     async def api_bias_grid(request: Request):
         need(request)
