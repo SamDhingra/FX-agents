@@ -25,10 +25,9 @@ hour completeness recorded, stale check in the precheck, 15m shadow tag.
 
 ## Jev adviser fixes (found Oct 26 2026 in ChatGPT's dynamic-trading review; small)
 
-- The scorecard's "helped" share for HOLD counts value_cut > 0, which means cutting would have helped, so it is
-  inverted for HOLD (fxagents/agents/jev_advisor.py). Make the sign action-specific and test it.
-- The adviser awaits Jev inside the bar_1m handler (the bus awaits handlers in order), so the C10 paper book's later
-  handlers can wait up to ~7 s every 15 minutes. Move the call to a bounded worker with a deadline and a version check.
+Done Oct 26 2026 (1ce2105): the HOLD "helped" sign is fixed (dashboard column now "Advice right"), and the Jev call
+runs as a background task with a deadline, one per position, dropping replies for closed positions. Still open:
+
 - CUT is chosen when p_worse ≥ 0.6, which ignores payoff sizes (80% × −0.2R and 20% × +1R is still +0.04R). Collect
   payoff-relevant forecasts before giving CUT any authority.
 - Prices and candles are rounded to 2 decimals in prompts; keep instrument precision if forex is ever added.
