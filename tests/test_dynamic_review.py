@@ -239,6 +239,8 @@ class Stub(PR.Provider):
         self.name, self.env_key, self.model = name, name.upper() + "_KEY", model
         self.action, self.delay, self.marker, self.has_key = action, delay, marker, key
         self.seen: list[str] = []
+        self.seen2: list[tuple] = []         # round 2 calls: (packet text, candidate id, the other's round-1 answer)
+        self.action2, self.delay2, self.changed2, self.trigger2 = None, None, None, None     # round 2 defaults to the round-1 behaviour
         self.prices = {}
 
     def available(self):
@@ -249,6 +251,15 @@ class Stub(PR.Provider):
         await asyncio.sleep(self.delay)
         return PR.result(self.action, None, evidence=f"{self.marker} evidence", conflicting="c", tokens_in=1000, tokens_out=50,
                          cost_usd=0.01, latency_ms=5.0)
+
+
+    async def review_exchange(self, packet_json, candidate_id, other_answer):
+        self.seen2.append((packet_json, candidate_id, other_answer))
+        await asyncio.sleep(self.delay if self.delay2 is None else self.delay2)
+        act = self.action2 or self.action
+        ch = (act != self.action) if self.changed2 is None else self.changed2
+        return PR.result(act, None, evidence=f"{self.marker} round2", conflicting="c2", tokens_in=1500, tokens_out=60, cost_usd=0.02,
+                         latency_ms=7.0, changed=ch, why_changed=f"{self.marker} why", trigger_id=self.trigger2, invalidation_id=None)
 
 
 def dyn_cfg(**kw):
@@ -302,8 +313,8 @@ async def enter(ra, ctx, price=2650.0, stop=2648.0):
     return list(ctx.state.positions.values())
 
 
-def reviews(j):
-    return [dict(r) for r in j.db.execute("SELECT * FROM dyn_reviews ORDER BY provider")]
+def reviews(j, rnd=1):
+    return [dict(r) for r in j.db.execute("SELECT * FROM dyn_reviews WHERE round=? ORDER BY provider", (rnd,))]
 
 
 def test_the_hook_returns_at_once_records_in_the_background_and_the_trade_is_taken_whatever_they_say(tmp_path):
@@ -625,3 +636,382 @@ def test_api_story_and_ask_show_the_reviews(tmp_path):
     assert {x["provider"] for x in got} == {"claude", "openai"} and "shadow_reviews" in ask.SYSTEM
     html = (__import__("pathlib").Path(__file__).parents[1] / "fxagents/dashboard/static/index.html").read_text()
     assert "shadow review (not used for decisions)" in html and "api/dynamic" in html and 'id="dynBody"' in html
+
+
+# ── 6. milestone 1b: one structured exchange (prompt dyn-x1) ────────────────────────────────────────────────────
+def x_rig(tmp_path, o, c, **kw):
+    ctx, ra, ag = entry_rig(tmp_path, [o, c], cfg=dyn_cfg(**kw))
+    return ctx, ag
+
+
+def drain_submit(ag, pk=None):
+    async def go():
+        ag.submit(pk or mk_packet()[0])
+        await ag.drain()
+    run(go())
+
+
+def cand(j, cid="abc123"):
+    return dict(j.db.execute("SELECT * FROM dyn_candidates WHERE candidate_id=?", (cid,)).fetchone())
+
+
+def test_round_two_runs_only_when_both_round_one_answers_are_valid(tmp_path):
+    for a1, a2, why in (("ENTER", "ABSTAIN", "round 1 not valid (openai: ABSTAIN)"), ("NOT_REVIEWED", "WAIT", "openai: NOT_REVIEWED")):
+        o, c = Stub("openai", a1), Stub("claude", a2)
+        if a1 == "NOT_REVIEWED":
+            o.review = lambda t, i: asyncio.sleep(0, PR.result("NOT_REVIEWED", "not_reviewed: budget"))
+        else:
+            o.review, c.review = c.review, o.review          # openai says ENTER, claude abstains
+            o.action, c.action = "ENTER", "ABSTAIN"
+            async def abst(t, i):
+                return PR.abstain("boom")
+            c.review = abst
+        ctx, ag = x_rig(tmp_path, o, c)
+        drain_submit(ag)
+        assert o.seen2 == [] and c.seen2 == []
+        assert reviews(ctx.journal, 2) == []
+        k = cand(ctx.journal)
+        assert k["exchange_status"].startswith("skipped: round 1 not valid") and k["exchange_ms"] is None
+        tmp_path = tmp_path / "b"; tmp_path.mkdir()
+    # a valid CANCEL counts as valid: the exchange runs
+    o, c = Stub("openai", "CANCEL"), Stub("claude", "ENTER")
+    ctx, ag = x_rig(tmp_path / "c" if (tmp_path / "c").mkdir() is None else tmp_path, o, c)
+    drain_submit(ag)
+    assert len(o.seen2) == len(c.seen2) == 1 and cand(ctx.journal)["exchange_status"] == "done"
+    # only one reviewer configured: no exchange, and the reason is recorded
+    (tmp_path / "d").mkdir()
+    ctx2, ra2, ag2 = entry_rig(tmp_path / "d", [Stub("claude", "ENTER")])
+    drain_submit(ag2)
+    assert cand(ctx2.journal)["exchange_status"] == "skipped: needs both reviewers (configured: claude)"
+    assert reviews(ctx2.journal, 2) == []
+
+
+def test_each_reviewer_gets_the_others_round_one_answer_and_the_same_packet(tmp_path):
+    o, c = Stub("openai", "ENTER", marker="OAI1"), Stub("claude", "WAIT", marker="CLD1")
+    o.action2, c.action2 = "WAIT", "ENTER"                       # they swap in round 2
+    o.marker2 = c.marker2 = None
+    ctx, ag = x_rig(tmp_path, o, c)
+    drain_submit(ag)
+    (po, ido, oth_o), (pc, idc, oth_c) = o.seen2[0], c.seen2[0]
+    assert po == pc == o.seen[0] == c.seen[0] and ido == idc == "abc123"       # identical packet text in both rounds
+    assert oth_o["action"] == "WAIT" and oth_o["decisive_evidence"] == "CLD1 evidence"       # OpenAI sees Claude's round 1
+    assert oth_c["action"] == "ENTER" and oth_c["decisive_evidence"] == "OAI1 evidence"       # Claude sees OpenAI's round 1
+    assert set(oth_o) == {"action", "trigger_id", "invalidation_id", "decisive_evidence", "conflicting_evidence", "missing_data"}
+    blob = json.dumps([oth_o, oth_c])
+    assert "round2" not in blob and "OAI1 round2" not in json.dumps(oth_c)        # nobody sees the other's round 2
+    assert "OAI1" not in json.dumps(oth_o) and "CLD1" not in json.dumps(oth_c)    # nor its own round-1 answer back
+    r2 = {r["provider"]: r for r in reviews(ctx.journal, 2)}
+    assert {k: v["action"] for k, v in r2.items()} == {"openai": "WAIT", "claude": "ENTER"}
+    assert all(v["prompt_version"] == "dyn-x1" and v["round"] == 2 and v["called"] == 1 and v["changed"] == 1 for v in r2.values())
+    assert r2["claude"]["why_changed"] == "CLD1 why"
+    assert {r["prompt_version"] for r in reviews(ctx.journal, 1)} == {"dyn-v1"}
+    k = cand(ctx.journal)
+    assert k["exchange_status"] == "done" and k["exchange_ms"] >= 0 and k["exchange_decision"] == "cancel"
+
+
+def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_others_fields(monkeypatch):
+    keys(monkeypatch)
+    other = PR.result("WAIT", None, trigger_id="retest_of_entry", evidence="e", conflicting="c", missing=["m"], tokens_in=9, latency_ms=3)
+    other["model"] = "SECRET-MODEL-NAME"
+    seen = {}
+    ex_obj = {**GOOD, "changed": False, "why_changed": "kept: 1.2 below the Asia low"}
+
+    def handler(kind):
+        def h(req):
+            seen[kind] = json.loads(req.content)
+            return httpx.Response(200, json=claude_reply(ex_obj) if kind == "claude" else openai_reply(ex_obj))
+        return h
+    for kind in ("claude", "openai"):
+        res = run(provider(kind, handler(kind)).review_exchange('{"p":1}', "abc123", other))
+        assert res["action"] == "WAIT" and res["changed"] is False and res["why_changed"].startswith("kept")
+        assert res["tokens_in"] and res["error"] is None
+        body = seen[kind]
+        text = json.dumps(body)
+        assert "ROUND 2" in text and "dyn-x1" in text and "SECRET-MODEL-NAME" not in text and "tokens_in" not in text
+        user = body["messages"][0]["content"] if kind == "claude" else body["messages"][1]["content"]
+        assert user.startswith('PACKET:\n{"p":1}') and "retest_of_entry" in user
+        schema = body["tools"][0]["input_schema"] if kind == "claude" else body["response_format"]["json_schema"]["schema"]
+        assert schema["properties"]["changed"] == {"type": "boolean"} and "why_changed" in schema["required"] and "changed" in schema["required"]
+        if kind == "openai":
+            assert "maxLength" not in json.dumps(schema)                  # strict mode: every field required, no length keywords
+            assert set(schema["required"]) == set(schema["properties"])
+        else:
+            assert schema["properties"]["why_changed"]["maxLength"] == 300
+    # round 1 keeps the dyn-v1 schema without the new fields
+    assert "changed" not in PR.review_schema()["properties"] and PR.EXCHANGE_PROMPT_VERSION == "dyn-x1"
+    # the same validation -> ABSTAIN-with-reason behaviour, and over-long why_changed is cut locally
+    for bad, why in (({**GOOD, "why_changed": "x"}, "changed"), ({**GOOD, "changed": "yes", "why_changed": "x"}, "changed"),
+                     ({**GOOD, "changed": True}, "why_changed"), ({**ex_obj, "action": "BUY"}, "action")):
+        r = run(provider("claude", lambda req, b=bad: httpx.Response(200, json=claude_reply(b))).review_exchange("{}", "abc123", other))
+        assert r["action"] == "ABSTAIN" and why in r["error"]
+    long = run(provider("openai", lambda req: httpx.Response(200, json=openai_reply({**ex_obj, "why_changed": "w" * 900}))).review_exchange("{}", "abc123", other))
+    assert len(long["why_changed"]) == 300
+    wrong = run(provider("claude", lambda req: httpx.Response(200, json=claude_reply({**ex_obj, "candidate_id": "zzz"}))).review_exchange("{}", "abc123", other))
+    assert wrong["action"] == "ABSTAIN" and "candidate_id" in wrong["error"]
+
+
+def test_round_two_prompt_keeps_the_rules_and_adds_the_exchange_instructions():
+    sp, xp = PR.SYSTEM_PROMPT, PR.EXCHANGE_SYSTEM_PROMPT
+    assert "dyn-x1" in xp and "dyn-v1" not in xp and "Use ONLY the packet" in xp and "no authority over orders" in xp
+    for phrase in ("other independent reviewer", "keep or change", "do not defer", "do not hold your", "why_changed", "packet numbers"):
+        assert phrase in xp.replace("\n", " ").replace("  ", " ") or phrase.lower() in xp.lower(), phrase
+
+
+def test_the_exchange_decision_rule_table():
+    mk = lambda a, t=None: PR.result(a, None, trigger_id=t)
+    table = [(("ENTER", None), ("ENTER", None), "enter"),
+             (("WAIT", "retest_of_entry"), ("WAIT", "retest_of_entry"), "wait"),
+             (("WAIT", "retest_of_entry"), ("WAIT", "m15_close_in_direction"), "cancel"),
+             (("WAIT", None), ("WAIT", None), "cancel"),
+             (("ENTER", None), ("CANCEL", None), "cancel"), (("CANCEL", None), ("CANCEL", None), "cancel"),
+             (("ENTER", None), ("WAIT", "retest_of_entry"), "cancel"),
+             (("ENTER", None), ("ABSTAIN", None), "cancel"), (("ABSTAIN", None), ("ABSTAIN", None), "cancel"),
+             (("ENTER", None), ("NOT_REVIEWED", None), "cancel")]
+    for a, b, want in table:
+        assert PR.exchange_decision(mk(*a), mk(*b)) == want, (a, b)
+    assert PR.exchange_decision(None, mk("ENTER")) == "cancel"
+
+
+def test_the_stored_decision_follows_the_rule(tmp_path):
+    for i, (a2, b2, t, want) in enumerate((("ENTER", "ENTER", None, "enter"), ("WAIT", "WAIT", "retest_of_entry", "wait"),
+                                           ("WAIT", "WAIT", None, "cancel"), ("ENTER", "CANCEL", None, "cancel"))):
+        o, c = Stub("openai", "ENTER"), Stub("claude", "ENTER")
+        o.action2, c.action2 = a2, b2
+        o.trigger2 = c.trigger2 = t
+        (tmp_path / str(i)).mkdir()
+        ctx, ag = x_rig(tmp_path / str(i), o, c)
+        drain_submit(ag)
+        assert cand(ctx.journal)["exchange_decision"] == want, (a2, b2)
+
+
+def test_exchange_deadline_makes_a_late_round_two_an_abstain(tmp_path):
+    o, c = Stub("openai", "ENTER"), Stub("claude", "ENTER", )
+    o.delay2 = 5.0                                                  # OpenAI's round 2 is far too slow
+    ctx, ag = x_rig(tmp_path, o, c, exchange_deadline_s=0.5, deadline_s=2)
+    t0 = time.monotonic()
+    drain_submit(ag)
+    assert time.monotonic() - t0 < 3
+    r2 = {r["provider"]: r for r in reviews(ctx.journal, 2)}
+    assert r2["openai"]["action"] == "ABSTAIN" and r2["openai"]["error"].startswith("exchange deadline") and r2["openai"]["called"] == 1
+    assert r2["claude"]["action"] == "ENTER"                       # the other reply was in time and is kept
+    k = cand(ctx.journal)
+    assert k["exchange_status"] == "done" and k["exchange_decision"] == "cancel" and 400 <= k["exchange_ms"] < 1500
+    # round 1 used the whole window: round 2 is not even called and does not use the budget
+    o2, c2 = Stub("openai", "ENTER", delay=0.4), Stub("claude", "ENTER", delay=0.4)
+    (tmp_path / "w").mkdir()
+    ctx2, ag2 = x_rig(tmp_path / "w", o2, c2, exchange_deadline_s=0.2, deadline_s=2)
+    drain_submit(ag2)
+    assert o2.seen2 == [] and c2.seen2 == []
+    rows = reviews(ctx2.journal, 2)
+    assert len(rows) == 2 and all(r["action"] == "ABSTAIN" and r["error"].startswith("exchange deadline") and r["called"] == 0 for r in rows)
+    assert DS.calls_on(ctx2.journal, "openai", rows[0]["day"]) == 1
+
+
+def test_round_two_calls_count_against_the_same_daily_budget(tmp_path):
+    o, c = Stub("openai", "ENTER"), Stub("claude", "ENTER")
+    ctx, ag = x_rig(tmp_path, o, c, daily_call_budget=3)
+    drain_submit(ag)                                               # 1 + 1 calls each: within the budget of 3
+    day = reviews(ctx.journal)[0]["day"]
+    assert DS.calls_on(ctx.journal, "openai", day) == 2 and len(o.seen2) == 1
+    drain_submit(ag, mk_packet(candidate_id="second")[0])         # round 1 takes the 3rd call, round 2 finds none left
+    assert len(o.seen) == 2 and len(o.seen2) == 1 and len(c.seen2) == 1
+    r2 = [dict(r) for r in ctx.journal.db.execute("SELECT * FROM dyn_reviews WHERE candidate_id='second' AND round=2")]
+    assert {r["action"] for r in r2} == {"NOT_REVIEWED"} and all(r["called"] == 0 and r["error"].startswith("not_reviewed: budget") for r in r2)
+    assert DS.calls_on(ctx.journal, "openai", day) == 3
+    assert cand(ctx.journal, "second")["exchange_decision"] == "cancel"
+
+
+def test_entry_is_taken_and_unchanged_with_a_slow_exchange(tmp_path):
+    slow = [Stub("openai", "CANCEL", delay=0.2, marker="O"), Stub("claude", "CANCEL", delay=0.2, marker="C")]
+    for s_ in slow:
+        s_.delay2 = 0.6
+    ctx, ra, ag = entry_rig(tmp_path, slow, name="slowx")
+    base_ctx, base_ra, _ = entry_rig(tmp_path, with_agent=False, name="basex")
+
+    async def go():
+        t0 = time.monotonic()
+        (pos,) = await enter(ra, ctx)
+        assert time.monotonic() - t0 < 0.15 and pos.status == "open"
+        await asyncio.sleep(0.3)                                   # still between round 1 and round 2
+        assert pos.status == "open" and ctx.state.positions[pos.id] is pos
+        await ag.drain()
+        return pos
+    pos = run(go())
+    (b,) = run(enter(base_ra, base_ctx))
+    assert (b.entry, b.stop, b.initial_stop, b.initial_qty, b.risk_mult, b.rr) == (pos.entry, pos.stop, pos.initial_stop, pos.initial_qty, pos.risk_mult, pos.rr)
+    k = dict(ctx.journal.db.execute("SELECT * FROM dyn_candidates").fetchone())
+    assert k["exchange_status"] == "done" and k["exchange_ms"] >= 750 and k["status"] == "reviewed"
+    ev = lambda p: [{k_: v for k_, v in e.items() if k_ != "ts"} for e in p.events if e["kind"] == "entry"]
+    assert ev(b) == ev(pos)
+
+
+def test_old_milestone_one_tables_are_migrated_and_old_rows_are_round_one(tmp_path):
+    import sqlite3
+    path = str(tmp_path / "old.sqlite")
+    j = Journal(path)
+    j.db.executescript("""
+CREATE TABLE dyn_candidates(candidate_id TEXT PRIMARY KEY, book TEXT, symbol TEXT, side TEXT, strategy TEXT, ts TEXT, packet_hash TEXT,
+  packet TEXT, status TEXT, prompt_version TEXT);
+CREATE TABLE dyn_reviews(id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id TEXT, provider TEXT, model TEXT, prompt_version TEXT,
+  packet_hash TEXT, action TEXT, trigger_id TEXT, invalidation_id TEXT, evidence TEXT, conflicting TEXT, missing TEXT,
+  latency_ms REAL, tokens_in INTEGER, tokens_out INTEGER, cost_usd REAL, error TEXT, called INTEGER, day TEXT,
+  response TEXT, ts TEXT, UNIQUE(candidate_id, provider, prompt_version));""")
+    j.db.execute("INSERT INTO dyn_candidates(candidate_id,symbol,ts,prompt_version,status) VALUES('t1','NDQ','2026-10-19 14:00','dyn-v1','reviewed')")
+    j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,realized,qty_initial,entry,initial_stop,events) "
+                 "VALUES('t1','NDQ','LONG','x','closed','2026-10-19T10:00','2026-10-19T11:00',2.0,200,100,100,99,'[]')")
+    j.db.execute("INSERT INTO dyn_reviews(candidate_id,provider,model,prompt_version,action,called,day,cost_usd,latency_ms) VALUES('t1','openai','m','dyn-v1','ENTER',1,'2026-10-19',0.5,1000)")
+    j.db.execute("INSERT INTO dyn_reviews(candidate_id,provider,model,prompt_version,action,called,day,cost_usd,latency_ms) VALUES('t1','claude','m','dyn-v1','ENTER',1,'2026-10-19',0.2,1000)")
+    j.db.commit()
+    # a read-only report on the old file works before any migration
+    ro = S.ReadOnly(path)
+    sc = S.scorecard(ro, SCFG, "live")
+    assert sc["candidates"] == 1 and sc["arms"]["D"]["total_r"] == 2.0
+    ex = sc["exchange"]
+    assert ex["exchanged"] == 0 and ex["not_exchanged"] == 1 and ex["arms"]["E3"]["on"] is False
+    assert "milestone-1 row" in list(ex["not_exchanged_reasons"])[0]
+    assert S.report_md({"All books": sc}, "dyn-v1", ["live"], [])
+    assert DS.reviews_for(ro, "t1")[0]["round"] == 1 and S.recent_reviews(ro)[0]["round"] == 1
+    # the bot's ensure_schema adds the columns; old rows become round 1; round 2 rows can then be written beside them
+    DS.ensure_schema(j)
+    assert {r["round"] for r in j.db.execute("SELECT round FROM dyn_reviews")} == {1}
+    DS.ensure_schema(j)                                            # idempotent
+    DS.add_review(j, "t1", "openai", "m", "dyn-x1", "h", PR.result("WAIT", None, changed=True, why_changed="y"), True, "2026-10-19", "t", 2)
+    got = [r for r in DS.reviews_for(j, "t1") if r["round"] == 2][0]
+    assert got["changed"] == 1 and got["why_changed"] == "y"
+    assert S.scorecard(j, SCFG, "live")["arms"]["D"]["total_r"] == 2.0       # round 2 rows never leak into arms A-D
+    # a fresh table's unique key includes the round
+    j2 = Journal(str(tmp_path / "new.sqlite")); DS.ensure_schema(j2)
+    assert "round" in j2.db.execute("SELECT sql FROM sqlite_master WHERE name='dyn_reviews'").fetchone()[0].split("UNIQUE")[1]
+
+
+# exchange scorecard on a hand-made set. Round 1 / round 2 (openai, claude), R, exchange seconds, status.
+#   id  sym   R     openai r1 / r2           claude r1 / r2              exchange
+XT = [("x1", "NDQ", 2.0, ("ENTER", "ENTER", 0), ("ENTER", "ENTER", 0), (20, "done")),            # both ENTER: E3 enters
+      ("x2", "NDQ", -1.0, ("ENTER", "CANCEL", 1), ("CANCEL", "CANCEL", 0), (31, "done")),        # openai changed away from ENTER
+      ("x3", "NDQ", 1.5, ("CANCEL", "ENTER", 1), ("ENTER", "ENTER", 0), (44, "done")),           # openai changed toward ENTER: E3 enters
+      ("x4", "US30", -2.0, ("WAIT", "WAIT", 0), ("CANCEL", "ENTER", 1), (50, "done")),           # claude changed toward ENTER, E3 cancels
+      ("x5", "US30", 1.0, ("ENTER", "ABSTAIN", 0), ("ENTER", "ENTER", 0), (46, "done")),         # round-2 abstain
+      ("x6", "US30", 3.0, ("ENTER", None, 0), ("ABSTAIN", None, 0), (None, "skipped: round 1 not valid (claude: ABSTAIN)"))]
+
+
+def exchange_journal(tmp_path):
+    j = Journal(str(tmp_path / "x.sqlite"))
+    DS.ensure_schema(j)
+    for i, (tid, sym, r, o, c, (xs, st)) in enumerate(XT):
+        opened = pd.Timestamp("2026-10-19 10:00", tz=TZ) + pd.Timedelta(days=i)
+        j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,realized,qty_initial,entry,initial_stop,events) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (tid, sym, "LONG", "x:5m@y", "closed", opened.isoformat(),
+                                                           (opened + pd.Timedelta(hours=1)).isoformat(), r, r * 100, 100, 100.0, 99.0, "[]"))
+        pk = {"candidate": {"id": tid, "book": "live", "symbol": sym, "side": "LONG", "strategy": "x:5m@y",
+                            "entry_time_utc": opened.tz_convert("UTC").strftime("%Y-%m-%d %H:%M")}, "packet_hash": "h" + tid}
+        DS.add_candidate(j, pk, "reviewed", "dyn-v1")
+        DS.set_exchange(j, tid, st, None if xs is None else xs * 1000)
+        for prov, (a1, a2, ch) in (("openai", o), ("claude", c)):
+            DS.add_review(j, tid, prov, "m", "dyn-v1", "h" + tid, PR.result(a1, "x" if a1 == "ABSTAIN" else None, latency_ms=1000,
+                                                                            cost_usd=0.5 if prov == "openai" else 0.2, tokens_in=1, tokens_out=1),
+                          True, "2026-10-19", "t")
+            if a2 is not None:
+                DS.add_review(j, tid, prov, "m", "dyn-x1", "h" + tid, PR.result(a2, "x" if a2 == "ABSTAIN" else None, latency_ms=2000,
+                                                                                cost_usd=1.0 if prov == "openai" else 0.4, tokens_in=1, tokens_out=1,
+                                                                                changed=bool(ch), why_changed="w"), True, "2026-10-19", "t", 2)
+    return j
+
+
+def test_exchange_arms_and_the_subset_comparison_with_d_match_the_hand_totals(tmp_path):
+    j = exchange_journal(tmp_path)
+    sc = S.scorecard(j, SCFG, "live")
+    assert sc["candidates"] == 6 and sc["arms"]["D"]["total_r"] == 3.0       # D (round 1): both ENTER on x1 and x5 (x6: claude ABSTAIN)
+    ex = sc["exchange"]
+    assert (ex["candidates"], ex["exchanged"], ex["not_exchanged"]) == (6, 5, 1)
+    assert ex["not_exchanged_reasons"] == {"skipped: round 1 not valid (claude: ABSTAIN)": 1}
+    A, D, E1, E2, E3 = (ex["arms"][k] for k in ("A", "D", "E1", "E2", "E3"))
+    assert (A["candidates"], A["total_r"]) == (5, 2.0 - 1.0 + 1.5 - 2.0 + 1.0)                  # 1.5: x6 is not in the subset
+    # D on the exchanged subset: both round-1 ENTER on x1 and x5
+    assert (D["entered"], D["total_r"]) == (2, 3.0)
+    # E1 (Claude round 2): ENTER on x1, x3, x4, x5
+    assert (E1["entered"], E1["total_r"], E1["skipped"]) == (4, 2.0 + 1.5 - 2.0 + 1.0, 1) and E1["total_r"] == 2.5
+    # E2 (OpenAI round 2): ENTER x1, x3; CANCEL x2, WAIT x4, ABSTAIN x5
+    assert (E2["entered"], E2["total_r"], E2["abstained"], E2["skipped_by_review"]) == (2, 3.5, 1, 2)
+    # E3: both ENTER after round 2 -> x1 and x3 only (x4 WAIT/ENTER cancels, x5 has an abstain)
+    assert (E3["entered"], E3["total_r"], E3["skipped"], E3["abstained"], E3["skipped_by_review"]) == (2, 3.5, 3, 1, 2)
+    assert (E3["avoided_losers"], E3["avoided_r"], E3["missed_winners"], E3["missed_r"]) == (2, 3.0, 1, 1.0)
+    # cost = whole exchange (round 1 + round 2, both reviewers) per candidate: 0.5+0.2+1.0+0.4 = 2.1 on a $100 risk; x5's openai
+    # round 2 also cost 1.0 (an ABSTAIN call is still paid for)
+    assert E3["cost"]["usd"] == pytest.approx(5 * 2.1) and E3["cost"]["r"] == pytest.approx(5 * 0.021)
+    assert E1["cost"]["usd"] == pytest.approx(5 * 2.1)
+    assert D["cost"]["usd"] == pytest.approx(5 * 0.7) and E3["net_r"] == pytest.approx(3.5 - 0.105)
+    # E3 minus D, paired, net of each arm's own cost: D skips x2..x4, enters x1, x5 -> net gross diff vs A
+    #   per candidate: E3 gross vs A = -(skipped R) ; D gross = -(-1 + 1.5 - 2.0) ; E3 gross = -(-1 -2 + 1) 
+    d = ex["e3_minus_d"]
+    gross_e3 = -(-1.0 - 2.0 + 1.0)            # skipped x2, x4, x5 -> +2.0
+    gross_d = -(-1.0 + 1.5 - 2.0)             # skipped x2, x3, x4 -> +1.5
+    cost_diff = 5 * (0.021 - 0.007)
+    assert d["n"] == 5 and d["net_total_r"] == pytest.approx((gross_e3 - gross_d) - cost_diff, abs=1e-3)
+    assert d["net_per_candidate"] == pytest.approx(d["net_total_r"] / 5, abs=1e-3) and d["net_ci"] is None and "30" in d["ci_note"]
+    # latency of the full exchange over the 5 exchanged: 20, 31, 44, 50, 46 s
+    lt = ex["latency"]
+    assert (lt["p50_ms"], lt["max_ms"], lt["n"]) == (44000.0, 50000.0, 5)
+    assert lt["share_le_30s"] == 0.2 and lt["share_le_45s"] == 0.6 and lt["share_le_30s_all_candidates"] == round(1 / 6, 4)
+    assert lt["slower_than_30s_ge_5pct"] is True
+    assert E3["share_within_30s"] == round(1 / 6, 4) and E3["latency_ms"]["p50"] == 44000.0     # share over ALL candidates
+    # round-2 cost: 5 exchanged x (1.0 + 0.4)
+    assert ex["round2_cost"]["usd"] == pytest.approx(7.0) and ex["round2_cost"]["r"] == pytest.approx(0.07)
+    assert sc["spend_r2"]["openai"]["reviews"] == 5 and sc["spend_r2"]["claude"]["calls"] == 5
+    # per symbol
+    nd, us = sc["by_symbol"]["NDQ"]["exchange"], sc["by_symbol"]["US30"]["exchange"]
+    assert (nd["exchanged"], nd["arms"]["E3"]["total_r"], nd["arms"]["E3"]["entered"]) == (3, 3.5, 2)
+    assert (us["exchanged"], us["not_exchanged"], us["arms"]["E3"]["entered"]) == (2, 1, 0)
+    # arms A-D are unchanged by the exchange rows
+    assert sc["arms"]["D"]["entered"] == 2 and sc["arms"]["D"]["total_r"] == 3.0
+    md = S.report_md({"All books": sc}, "dyn-v1", ["live"], [])
+    assert "1 not exchanged" in md or "**1 not exchanged**" in md
+    assert "slower (15m+) setups" in md and "E3 minus D" in md and "that is the case here" in md
+
+
+def test_mind_change_stats(tmp_path):
+    j = exchange_journal(tmp_path)
+    mc = S.scorecard(j, SCFG, "live")["exchange"]["mind_change"]
+    o, c = mc["openai"], mc["claude"]
+    # openai changed on x2 (ENTER -> CANCEL, R -1) and x3 (CANCEL -> ENTER, R +1.5)
+    assert (o["exchanged"], o["changed"], o["toward_enter"], o["away_from_enter"], o["other"]) == (5, 2, 1, 1, 0)
+    assert (o["r_round1"], o["r_round2"], o["r_gain"]) == (-1.0, 1.5, 2.5)
+    # claude changed on x4 only (CANCEL -> ENTER, R -2): its round-2 answer lost 2R that round 1 avoided
+    assert (c["exchanged"], c["changed"], c["toward_enter"], c["away_from_enter"]) == (5, 1, 1, 0)
+    assert (c["r_round1"], c["r_round2"], c["r_gain"]) == (0.0, -2.0, -2.0)
+    assert o["flag_vs_action_mismatch"] == 0 and c["flag_vs_action_mismatch"] == 0
+
+
+def test_dashboard_story_and_ask_show_round_two(tmp_path):
+    ctx = make_ctx(tmp_path)
+    ctx.book_key = "live"
+    c = TestClient(build_app(ctx))
+    j = ctx.journal
+    DS.ensure_schema(j)
+    DS.add_candidate(j, {"candidate": {"id": "recent", "book": "live", "symbol": "XAUUSD", "side": "LONG", "strategy": "trend_breakout:15m@pb-x",
+                                       "entry_time_utc": "2026-10-14 13:00"}, "packet_hash": "h"}, "reviewed", "dyn-v1")
+    DS.set_exchange(j, "recent", "done", 21500, "cancel")
+    for prov, a1, a2 in (("claude", "ENTER", "WAIT"), ("openai", "CANCEL", "CANCEL")):
+        DS.add_review(j, "recent", prov, "m", "dyn-v1", "h", PR.result(a1, None, evidence=f"{prov} r1", conflicting="b", latency_ms=4200, cost_usd=0.01,
+                                                                      tokens_in=1, tokens_out=1), True, "2026-10-14", "2026-10-14T09:00:00-04:00")
+        DS.add_review(j, "recent", prov, "m", "dyn-x1", "h", PR.result(a2, None, evidence=f"{prov} r2", conflicting="b", latency_ms=6000, cost_usd=0.02,
+                                                                      tokens_in=1, tokens_out=1, changed=a1 != a2, why_changed=f"{prov} why"),
+                      True, "2026-10-14", "2026-10-14T09:00:10-04:00", 2)
+    s = c.get("/api/story/recent").json()
+    by = {(r["provider"], r["round"]): r for r in s["shadow_reviews"]}
+    assert by[("claude", 2)]["action"] == "WAIT" and by[("claude", 2)]["changed"] == 1 and by[("claude", 2)]["why_changed"] == "claude why"
+    assert by[("claude", 1)]["action"] == "ENTER" and by[("openai", 2)]["changed"] == 0
+    assert s["shadow_exchange"] == {"status": "done", "ms": 21500.0, "decision": "cancel"}
+    d = c.get("/api/dynamic").json()
+    assert d["exchange"]["candidates"] == 1 and d["exchange"]["exchanged"] == 1 and d["exchange"]["arms"]["E3"]["entered"] == 0
+    assert d["exchange"]["arms"]["E1"]["skipped_by_review"] == 1 and d["exchange"]["mind_change"]["claude"]["changed"] == 1
+    assert {r["round"] for r in d["recent"]} == {1, 2}
+    facts = ask.gather(ctx, "how did the last XAUUSD trade go")["books"]["live"]["latest_trades"]
+    t = [t for t in facts if t["id"] == "recent"][0]
+    assert {(x["provider"], x["round"]) for x in t["shadow_reviews"]} == {("claude", 1), ("claude", 2), ("openai", 1), ("openai", 2)}
+    assert t["shadow_exchange"]["decision"] == "cancel" and "round 2" in ask.SYSTEM
+    html = (__import__("pathlib").Path(__file__).parents[1] / "fxagents/dashboard/static/index.html").read_text()
+    assert "round 2" in html and "shadow_exchange" in html and "d.exchange" in html
+
+
+def test_config_has_the_exchange_deadline():
+    assert CFG["dynamic"]["exchange_deadline_s"] == 45

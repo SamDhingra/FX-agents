@@ -37,7 +37,9 @@ SYSTEM = (
     "gate — mention them when asked about Jev or about a skipped setup. 'm15_candle_against_entry' (1 yes, 0 no, null unknown) "
     "is a shadow tag only: it was not confirmed and never decides a trade. 'shadow_reviews' on a trade are what a Claude "
     "and an OpenAI reviewer said (ENTER / WAIT / CANCEL, or ABSTAIN when they failed) about the entry from the data known "
-    "then; they decide nothing and are being scored, so report them as opinions, never as the reason a trade was taken. "
+    "then; they decide nothing and are being scored, so report them as opinions, never as the reason a trade was taken. Each reviewer has a round 1 (alone) and, when both answered, a round 2 "
+    "after seeing the other's round-1 answer ('round', 'changed', 'why_changed'; 'shadow_exchange' has the decision rule's verdict: "
+    "enter / wait / cancel, and the exchange time in ms, or why no exchange ran). "
     "Keep the whole answer under 180 words.")
 
 
@@ -173,7 +175,7 @@ def gather(main, question: str) -> dict:
         for t in L["trades_in_window"] + L["latest_trades"]:
             if t.get("id") in got:
                 t["lesson"] = got[t["id"]]
-    from ..dynamic.store import reviews_for
+    from ..dynamic.store import exchange_for, reviews_for
     for key, c in books_of(main):               # shadow reviews of the trades listed (reading only)
         b = per_book.get(key)
         if not b:
@@ -182,8 +184,11 @@ def gather(main, question: str) -> dict:
             if t.get("id"):
                 rv = reviews_for(c.journal, t["id"])
                 if rv:
-                    t["shadow_reviews"] = [{k: x.get(k) for k in ("provider", "action", "trigger_id", "evidence", "conflicting", "latency_ms", "error")}
+                    t["shadow_reviews"] = [{k: x.get(k) for k in ("provider", "round", "action", "trigger_id", "evidence", "conflicting", "changed", "why_changed", "latency_ms", "error")}
                                            for x in rv]
+                    xc = exchange_for(c.journal, t["id"])
+                    if xc:
+                        t["shadow_exchange"] = xc
     facts["books"] = per_book
     facts["jev_fallbacks"] = jev_fallbacks(main.journal, sa, sb)
     facts["live_state"] = {"entries_enabled": st.trading_enabled, "halt_reason": st.halt_reason or None,

@@ -108,3 +108,13 @@ were right (the changed answer's arm result vs its round-1 answer on those trade
 Same decision rule as the other arms: ≥ 100 reviewed closed trades, improvement over A after ALL review costs (round 1
 + round 2) with a 95% range above 0, and the full decision available within 30 s for ≥ 95% of candidates — if the
 exchange needs longer than 30 s, it can only ever inform slower (15m+) setups, and the report says so.
+
+### Milestone 1b implementation notes (Oct 27 2026; clarifications only, the design above is unchanged)
+
+- Round-2 prompt version `dyn-x1`, rows in `dyn_reviews` with `round = 2`; `dyn_candidates.exchange_status` (`done` / `skipped: <reason>`),
+  `exchange_ms` (round-1 hand-over to round-2 end) and `exchange_decision` (enter / wait / cancel).
+- "Same trigger" for WAIT/WAIT means equal and non-null `trigger_id`; two WAITs without a trigger cancel.
+- E arms are scored on exchanged candidates only (A and D are shown on the same subset). An E arm's cost is the whole exchange
+  that produced its decision: both reviewers' round 1 and round 2 (each answer needs the other's round 1). The 30 s share for the
+  rule is taken over all candidates, so candidates where no exchange ran count as not available.
+- A round-2 row's `latency_ms` is the round-2 call itself; the full exchange time is `exchange_ms`.

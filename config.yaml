@@ -251,6 +251,7 @@ dynamic:
   claude_model: claude-sonnet-5-5
   openai_model: ""               # empty = the OpenAI arm is off; set the model name to switch it on
   deadline_s: 25                 # hard limit per review; later = ABSTAIN (the bar path never waits either way)
+  exchange_deadline_s: 45        # milestone 1b: round 1 start -> round 2 end; a later round 2 is ABSTAIN (an exchange > 30 s can only inform 15m+ setups)
   max_concurrency: 4             # model calls in flight at once, per book
   daily_call_budget: 120         # per provider per NY trading day, per book; beyond it: not_reviewed: budget
   prices:                        # USD per million tokens; a model without a price shows "price not set"
