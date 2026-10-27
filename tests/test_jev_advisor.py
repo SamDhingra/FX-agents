@@ -61,6 +61,7 @@ def run(tmp_path, with_adviser: bool):
             await tr.on_bar(b)
             if ad:
                 await ad.on_bar(b)
+                await ad.drain()          # advice runs in the background; settle it before the next bar
     asyncio.run(go())
     return closed, j, jev
 
@@ -93,3 +94,93 @@ def test_adviser_stays_off_for_other_books(tmp_path):
     ctx.book_key = "playbook"
     a = ja.JevAdvisorAgent(ctx); a.start()
     assert not a.on
+
+
+def _agent(tmp_path, jev):
+    st = LiveState()
+    ctx = Ctx(copy.deepcopy(CFG), Bus(), st, None, None, Journal(str(tmp_path / "bg.sqlite")), jev, None)
+    ctx.book_key = "c10_afternoon"
+    ad = ja.JevAdvisorAgent(ctx); ad.start(); assert ad.on
+    return ad, st
+
+
+class _Pos:
+    id, symbol, strategy, side, status = "p1", "NDQ", "c10_afternoon", 1, "open"
+    opened_ts = pd.Timestamp("2026-10-26 17:00", tz="UTC")
+    meta: dict = {}
+    mfe_r = 0.2
+    def __init__(self): self.meta, self.events = {}, []
+    def log(self, ts, kind, **d): self.events.append(kind)
+    def r_now(self, price): return 0.1
+
+
+class SlowJev:
+    def __init__(self, delay=0.2): self.calls, self.delay = 0, delay
+    async def manage_trade(self, info):
+        self.calls += 1
+        await asyncio.sleep(self.delay)
+        return {"p_worse": 0.3, "conf_worse": 0.6, "p_extend": 0.4, "conf_extend": 0.6, "source": "jev"}
+
+
+def _bg(tmp_path, jev, scenario):
+    ad, st = _agent(tmp_path, jev)
+    pos = _Pos(); st.positions[pos.id] = pos
+    ad.info_for = lambda *a: {"r_now": 0.1}
+    ad.r_if_exit = lambda p, px: 0.05
+    bar = lambda m: Bar("NDQ", pd.Timestamp("2026-10-26 17:00", tz="UTC") + pd.Timedelta(minutes=m), 1, 1, 1, 100.0, 1.0)
+
+    async def go():
+        await scenario(ad, st, pos, bar)
+    asyncio.run(go())
+    return ad, pos, [dict(r) for r in ad.ctx.journal.db.execute("SELECT * FROM jev_advice")]
+
+
+def test_on_bar_returns_before_slow_jev_and_records_after(tmp_path):
+    jev, seen = SlowJev(0.3), {}
+    async def sc(ad, st, pos, bar):
+        await ad.on_bar(bar(14))                      # bar end 17:15 -> held 15 min
+        seen["before"] = len(list(ad.ctx.journal.db.execute("SELECT * FROM jev_advice")))
+        seen["pending"] = len(ad._tasks)
+        await ad.drain()
+    ad, pos, rows = _bg(tmp_path, jev, sc)
+    assert seen == {"before": 0, "pending": 1}
+    assert len(rows) == 1 and rows[0]["ts"].startswith("2026-10-26T17:15") and rows[0]["held_min"] == 15.0
+    assert pos.events == ["jev_advice"] and not ad._tasks
+
+
+def test_reply_for_closed_position_is_dropped(tmp_path):
+    async def sc(ad, st, pos, bar):
+        await ad.on_bar(bar(14))
+        pos.status = "closed"
+        await ad.drain()
+    _, pos, rows = _bg(tmp_path, SlowJev(0.05), sc)
+    assert rows == [] and pos.events == []
+
+
+def test_one_call_in_flight_per_position(tmp_path):
+    jev = SlowJev(0.2)
+    async def sc(ad, st, pos, bar):
+        await ad.on_bar(bar(14)); await ad.on_bar(bar(29))   # second 15-min mark while the first is running
+        await ad.drain()
+        await ad.on_bar(bar(44)); await ad.drain()           # free again afterwards
+    _, _, rows = _bg(tmp_path, jev, sc)
+    assert jev.calls == 2 and len(rows) == 2
+
+
+def test_jev_error_and_timeout_are_contained(tmp_path):
+    class Boom:
+        async def manage_trade(self, info): raise RuntimeError("x")
+    async def sc(ad, st, pos, bar):
+        await ad.on_bar(bar(14)); await ad.drain()
+    _, _, rows = _bg(tmp_path, Boom(), sc)
+    assert rows == []
+
+
+def test_scorecard_helped_is_action_specific(tmp_path):
+    j = Journal(str(tmp_path / "sc.sqlite")); ja.ensure_schema(j)
+    # trade finished better (-0.5 at advice, +1 final): value_cut = -1.5 -> HOLD right, CUT wrong; ADD value 0.4 -> right
+    for i, (act, vc, va) in enumerate([("hold", -1.5, 0.0), ("cut", -1.5, 0.0), ("add", -1.5, 0.4)], 1):
+        j.db.execute("INSERT INTO jev_advice_outcome VALUES(?,?,?,?,?,?,?,?,?)", (i, "p", "s", "jev", act, -0.5, 1.0, vc, va))
+    j.db.commit()
+    h = {a["action"]: a["helped"] for a in ja.scorecard(j)["actions"]}
+    assert h == {"hold": 1.0, "cut": 0.0, "add": 1.0}

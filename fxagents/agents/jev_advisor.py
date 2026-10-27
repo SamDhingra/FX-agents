@@ -18,6 +18,8 @@ Config: jev_advisor: {books: [c10_afternoon], every_min: 15, cut_at: 0.6, add_at
 """
 from __future__ import annotations
 
+import asyncio
+
 import numpy as np
 import pandas as pd
 
@@ -75,6 +77,7 @@ class JevAdvisorAgent(Agent):
         self.cut_at, self.add_at = float(c.get("cut_at", 0.6)), float(c.get("add_at", 0.6))
         self.on = bool(c.get("enabled", True)) and getattr(self.ctx, "book_key", None) in self.books \
             and getattr(self.ctx, "jev", None) is not None and self.ctx.journal is not None
+        self._tasks: dict[str, asyncio.Task] = {}   # pos_id -> in-flight advice; also keeps references alive
         if not self.on:
             return
         ensure_schema(self.ctx.journal)
@@ -96,10 +99,40 @@ class JevAdvisorAgent(Agent):
             held = (end - pd.Timestamp(pos.opened_ts)).total_seconds() / 60
             if held < self.every - 0.5:
                 continue
+            if pos.id in self._tasks:       # one call in flight per position; this 15-minute mark is skipped
+                continue
             try:
-                await self.advise(pos, bar.close, end, held)
+                snap = self.snapshot(pos, bar.close, end, held)
             except Exception as e:  # noqa: BLE001 — the adviser must never disturb trading
                 self.log.warning("jev adviser %s: %s", pos.symbol, e)
+                continue
+            task = asyncio.ensure_future(self._advise_bg(pos, snap))
+            self._tasks[pos.id] = task
+            task.add_done_callback(lambda t, pid=pos.id: self._tasks.get(pid) is t and self._tasks.pop(pid, None))
+
+    async def drain(self) -> None:
+        """Wait for in-flight advice calls (tests, shutdown)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks.values()), return_exceptions=True)
+            await asyncio.sleep(0)
+
+    def deadline(self) -> float:
+        """Hard limit for one Jev call: the Jev client's own timeout plus its 1 s wait_for margin, plus 1 s."""
+        return float((self.cfg.get("jev") or {}).get("timeout_s", 6)) + 2
+
+    async def _advise_bg(self, pos, snap: dict) -> None:
+        """Run one advice call off the bar path (Oct 26 2026). Never raises; a reply about a trade that has since
+        closed (or a different position) is obsolete and dropped."""
+        try:
+            a = await asyncio.wait_for(self.ctx.jev.manage_trade(snap["info"]), timeout=self.deadline())
+            if pos.status != "open" or self.state.positions.get(pos.id) is not pos:
+                self.log.info("jev adviser %s: dropped reply, position %s no longer open", pos.symbol, pos.id)
+                return
+            self.record(pos, snap, a)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — the adviser must never disturb trading (timeouts land here too)
+            self.log.warning("jev adviser %s: %r", pos.symbol, e)
 
     def info_for(self, pos, price: float, now: pd.Timestamp, held: float) -> dict:
         tz, store, sym = self.cfg["timezone"], self.ctx.store, pos.symbol
@@ -137,14 +170,18 @@ class JevAdvisorAgent(Agent):
             info["htf_bias"] = {k: bias.get(k) for k in ("label", "score", "d", "h4", "h1")}
         return info
 
-    async def advise(self, pos, price: float, now: pd.Timestamp, held: float) -> dict:
-        info = self.info_for(pos, price, now, held)
-        a = await self.ctx.jev.manage_trade(info)
-        r_now = pos.r_now(price)
+    def snapshot(self, pos, price: float, now: pd.Timestamp, held: float) -> dict:
+        """Everything advice needs as of the bar close, taken before the (slow) model call (Oct 26 2026)."""
+        return {"info": self.info_for(pos, price, now, held), "price": price, "now": now, "held": held,
+                "r_now": pos.r_now(price), "r_exit": self.r_if_exit(pos, price), "mfe": pos.mfe_r}
+
+    def record(self, pos, snap: dict, a: dict) -> dict:
+        """Journal + timeline the answer, using the snapshot values; the advice time is the bar end it was asked for."""
+        now, price, held, r_now = snap["now"], snap["price"], snap["held"], snap["r_now"]
         act = action_of(a, r_now, self.cut_at, self.add_at)
         rec = (now.isoformat(), pos.id, pos.symbol, pos.strategy, a["source"], act, a["p_worse"], a["conf_worse"],
-               a["p_extend"], a["conf_extend"], round(r_now, 3), round(self.r_if_exit(pos, price), 3), price,
-               round(pos.mfe_r, 3), round(held, 1))
+               a["p_extend"], a["conf_extend"], round(r_now, 3), round(snap["r_exit"], 3), price,
+               round(snap["mfe"], 3), round(held, 1))
         j = self.ctx.journal
         j.db.execute("INSERT INTO jev_advice(ts,pos_id,symbol,strategy,source,action,p_worse,conf_worse,p_extend,conf_extend,"
                      "r_now,r_if_exit,price,mfe,held_min) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rec)
@@ -155,6 +192,11 @@ class JevAdvisorAgent(Agent):
                     source=a["source"], shadow=True)
         pos.meta["jev_advice"] = act
         return {"action": act, **a}
+
+    async def advise(self, pos, price: float, now: pd.Timestamp, held: float) -> dict:
+        """Ask and record in one await (kept for direct callers; on_bar uses the background path)."""
+        snap = self.snapshot(pos, price, now, held)
+        return self.record(pos, snap, await self.ctx.jev.manage_trade(snap["info"]))
 
     async def on_closed(self, ev):
         pos, px = ev["position"], float(ev.get("price") or pos.last_price or 0)
@@ -193,6 +235,8 @@ def scorecard(journal, seed: int = 11) -> dict:
     jev = [r for r in rows if r["source"] == "jev"]
     out = {"n_trades": len({r["pos_id"] for r in jev}), "n_calls": len(jev),
            "n_heuristic": len(rows) - len(jev), "actions": []}
+    # "helped" = share of calls where the advice was right: CUT value_cut > 0, HOLD value_cut < 0, ADD value_add > 0
+    # (HOLD was inverted before; Oct 26 2026).
     for act, key, meaning in (("cut", "value_cut", "closing then vs holding to the real exit"),
                               ("hold", "value_cut", "closing then vs holding (negative = holding was right)"),
                               ("add", "value_add", "a second unit added then, to the real exit")):
@@ -201,7 +245,7 @@ def scorecard(journal, seed: int = 11) -> dict:
             continue
         lo, hi = _ci(v, rng)
         out["actions"].append({"action": act, "n": int(len(v)), "avg_value_r": round(float(v.mean()), 3),
-                               "lo": round(lo, 3), "hi": round(hi, 3), "helped": round(float((v > 0).mean()), 3),
+                               "lo": round(lo, 3), "hi": round(hi, 3), "helped": round(float(((v < 0) if act == "hold" else (v > 0)).mean()), 3),
                                "meaning": meaning})
     by_pos: dict[str, dict] = {}
     for r in sorted(jev, key=lambda x: x["advice_id"]):
