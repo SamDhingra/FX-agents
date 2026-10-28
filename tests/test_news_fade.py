@@ -77,3 +77,21 @@ def test_run_end_to_end_and_vault_needs_a_pass(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         F.run("vault", hist, tmp_path / "v", syms=("XAUUSD",))
+
+
+def test_nostop_variant_holds_to_the_time_exit_and_runs_once(tmp_path, monkeypatch):
+    T = pd.Timestamp("2024-03-07 08:30", tz=NY)
+    base = flat_m1()
+    u = Prices(base).atr15(T - pd.Timedelta("60min"))
+    m2 = shape(base, T, [(-1, 100.0), (30, 102.0), (40, 102.0 + 6 * u), (160, 102.0 + 6 * u)])
+    y = F.trade(Prices(m2), T, stop_atr=None)
+    assert y["exit"] == "time" and y["net"] < -F.STOP_ATR
+    hist = tmp_path / "h"; hist.mkdir()
+    pd.to_pickle((flat_m1(start="2017-02-01", days=40), None), hist / "XAUUSD.pkl")
+    monkeypatch.setitem(F.PERIODS, "vault", (pd.Timestamp("2017-02-06", tz=NY), pd.Timestamp("2017-03-10", tz=NY)))
+    with pytest.raises(SystemExit):
+        F.run("test", hist, tmp_path / "x", syms=("XAUUSD",), nostop=True)              # 2016-2020 only
+    res = F.run("vault", hist, tmp_path / "v", syms=("XAUUSD",), nostop=True)          # no test-period pass needed
+    assert res["n"] > 0 and "No-stop variant" in (tmp_path / "v/report.md").read_text()
+    with pytest.raises(SystemExit):
+        F.run("vault", hist, tmp_path / "v", syms=("XAUUSD",), nostop=True)            # once

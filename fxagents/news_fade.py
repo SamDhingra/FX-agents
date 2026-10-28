@@ -29,7 +29,7 @@ def clock_group(typ: str) -> str:
     return "14:00" if typ in ("FOMC", "ctl_1400") else "08:30"
 
 
-def trade(P: Prices, T: pd.Timestamp, cost_mult: float = 1.0) -> dict | None:
+def trade(P: Prices, T: pd.Timestamp, cost_mult: float = 1.0, stop_atr: float | None = STOP_ATR) -> dict | None:
     """One fade from T+30. None when a price or the ATR is missing, or the first move is 0."""
     u = P.atr15(T - pd.Timedelta(minutes=60))
     if not np.isfinite(u):
@@ -42,14 +42,14 @@ def trade(P: Prices, T: pd.Timestamp, cost_mult: float = 1.0) -> dict | None:
     i_in = P.pos(t_in)
     hs = lambda i: P.sp[i] / 2 * cost_mult                         # noqa: E731
     entry = P.c[i_in] + d * hs(i_in)
-    stop = entry - d * STOP_ATR * u
+    stop = entry - d * stop_atr * u if stop_atr else None
     flat = T.normalize() + pd.Timedelta(hours=FLAT[0], minutes=FLAT[1])
     t_out = min(T + pd.Timedelta(minutes=K + HOLD), flat)
     if t_out <= t_in:
         return None
     end = int(np.searchsorted(P.ns, (t_out - pd.Timedelta(minutes=1)).as_unit("ns").value, side="right"))   # bars starting before t_out
     how, fill = "time", None
-    for i in range(i_in + 1, end):
+    for i in range(i_in + 1, end if stop is not None else i_in + 1):
         far = (P.l[i] - hs(i)) if d > 0 else (P.h[i] + hs(i))
         if (far - stop) * d <= 0:
             op = (P.o[i] - hs(i)) if d > 0 else (P.o[i] + hs(i))
@@ -65,12 +65,12 @@ def trade(P: Prices, T: pd.Timestamp, cost_mult: float = 1.0) -> dict | None:
             "hold_min": (t_out - t_in).total_seconds() / 60}
 
 
-def collect(m1s: dict[str, pd.DataFrame], ev: pd.DataFrame, cost_mult: float = 1.0) -> pd.DataFrame:
+def collect(m1s: dict[str, pd.DataFrame], ev: pd.DataFrame, cost_mult: float = 1.0, stop_atr: float | None = STOP_ATR) -> pd.DataFrame:
     rows = []
     for sym, m1 in m1s.items():
         P = Prices(m1)
         for r in ev.itertuples(index=False):
-            x = trade(P, r.T, cost_mult)
+            x = trade(P, r.T, cost_mult, stop_atr)
             if x is not None:
                 rows.append({"sym": sym, "type": r.type, "T": r.T, "day": r.day, "group": clock_group(r.type), **x})
     return pd.DataFrame(rows)
@@ -119,9 +119,15 @@ def fmt(m) -> str:
     return "—" if not np.isfinite(m[0]) else (f"{m[0]:+.2f}" + (f" ({m[1]:+.2f}..{m[2]:+.2f})" if np.isfinite(m[1]) else ""))
 
 
-def run(period: str, hist: Path, out: Path, syms=SYMS) -> dict:
+def run(period: str, hist: Path, out: Path, syms=SYMS, nostop: bool = False) -> dict:
     a0, b0 = PERIODS[period]
-    if period == "vault":
+    stop_atr = None if nostop else STOP_ATR
+    if nostop:
+        if period != "vault":
+            raise SystemExit("registered (addendum): the no-stop variant is judged only on 2016-2020")
+        if (out / "summary.json").exists():
+            raise SystemExit(f"registered: the no-stop variant is judged ONCE; {out / 'summary.json'} already exists")
+    elif period == "vault":
         p = Path("data/year_test/news_fade_test/summary.json")
         if not (p.exists() and json.loads(p.read_text()).get("pass")):
             raise SystemExit("registered: 2016-2020 is judged only if the rule passed every gate on the test period")
@@ -136,8 +142,8 @@ def run(period: str, hist: Path, out: Path, syms=SYMS) -> dict:
         m1 = pd.read_pickle(f)[0]
         m1s[s] = m1[(m1.index >= a0 - pd.Timedelta(days=5)) & (m1.index < b0)]       # the period only
         print(f"  {s}: {len(m1s[s]):,} minutes", flush=True)
-    rel, ctl = collect(m1s, ev), collect(m1s, ctl_t)
-    rel2 = collect(m1s, ev, cost_mult=2.0)
+    rel, ctl = collect(m1s, ev, stop_atr=stop_atr), collect(m1s, ctl_t, stop_atr=stop_atr)
+    rel2 = collect(m1s, ev, cost_mult=2.0, stop_atr=stop_atr)
     mc, thr = matched(rel, ctl)
     mid = a0 + (b0 - a0) / 2
     main = boot(rel.net, rel.day)
@@ -149,7 +155,12 @@ def run(period: str, hist: Path, out: Path, syms=SYMS) -> dict:
              "beats the size-matched control": bool(np.isfinite(vs[1]) and vs[1] > 0)}
     ok = all(gates.values())
     first4 = all(v for k, v in gates.items() if k != "beats the size-matched control")
-    if ok:
+    if nostop:
+        verdict = ("**PASS (no-stop variant, its only test)** → to the Nov 5 review as a candidate for a forward paper record only; "
+                   "a live version needs a stop sized to post-release volatility (a new rule)." if ok else
+                   "**Does not pass → the news fade is closed.**" + (" It pays, but no more than fading an equally big early move "
+                   "on a no-release day." if first4 else ""))
+    elif ok:
         verdict = ("**PASS — a news edge.** One judgement on 2016–2020: `./fx.sh newsfade vault`." if period == "test" else
                    "**CONFIRMED on 2016–2020** → to the Nov 5 review (the blackout is unchanged until then).")
     elif first4 and period == "test":
@@ -157,13 +168,16 @@ def run(period: str, hist: Path, out: Path, syms=SYMS) -> dict:
                    "\"Fade any big early move\" goes to its own registered test; nothing from this run is traded.")
     else:
         verdict = "**Does not pass → closed.**" + (" 2016–2020 is not read." if period == "test" else "")
-    L = [f"# News fade ({period}: {a0.date()} → {b0.date()})", "",
+    title = "News fade, no-stop variant" if nostop else "News fade"
+    L = [f"# {title} ({period}: {a0.date()} → {b0.date()})", "",
+         *(["**No-stop variant** (addendum of Oct 28 2026, after the registered rule failed on 2023–2026): exit only at T+150 / "
+            "15:50, no stop. Its only test, judged once; weaker evidence than a confirmation.", ""] if nostop else []),
          "Registered Oct 28 2026 before this data was read (research/news_fade/PREREGISTRATION_2026-10-28.md). At T+30 after a "
          "FOMC / CPI / NFP / PPI release, trade against the move from T−1 to T+30; exit at T+150 or 15:50 NY (first), emergency "
          "stop 4 × ATR15, real bid/ask fills. Results in ATR15 net of the spread (R = 4 × ATR15).", "",
          "| | trades | mean net ATR15 (95% range) | in R | halves | 2× costs | size-matched control (trades) | release − control (95% range) |",
          "|---|---|---|---|---|---|---|---|",
-         f"| all releases | {len(rel)} | {fmt(main)} | {main[0] / STOP_ATR:+.3f} | {halves[0]:+.2f} / {halves[1]:+.2f} | {two_x:+.2f} | "
+         f"| all releases | {len(rel)} | {fmt(main)} | {'—' if nostop else f'{main[0] / STOP_ATR:+.3f}'} | {halves[0]:+.2f} / {halves[1]:+.2f} | {two_x:+.2f} | "
          f"{mc.net.mean():+.2f} ({len(mc)}) | {fmt(vs)} |", "",
          "| gate | result |", "|---|---|"] + [f"| {k} | {'yes' if v else '**no**'} |" for k, v in gates.items()]
     L += ["", verdict, "", "## Information only (never a pass)", "",
@@ -189,9 +203,10 @@ def run(period: str, hist: Path, out: Path, syms=SYMS) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser(description="News fade (registered Oct 28 2026)")
     ap.add_argument("--period", choices=("test", "vault"), default="test")
+    ap.add_argument("--nostop", action="store_true", help="the addendum's no-stop variant (2016-2020 only, once)")
     a = ap.parse_args(argv)
-    out = Path(f"data/year_test/news_fade_{a.period}")
-    run(a.period, HIST[a.period], out)
+    out = Path(f"data/year_test/news_fade_nostop_{a.period}" if a.nostop else f"data/year_test/news_fade_{a.period}")
+    run(a.period, HIST[a.period], out, nostop=a.nostop)
     print((out / "report.md").read_text())
 
 

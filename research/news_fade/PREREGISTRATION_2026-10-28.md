@@ -39,3 +39,19 @@ instruments, fading the T−1 → T+30 move from T+30 and holding 120 minutes av
 Information only (never a pass): results by release type, by instrument, with the unmatched control, and stop hits.
 Note: control days can hold other releases the calendar lacks (retail sales, claims, ISM …); that dilutes, not inflates,
 the difference.
+
+---
+
+## Addendum (Oct 28 2026, after the test-period run, before any 2016–2020 data is read): no-stop variant
+
+The registered rule failed on 2023-11-17 → 2026-10-01 (+0.16 ATR15, −0.42..+0.77; halves +0.57 / −0.26; vs control +0.05).
+Its 4 × ATR15 emergency stop fired on 145 of 361 trades: ATR15 is measured in the calm hour before the release and
+post-release swings are 4–10× larger, so the stop changed the rule away from what step 1 measured (no stop). Sam chose to
+test the step-1 version once:
+
+- **news_fade_nostop:** identical to the rule above except **no stop** — exit only at T+150 or 15:50 NY.
+- Judged **once** on 2016-01-01 → 2021-01-01 (`./fx.sh newsfade nostop`), with the same five gates (halves at the elapsed
+  midpoint; the size-matched control built the same way within 2016–2020). The run refuses to repeat.
+- This is its ONLY test (no later confirmation), and it follows a failure on 2023–2026, so a pass is weaker evidence than
+  usual: it goes to the Nov 5 review as a candidate for a forward paper record only, and a live version would need a stop
+  sized to post-release volatility, which would be a new rule.
