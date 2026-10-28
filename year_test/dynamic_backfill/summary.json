@@ -1,0 +1,168 @@
+{
+ "book": "live",
+ "trades": [
+  {
+   "id": "d7c4445738",
+   "symbol": "NDQ",
+   "side": "LONG",
+   "entry_time": "2026-10-27 13:00",
+   "r": 0.719,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0095
+  },
+  {
+   "id": "c15d2a732d",
+   "symbol": "US30",
+   "side": "LONG",
+   "entry_time": "2026-10-27 09:15",
+   "r": -1.024,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "WAIT",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0097
+  },
+  {
+   "id": "64c2f0b8b6",
+   "symbol": "US30",
+   "side": "LONG",
+   "entry_time": "2026-10-27 08:40",
+   "r": -1.018,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "WAIT",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0081
+  },
+  {
+   "id": "d68398e495",
+   "symbol": "NDQ",
+   "side": "LONG",
+   "entry_time": "2026-10-26 13:00",
+   "r": 0.197,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0089
+  },
+  {
+   "id": "d806b7fffd",
+   "symbol": "XAUUSD",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 10:30",
+   "r": -1.001,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0087
+  },
+  {
+   "id": "ad6e6ce5bf",
+   "symbol": "NDQ",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 10:00",
+   "r": -1.0,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0089
+  },
+  {
+   "id": "1ea59a8f72",
+   "symbol": "NDQ",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 09:05",
+   "r": 0.557,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "WAIT",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0096
+  },
+  {
+   "id": "301afeade0",
+   "symbol": "XAUUSD",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 04:05",
+   "r": -1.015,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "WAIT",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0091
+  },
+  {
+   "id": "82213c346a",
+   "symbol": "NDQ",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 03:45",
+   "r": 1.047,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0091
+  },
+  {
+   "id": "4f85e7994c",
+   "symbol": "XAUUSD",
+   "side": "SHORT",
+   "entry_time": "2026-10-26 03:00",
+   "r": -1.001,
+   "claude_r1": "ABSTAIN",
+   "claude_r2": "\u2014",
+   "openai_r1": "ENTER",
+   "openai_r2": "\u2014",
+   "exchange": "skipped: round 1 not valid (claude: ABSTAIN)",
+   "cost_usd": 0.0094
+  }
+ ],
+ "notes": [],
+ "estimate": {
+  "providers": {
+   "claude": {
+    "model": "claude-sonnet-5-5",
+    "calls": 20,
+    "tokens_in": 49320,
+    "tokens_out": 8000,
+    "usd": 0.17864,
+    "price_in": 2.0,
+    "price_out": 10.0,
+    "out_source": "default; round 2: default",
+    "used_today": 0,
+    "over_budget": false
+   },
+   "openai": {
+    "model": "gpt-6.1-sol",
+    "calls": 20,
+    "tokens_in": 49320,
+    "tokens_out": 8000,
+    "usd": 0.17864,
+    "price_in": 2.0,
+    "price_out": 10.0,
+    "out_source": "default; round 2: default",
+    "used_today": 0,
+    "over_budget": false
+   }
+  },
+  "total_usd": 0.3573,
+  "unpriced": [],
+  "two_rounds": true
+ },
+ "actual_usd": 0.091
+}
