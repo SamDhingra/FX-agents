@@ -68,13 +68,14 @@ EXCHANGE_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(f"(prompt {PROMPT_VERSION})", f"(
     "Return your answer only through the structured output.", EXCHANGE_ADDENDUM + "\nReturn your answer only through the structured output.")
 
 
-def review_schema(strict_openai: bool = False, exchange: bool = False) -> dict:
-    """The answer schema (docs/dynamic_controller.md). OpenAI's strict mode gets the same shape without the length
-    keywords, which it may reject; the limits are enforced locally in validate()."""
+def review_schema(strict: bool = False, exchange: bool = False) -> dict:
+    """The answer schema (docs/dynamic_controller.md). strict=True (both providers' structured outputs: OpenAI strict mode,
+    Anthropic output_config) gets the same shape without the length keywords, which they reject; the limits are enforced
+    locally in validate()."""
     def text(n):
-        return {"type": "string"} if strict_openai else {"type": "string", "maxLength": n}
+        return {"type": "string"} if strict else {"type": "string", "maxLength": n}
     arr = {"type": "array", "items": text(120)}
-    if not strict_openai:
+    if not strict:
         arr["maxItems"] = MAX_MISSING
     props = {"candidate_id": {"type": "string"},
              "action": {"type": "string", "enum": list(ACTIONS)},
@@ -242,21 +243,25 @@ class ClaudeProvider(Provider):
     def request(self, system, user, exchange=False):
         headers = {"x-api-key": self.key(), "anthropic-version": "2023-06-01", "content-type": "application/json"}
         body = {"model": self.model, "max_tokens": 1024, "system": system,
-                "tools": [{"name": "review", "description": "Record your review of this entry.",
-                           "input_schema": review_schema(exchange=exchange)}],
-                "tool_choice": {"type": "tool", "name": "review"},
-                "messages": [{"role": "user", "content": user}]}
+                "messages": [{"role": "user", "content": user}],
+                "output_config": {"format": {"type": "json_schema", "schema": review_schema(True, exchange)}}}
         return self.URL, headers, body
 
     def parse(self, body):
         u = body.get("usage") or {}
         tin, tout = u.get("input_tokens"), u.get("output_tokens")
-        if body.get("stop_reason") == "refusal":
+        sr = body.get("stop_reason")
+        if sr == "refusal":
             return None, tin, tout, "refused by the model"
+        if sr == "max_tokens":
+            return None, tin, tout, "invalid: reply cut off (max_tokens)"
         for b in body.get("content") or []:
-            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "review":
-                return b.get("input"), tin, tout, None
-        return None, tin, tout, f"invalid: no review tool call (stop_reason {body.get('stop_reason')})"
+            if isinstance(b, dict) and b.get("type") == "text":
+                try:
+                    return json.loads(b.get("text") or ""), tin, tout, None
+                except ValueError:
+                    return None, tin, tout, "invalid: reply is not valid JSON"
+        return None, tin, tout, f"invalid: no text block in the reply (stop_reason {sr})"
 
 
 class OpenAIProvider(Provider):

@@ -216,6 +216,39 @@ def test_picks_the_newest_closed_unreviewed_trades_and_skips_reviewed_ones(tmp_p
     assert j2.db.execute("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id='t4' AND round=1").fetchone()[0] == 2
 
 
+def test_redo_clears_only_all_abstain_backfill_trades_keeps_live_and_real_answers_then_reviews_them(tmp_path):
+    abst = {"openai": Stub("openai", "ABSTAIN"), "claude": Stub("claude", "ABSTAIN")}
+    code, j, cl, _ = go(tmp_path, n=4, stubs=abst)
+    assert code == 0
+    q = lambda sql, *a: [tuple(r) for r in j.db.execute(sql, a).fetchall()]
+    assert {r[0] for r in q("SELECT DISTINCT action FROM dyn_reviews")} == {"ABSTAIN"}
+    j.db.execute("UPDATE dyn_reviews SET action='WAIT' WHERE candidate_id='t3' AND provider='claude' AND round=1")   # t3: one real answer
+    j.db.execute("UPDATE dyn_candidates SET source='live', retrospective=0 WHERE candidate_id='t2'")                # t2: a live row
+    j.db.commit()
+    live_before = q("SELECT * FROM dyn_reviews WHERE candidate_id='t2' ORDER BY provider, round")
+    t3_before = q("SELECT * FROM dyn_reviews WHERE candidate_id='t3' ORDER BY provider, round")
+    cfg = bf_cfg()
+    # without --redo nothing is picked: everything has a candidate row
+    assert B.pick_trades(j, cfg, 4)[0] == []
+    assert [t["id"] for t in B.pick_trades(j, cfg, 4, redo=True)[0]] == ["t4", "t1"]
+    assert B.redoable_ids(j) == {"t1", "t4"}
+    # a dry run with redo changes nothing
+    ok = {"openai": Stub("openai", "ENTER", marker="O"), "claude": Stub("claude", "ENTER", marker="C")}
+    run(B.run(cfg, "live", 4, tmp_path / "o", dry_run=True, client=FakeOanda(), journal=j, providers=ok, redo=True))
+    assert q("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id IN ('t1','t4') AND action='ENTER'")[0][0] == 0
+    run(B.run(cfg, "live", 4, tmp_path / "o", client=FakeOanda(), journal=j, providers=ok, redo=True))
+    for tid in ("t1", "t4"):
+        acts = {r[0] for r in q("SELECT action FROM dyn_reviews WHERE candidate_id=? AND round=1", tid)}
+        assert acts == {"ENTER"}
+        assert q("SELECT source FROM dyn_candidates WHERE candidate_id=?", tid) == [("backfill",)]
+    assert q("SELECT * FROM dyn_reviews WHERE candidate_id='t2' ORDER BY provider, round") == live_before
+    assert q("SELECT * FROM dyn_reviews WHERE candidate_id='t3' ORDER BY provider, round") == t3_before
+    assert q("SELECT source FROM dyn_candidates WHERE candidate_id='t2'") == [("live",)]
+    # redo never touches a live row even when its reviews are all non-answers
+    assert "t2" not in B.redoable_ids(j) and B.clear_backfill(j, ["t2"]) == 0
+    assert q("SELECT COUNT(*) FROM dyn_candidates WHERE candidate_id='t2'")[0][0] == 1
+
+
 def test_more_than_fifty_is_refused_before_anything_is_fetched(tmp_path, capsys):
     j = journal_with_trades(tmp_path)
     cl = FakeOanda()
@@ -437,4 +470,5 @@ def test_fx_sh_has_the_command_and_the_docs_mention_it():
     root = Path(__file__).parents[1]
     sh = (root / "fx.sh").read_text()
     assert "dynbackfill)" in sh and "python -m fxagents.dynamic.backfill --book" in sh and "dynbackfill [book] [n]" in sh
+    assert "--redo" in sh and "redo|--redo" in sh
     assert "dynbackfill" in (root / "docs/dynamic_controller.md").read_text()

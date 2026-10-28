@@ -125,8 +125,26 @@ GOOD = {"candidate_id": "abc123", "action": "WAIT", "trigger_id": "retest_of_ent
 
 
 def claude_reply(obj=GOOD, **kw):
-    return {"content": [{"type": "tool_use", "name": "review", "input": obj}], "stop_reason": "tool_use",
+    return {"content": [{"type": "text", "text": json.dumps(obj)}], "stop_reason": "end_turn",
             "usage": {"input_tokens": 2000, "output_tokens": 100}, **kw}
+
+
+def assert_claude_schema(sch):
+    """Anthropic structured outputs: no length/number keywords, minItems 0/1 only, additionalProperties false on every object."""
+    txt = json.dumps(sch)
+    for kw in ("maxLength", "minLength", "maxItems", "minimum", "maximum", "multipleOf"):
+        assert kw not in txt
+    def walk(n):
+        if isinstance(n, dict):
+            if n.get("type") == "object":
+                assert n.get("additionalProperties") is False
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+    walk(sch)
+    assert set(sch["required"]) == set(sch["properties"])
 
 
 def openai_reply(obj=GOOD, **kw):
@@ -164,8 +182,10 @@ def test_claude_and_openai_parse_valid_replies_and_price_the_tokens(monkeypatch)
     url, hd, body = seen["claude"]
     assert str(url) == "https://api.anthropic.com/v1/messages" and hd["x-api-key"] == "sk-ant-SECRET"
     assert hd["anthropic-version"] == "2023-06-01"
-    assert body["tool_choice"] == {"type": "tool", "name": "review"} and body["tools"][0]["name"] == "review"
-    assert body["tools"][0]["input_schema"]["properties"]["decisive_evidence"]["maxLength"] == 300
+    assert "tools" not in body and "tool_choice" not in body and "betas" not in body and "anthropic-beta" not in hd
+    assert body["output_config"]["format"]["type"] == "json_schema" and set(body["output_config"]) == {"format"}
+    assert_claude_schema(body["output_config"]["format"]["schema"])
+    assert body["messages"][-1]["role"] == "user" and body["max_tokens"] == 1024
     assert body["system"] == PR.SYSTEM_PROMPT and "PROMPT" not in body["messages"][0]["content"]
     url, hd, body = seen["openai"]
     assert str(url) == "https://api.openai.com/v1/chat/completions" and hd["authorization"] == "Bearer sk-oai-SECRET"
@@ -197,6 +217,11 @@ BAD = [
     ("claude", lambda q: httpx.Response(200, json=claude_reply({k: v for k, v in GOOD.items() if k != "decisive_evidence"})), "decisive_evidence"),
     ("openai", lambda q: httpx.Response(500, text="upstream sk-oai-SECRET exploded"), "HTTP 500"),
     ("claude", lambda q: httpx.Response(529, text="overloaded"), "HTTP 529"),
+    ("claude", lambda q: httpx.Response(200, json={"content": [{"type": "text", "text": '{"action": "WAIT"'}], "stop_reason": "end_turn",
+                                                    "usage": {"input_tokens": 5, "output_tokens": 5}}), "not valid JSON"),
+    ("claude", lambda q: httpx.Response(200, json={"content": [], "stop_reason": "end_turn"}), "no text block"),
+    ("claude", lambda q: httpx.Response(200, json={"content": [{"type": "text", "text": '{"action": "WAIT"'}], "stop_reason": "max_tokens",
+                                                    "usage": {"input_tokens": 5, "output_tokens": 1024}}), "cut off (max_tokens)"),
     ("claude", _boom, "ReadTimeout"),
     ("openai", _boom, "ReadTimeout"),
     ("claude", lambda q: httpx.Response(200, json={"content": [{"type": "text", "text": "I refuse"}], "stop_reason": "refusal",
@@ -738,13 +763,12 @@ def test_the_provider_requests_carry_the_round_two_prompt_schema_and_only_the_ot
         assert mine < theirs and "MY-OWN-EVIDENCE" in user[mine:theirs] and "MY-OWN-EVIDENCE" not in user[theirs:]
         assert '"decisive_evidence": "e"' in user[theirs:] and '"missing_data": ["mm"]' in user[mine:theirs]
         assert "tokens_in" not in user and "latency" not in user
-        schema = body["tools"][0]["input_schema"] if kind == "claude" else body["response_format"]["json_schema"]["schema"]
+        schema = body["output_config"]["format"]["schema"] if kind == "claude" else body["response_format"]["json_schema"]["schema"]
         assert schema["properties"]["changed"] == {"type": "boolean"} and "why_changed" in schema["required"] and "changed" in schema["required"]
-        if kind == "openai":
-            assert "maxLength" not in json.dumps(schema)                  # strict mode: every field required, no length keywords
-            assert set(schema["required"]) == set(schema["properties"])
-        else:
-            assert schema["properties"]["why_changed"]["maxLength"] == 300
+        assert "maxLength" not in json.dumps(schema)                      # strict mode: every field required, no length keywords
+        assert set(schema["required"]) == set(schema["properties"])
+        if kind == "claude":
+            assert_claude_schema(schema)
     # round 1 keeps the dyn-v1 schema without the new fields
     assert "changed" not in PR.review_schema()["properties"] and PR.EXCHANGE_PROMPT_VERSION == "dyn-x1"
     # the same validation -> ABSTAIN-with-reason behaviour, and over-long why_changed is cut locally

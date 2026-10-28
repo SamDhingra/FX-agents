@@ -55,14 +55,45 @@ ROUND2_EXTRA_TOKENS = 700    # the exchange addendum is in the system prompt (co
 
 
 # ── choosing the trades ───────────────────────────────────────────────────────────────────────────────────────
-def pick_trades(journal, cfg, n: int) -> tuple[list[dict], list[str]]:
-    """The last n closed trades with an R result and no review yet, newest close first. (trades, notes about rows left out)"""
+ANSWERS = ("ENTER", "WAIT", "CANCEL")
+
+
+def redoable_ids(journal) -> set[str]:
+    """Backfill candidates whose stored reviews are ALL non-answers (ABSTAIN / NOT_REVIEWED from every provider, both rounds):
+    nothing real was learned from them, so --redo may clear and re-review them. Live rows are never included."""
+    return {r[0] for r in journal.db.execute(
+        "SELECT c.candidate_id FROM dyn_candidates c WHERE COALESCE(c.source,'live')='backfill' AND NOT EXISTS "
+        f"(SELECT 1 FROM dyn_reviews v WHERE v.candidate_id=c.candidate_id AND v.action IN ({','.join('?' * len(ANSWERS))}))", ANSWERS)}
+
+
+def clear_backfill(journal, ids) -> int:
+    """Delete the dyn_reviews and the dyn_candidates row of these backfill trades (source='backfill' only). Returns the count."""
+    n = 0
+    for tid in ids:
+        if journal.db.execute("SELECT 1 FROM dyn_candidates WHERE candidate_id=? AND COALESCE(source,'live')='backfill'", (tid,)).fetchone():
+            journal.db.execute("DELETE FROM dyn_reviews WHERE candidate_id=?", (tid,))
+            journal.db.execute("DELETE FROM dyn_candidates WHERE candidate_id=? AND COALESCE(source,'live')='backfill'", (tid,))
+            n += 1
+    journal.db.commit()
+    return n
+
+
+def pick_trades(journal, cfg, n: int, redo: bool = False) -> tuple[list[dict], list[str]]:
+    """The last n closed trades with an R result and no review yet, newest close first. With redo, a trade whose backfill
+    reviews are all non-answers counts as unreviewed too (it is cleared later, only once it has been rebuilt).
+    (trades, notes about rows left out)"""
     if not (1 <= n <= MAX_TRADES):
         raise ValueError(f"--last must be 1 to {MAX_TRADES} (asked for {n})")
     rows = [dict(r) for r in journal.db.execute(
         "SELECT id, symbol, side, strategy, opened, closed, entry, initial_stop, r_multiple, events, m15_live FROM trades "
         "WHERE status='closed' AND r_multiple IS NOT NULL AND closed IS NOT NULL "
         "AND id NOT IN (SELECT candidate_id FROM dyn_candidates)")]
+    if redo:
+        again = redoable_ids(journal)
+        rows += [dict(r) for r in journal.db.execute(
+            "SELECT id, symbol, side, strategy, opened, closed, entry, initial_stop, r_multiple, events, m15_live FROM trades "
+            "WHERE status='closed' AND r_multiple IS NOT NULL AND closed IS NOT NULL AND id IN (%s)" % ",".join("?" * len(again)),
+            tuple(again))] if again else []
     rows.sort(key=lambda r: pd.Timestamp(r["closed"]).tz_convert("UTC"), reverse=True)
     out, notes = [], []
     for r in rows:
@@ -344,7 +375,8 @@ def say(*a) -> None:
     print(*a, flush=True)
 
 
-async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=None, journal=None, providers: dict | None = None) -> int:
+async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=None, journal=None, providers: dict | None = None,
+              redo: bool = False) -> int:
     """`client` (an OANDA-like object with `req`), `journal` and `providers` can be handed in (tests); otherwise they are made
     from the config and the environment."""
     from . import score
@@ -376,7 +408,7 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
     for x in notes:
         say("NOTE:", x)
 
-    trades, skipped = pick_trades(journal, cfg, n)
+    trades, skipped = pick_trades(journal, cfg, n, redo)
     notes += skipped
     if not trades:
         say("no closed, unreviewed trade to backfill in book", book)
@@ -411,6 +443,9 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
     if not items:
         return 1
     runner = BackfillRunner(journal, cfg, providers)
+    redo_ids = [it["trade"]["id"] for it in items if redo and it["trade"]["id"] in redoable_ids(journal)]
+    if redo_ids:
+        say(f"--redo: {len(redo_ids)} trade(s) had only non-answers and will be cleared and reviewed again: {', '.join(redo_ids)}")
     day = trading_day(runner.now())
     est = estimate(journal, providers, [it["packet"] for it in items], {p: store.calls_on(journal, p, day) for p in providers}, runner.budget)
     say("\nCost estimate (before any call):")
@@ -419,6 +454,8 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
     if dry_run:
         say("\n--dry-run: nothing was called or stored.")
         return 0
+    if redo_ids:
+        clear_backfill(journal, redo_ids)
     say("\nReviewing (same prompts, validation, budget and deadlines as the live gate)...")
     await runner.run([it["packet"] for it in items])
     rows = trade_rows(journal, items, tz)
@@ -448,6 +485,7 @@ def main(argv=None) -> int:
     ap.add_argument("--book", default="live")
     ap.add_argument("--last", type=int, default=10, help=f"how many of the latest unreviewed closed trades (max {MAX_TRADES})")
     ap.add_argument("--dry-run", action="store_true", help="fetch, build the packets, print the trades and the cost estimate, call nothing")
+    ap.add_argument("--redo", action="store_true", help="also re-review backfilled trades whose stored reviews are all ABSTAIN / NOT_REVIEWED (their backfill rows are deleted first; live rows never)")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)
@@ -459,7 +497,7 @@ def main(argv=None) -> int:
     if cfg.get("broker") == "oanda":
         from ..reconcile import broker_cfg
         cfg = broker_cfg(cfg)               # paper/live view with OANDA's instrument values (the journal was booked with them)
-    return asyncio.run(run(cfg, a.book, a.last, Path(a.out), a.dry_run))
+    return asyncio.run(run(cfg, a.book, a.last, Path(a.out), a.dry_run, redo=a.redo))
 
 
 if __name__ == "__main__":
