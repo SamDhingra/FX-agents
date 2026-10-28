@@ -59,11 +59,52 @@ ANSWERS = ("ENTER", "WAIT", "CANCEL")
 
 
 def redoable_ids(journal) -> set[str]:
-    """Backfill candidates whose stored reviews are ALL non-answers (ABSTAIN / NOT_REVIEWED from every provider, both rounds):
-    nothing real was learned from them, so --redo may clear and re-review them. Live rows are never included."""
+    """Backfill candidates where ANY provider's round-1 review is a non-answer (ABSTAIN / NOT_REVIEWED): --redo re-asks only
+    that provider (the others' valid round-1 answers are kept) and runs the exchange again. Live rows are never included."""
     return {r[0] for r in journal.db.execute(
-        "SELECT c.candidate_id FROM dyn_candidates c WHERE COALESCE(c.source,'live')='backfill' AND NOT EXISTS "
-        f"(SELECT 1 FROM dyn_reviews v WHERE v.candidate_id=c.candidate_id AND v.action IN ({','.join('?' * len(ANSWERS))}))", ANSWERS)}
+        "SELECT c.candidate_id FROM dyn_candidates c WHERE COALESCE(c.source,'live')='backfill' AND EXISTS "
+        f"(SELECT 1 FROM dyn_reviews v WHERE v.candidate_id=c.candidate_id AND COALESCE(v.round,1)=1 "
+        f"AND v.action NOT IN ({','.join('?' * len(ANSWERS))}))", ANSWERS)}
+
+
+def stored_answers(journal, cid: str, packet_hash: str | None = None) -> dict[str, dict]:
+    """provider -> the stored VALID round-1 answer of this candidate, as the same result dict the runner produces.
+    With packet_hash, only answers given on that exact packet text."""
+    from .providers import result
+    out = {}
+    for r in journal.db.execute(
+            "SELECT provider, model, packet_hash, action, trigger_id, invalidation_id, evidence, conflicting, missing, latency_ms, "
+            "tokens_in, tokens_out, cost_usd, error, response FROM dyn_reviews WHERE candidate_id=? AND COALESCE(round,1)=1 "
+            f"AND prompt_version=? AND action IN ({','.join('?' * len(ANSWERS))})", (cid, PROMPT_VERSION, *ANSWERS)):
+        r = dict(r)
+        if packet_hash is not None and r["packet_hash"] != packet_hash:
+            continue
+        try:
+            missing = json.loads(r["missing"] or "[]")
+        except ValueError:
+            missing = []
+        out[r["provider"]] = result(r["action"], None, trigger_id=r["trigger_id"], invalidation_id=r["invalidation_id"],
+                                    evidence=r["evidence"], conflicting=r["conflicting"], missing=missing, latency_ms=r["latency_ms"],
+                                    tokens_in=r["tokens_in"], tokens_out=r["tokens_out"], cost_usd=r["cost_usd"], response=r["response"])
+    return out
+
+
+def prepare_redo(journal, packets: dict[str, dict], providers) -> dict[str, dict]:
+    """For these backfill candidates (id -> rebuilt packet): keep the valid round-1 rows of the configured providers (same packet
+    hash), delete every other review row (abstained round 1, ALL round 2) and the exchange fields. Returns id -> {provider:
+    stored result} to hand the runner. source='backfill' only, never a live row."""
+    prior: dict[str, dict] = {}
+    for cid, packet in packets.items():
+        if not journal.db.execute("SELECT 1 FROM dyn_candidates WHERE candidate_id=? AND COALESCE(source,'live')='backfill'", (cid,)).fetchone():
+            continue
+        valid = stored_answers(journal, cid, packet["packet_hash"])
+        keep = {p: res for p, res in valid.items() if p in providers}
+        journal.db.execute("DELETE FROM dyn_reviews WHERE candidate_id=? AND NOT (COALESCE(round,1)=1 AND prompt_version=? AND packet_hash=? "
+                           "AND action IN (%s))" % ",".join("?" * len(ANSWERS)), (cid, PROMPT_VERSION, packet["packet_hash"], *ANSWERS))
+        journal.db.execute("UPDATE dyn_candidates SET exchange_status=NULL, exchange_ms=NULL, exchange_decision=NULL WHERE candidate_id=?", (cid,))
+        prior[cid] = keep
+    journal.db.commit()
+    return prior
 
 
 def clear_backfill(journal, ids) -> int:
@@ -268,18 +309,18 @@ class BackfillRunner(ReviewRunner):
     def budget_day(self, packet: dict) -> str:
         return trading_day(self.now())
 
-    async def review(self, packet: dict) -> None:
+    async def review(self, packet: dict, prior: dict | None = None) -> None:
         store.add_candidate(self.ctx.journal, packet, "pending", PROMPT_VERSION, source="backfill", reviewed_at=self.now_iso())
-        await self._review_all(packet["candidate"]["id"], packet)
+        await self._review_all(packet["candidate"]["id"], packet, prior)
 
-    async def run(self, packets: list[dict]) -> None:
+    async def run(self, packets: list[dict], prior: dict[str, dict] | None = None) -> None:
         """Several trades at once, each already two providers wide: half the concurrency limit, so a call never waits for a
         slot long enough to eat its deadline."""
         pool = asyncio.Semaphore(max(1, self.conc // 2))
 
         async def one(p):
             async with pool:
-                await self.review(p)
+                await self.review(p, (prior or {}).get(p["candidate"]["id"]))
         await asyncio.gather(*[one(p) for p in packets])
 
 
@@ -297,7 +338,8 @@ def typical_out_tokens(journal, provider: str, round_no: int) -> tuple[int, str]
     return DEFAULT_OUT_TOKENS[round_no], "default"
 
 
-def estimate(journal, providers: dict, packets: list[dict], today_used: dict[str, int], budget: int) -> dict:
+def estimate(journal, providers: dict, packets: list[dict], today_used: dict[str, int], budget: int,
+             reuse: dict[str, int] | None = None) -> dict:
     """Upper-bound cost: round 1 for every trade and provider, round 2 for every trade when two providers are on (it only runs
     when both round-1 answers are valid). Input tokens from the real packet text; output tokens typical."""
     sys1, sys2 = len(SYSTEM_PROMPT) / 4.0, len(EXCHANGE_SYSTEM_PROMPT) / 4.0
@@ -307,9 +349,10 @@ def estimate(journal, providers: dict, packets: list[dict], today_used: dict[str
     for name, prov in providers.items():
         o1, src1 = typical_out_tokens(journal, name, 1)
         o2, src2 = typical_out_tokens(journal, name, 2)
-        tin1 = sum(sys1 + x for x in texts)
+        n_reuse = (reuse or {}).get(name, 0)           # --redo: valid round-1 answers kept, not paid twice
+        tin1 = sum(sys1 + x for x in texts) * (len(packets) - n_reuse) / max(1, len(packets))
         tin2 = sum(sys2 + x + ROUND2_EXTRA_TOKENS for x in texts) if two else 0
-        calls1, calls2 = len(packets), (len(packets) if two else 0)
+        calls1, calls2 = len(packets) - n_reuse, (len(packets) if two else 0)
         tout = o1 * calls1 + o2 * calls2
         tin = int(tin1 + tin2)
         usd = prov.cost(tin, tout)
@@ -343,6 +386,7 @@ def estimate_lines(e: dict, budget: int) -> list[str]:
 
 # ── the per-trade table ───────────────────────────────────────────────────────────────────────────────────────
 def trade_rows(journal, items: list[dict], tz: str) -> list[dict]:
+    from . import score
     out = []
     for it in items:
         t, cid = it["trade"], it["trade"]["id"]
@@ -352,7 +396,11 @@ def trade_rows(journal, items: list[dict], tz: str) -> list[dict]:
 
         def cell(p, rnd):
             r = rv.get((p, rnd))
-            return "—" if r is None else r["action"]
+            if r is None:
+                return "—"
+            if r["action"] in ANSWERS:
+                return r["action"]
+            return f"{r['action']}: {score.short_reason(r.get('error'), 60)}"
         out.append({"id": cid, "symbol": t["symbol"], "side": t["side"], "entry_time": it["entry_ts"].strftime("%Y-%m-%d %H:%M"),
                     "r": float(t["r_multiple"]), "claude_r1": cell("claude", 1), "claude_r2": cell("claude", 2),
                     "openai_r1": cell("openai", 1), "openai_r2": cell("openai", 2),
@@ -444,20 +492,26 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
         return 1
     runner = BackfillRunner(journal, cfg, providers)
     redo_ids = [it["trade"]["id"] for it in items if redo and it["trade"]["id"] in redoable_ids(journal)]
+    reuse: dict[str, int] = {}
     if redo_ids:
-        say(f"--redo: {len(redo_ids)} trade(s) had only non-answers and will be cleared and reviewed again: {', '.join(redo_ids)}")
+        for it in items:
+            if it["trade"]["id"] in redo_ids:
+                for p in stored_answers(journal, it["trade"]["id"], it["packet"]["packet_hash"]):
+                    if p in providers:
+                        reuse[p] = reuse.get(p, 0) + 1
+        say(f"--redo: {len(redo_ids)} trade(s) had a round-1 non-answer; their abstained rounds and all round-2 rows will be deleted and re-run "
+            f"(valid round-1 answers kept: {', '.join(f'{k} x{v}' for k, v in reuse.items()) or 'none'}): {', '.join(redo_ids)}")
     day = trading_day(runner.now())
-    est = estimate(journal, providers, [it["packet"] for it in items], {p: store.calls_on(journal, p, day) for p in providers}, runner.budget)
+    est = estimate(journal, providers, [it["packet"] for it in items], {p: store.calls_on(journal, p, day) for p in providers}, runner.budget, reuse)
     say("\nCost estimate (before any call):")
     for line in estimate_lines(est, runner.budget):
         say(" ", line)
     if dry_run:
         say("\n--dry-run: nothing was called or stored.")
         return 0
-    if redo_ids:
-        clear_backfill(journal, redo_ids)
+    prior = prepare_redo(journal, {it["trade"]["id"]: it["packet"] for it in items if it["trade"]["id"] in redo_ids}, providers) if redo_ids else {}
     say("\nReviewing (same prompts, validation, budget and deadlines as the live gate)...")
-    await runner.run([it["packet"] for it in items])
+    await runner.run([it["packet"] for it in items], prior)
     rows = trade_rows(journal, items, tz)
     actual = sum(r["cost_usd"] or 0 for r in rows)
     L = ["# Retrospective review of past trades (dynamic backfill)", "",
@@ -485,7 +539,7 @@ def main(argv=None) -> int:
     ap.add_argument("--book", default="live")
     ap.add_argument("--last", type=int, default=10, help=f"how many of the latest unreviewed closed trades (max {MAX_TRADES})")
     ap.add_argument("--dry-run", action="store_true", help="fetch, build the packets, print the trades and the cost estimate, call nothing")
-    ap.add_argument("--redo", action="store_true", help="also re-review backfilled trades whose stored reviews are all ABSTAIN / NOT_REVIEWED (their backfill rows are deleted first; live rows never)")
+    ap.add_argument("--redo", action="store_true", help="also redo backfilled trades where ANY provider's round 1 is ABSTAIN / NOT_REVIEWED: valid round-1 answers are kept, the rest (and all round 2) deleted and re-run (live rows never)")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)

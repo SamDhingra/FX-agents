@@ -144,3 +144,10 @@ repo's `.env` (like `weekly`), not `exec` (the new code needs the rebuilt image)
   rule verdict. The trade story labels such reviews "retrospective review". Results: `data/year_test/dynamic_backfill/report.md` (a per-trade table) and `summary.json`.
 - A past trade is a different sample from a live one (the entry already happened, the packet's `minutes_since_update` is 0, there is no latency to speak of), so it
   can inform how the reviewers behave, never the registered live decision.
+
+### Claude schema, probe, wider --redo (Oct 27 2026)
+
+- **Claude's schema** (`providers.review_schema_claude`): Anthropic rejects an enum next to a type list, so nullable enums (`trigger_id`, `invalidation_id`) are `anyOf: [{type: string, enum: [...]}, {type: null}]`. OpenAI keeps the strict schema byte for byte.
+- **`./fx.sh dynprobe`** (= `python -m fxagents.dynamic.probe`): one round-1 review per configured provider on a synthetic packet (`probe-<timestamp>`) through the real provider code; prints model, action or ABSTAIN + full error, latency, tokens, cost; stores nothing; exit 0 only if every provider answered.
+- **`--redo`** now redoes a backfill trade when ANY provider's round 1 is ABSTAIN / NOT_REVIEWED: valid round-1 rows (same packet hash) are kept and not paid for again, the other round-1 rows, all round-2 rows and the exchange fields are deleted, the missing round 1 is re-run, then the exchange. `source='live'` rows are never touched.
+- Reports and the dashboard list ABSTAIN / NOT_REVIEWED reasons per provider with counts (text cut to ~160 chars); the backfill per-trade table shows a short reason next to ABSTAIN.

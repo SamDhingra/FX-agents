@@ -342,12 +342,19 @@ case "${1:-help}" in
              # provider keys from .env, and network, like liqtoday/weekly). Stored as source='backfill', scored apart from the live
              # scorecard. Prints the trades and a cost estimate first. n is capped at 50.
              #   ./fx.sh dynbackfill [book=live] [n=10]  → data/year_test/dynamic_backfill/report.md  (add dry as a 4th word to only estimate)
-             #   redo (or --redo) also re-reviews backfilled trades whose stored reviews are ALL ABSTAIN/NOT_REVIEWED (deletes their
-             #   source='backfill' rows first, never live ones); combine: ./fx.sh dynbackfill live 10 redo dry
+             #   redo (or --redo) also redoes backfilled trades where ANY provider's round 1 is ABSTAIN/NOT_REVIEWED (keeps the valid round-1
+             #   answers, deletes the rest + all round 2 of source='backfill' rows, never live ones, then re-runs the exchange); combine: ./fx.sh dynbackfill live 10 redo dry
              need_env; mkdir -p logs
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynbackfill-build.log 2>&1 || { echo "build failed — see logs/dynbackfill-build.log"; exit 1; }
              $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" $(for w_ in "${@:4}"; do case "$w_" in dry|--dry-run) echo --dry-run;; redo|--redo) echo --redo;; esac; done) </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dynprobe)  # cheap live probe of the shadow review providers: ONE round-1 review each (Claude + OpenAI, real code path) on a small
+             # synthetic packet ("probe-<timestamp>"); prints model, action or ABSTAIN + the full error, latency, tokens, cost.
+             # Stores nothing. Exit 0 only if every configured provider answered ENTER/WAIT/CANCEL. Needs the keys from .env.
+             #   ./fx.sh dynprobe
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynprobe-build.log 2>&1 || { echo "build failed — see logs/dynprobe-build.log"; exit 1; }
+             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.probe </dev/null ;;
   round3g)   # round-3, Gemini's four what-if checks (research/round3/gemini, unchanged) on the playbook's 3m/5m entries,
              # stricter judge. ./fx.sh round3g [seen|vault] → data/year_test/round3_gemini_<period>/report.md
              # (vault: only chasing_exhausted_leg, and only if it passed on seen)
@@ -447,7 +454,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [dry] | dynprobe | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

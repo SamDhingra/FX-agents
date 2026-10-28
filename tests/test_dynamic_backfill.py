@@ -44,6 +44,9 @@ def entry_of(opened):
     return pd.Timestamp(opened).tz_convert(TZ).floor("min")
 
 
+POISON = {entry_of(t[2]): 9001.0 + i for i, t in enumerate(TRADES)}   # the same candles on a redo, so the packet hash matches
+
+
 class FakeOanda:
     """The candles endpoint only: M1 'BA' and H1 'M' from one synthetic minute series that runs PAST every entry, with a
     poisoned price (9999) at each entry minute and a wide spread there, so any look at or beyond the entry shows up."""
@@ -216,7 +219,7 @@ def test_picks_the_newest_closed_unreviewed_trades_and_skips_reviewed_ones(tmp_p
     assert j2.db.execute("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id='t4' AND round=1").fetchone()[0] == 2
 
 
-def test_redo_clears_only_all_abstain_backfill_trades_keeps_live_and_real_answers_then_reviews_them(tmp_path):
+def test_redo_redoes_any_abstained_round1_keeps_live_rows_and_real_answers(tmp_path):
     abst = {"openai": Stub("openai", "ABSTAIN"), "claude": Stub("claude", "ABSTAIN")}
     code, j, cl, _ = go(tmp_path, n=4, stubs=abst)
     assert code == 0
@@ -226,27 +229,67 @@ def test_redo_clears_only_all_abstain_backfill_trades_keeps_live_and_real_answer
     j.db.execute("UPDATE dyn_candidates SET source='live', retrospective=0 WHERE candidate_id='t2'")                # t2: a live row
     j.db.commit()
     live_before = q("SELECT * FROM dyn_reviews WHERE candidate_id='t2' ORDER BY provider, round")
-    t3_before = q("SELECT * FROM dyn_reviews WHERE candidate_id='t3' ORDER BY provider, round")
     cfg = bf_cfg()
-    # without --redo nothing is picked: everything has a candidate row
-    assert B.pick_trades(j, cfg, 4)[0] == []
-    assert [t["id"] for t in B.pick_trades(j, cfg, 4, redo=True)[0]] == ["t4", "t1"]
-    assert B.redoable_ids(j) == {"t1", "t4"}
-    # a dry run with redo changes nothing
+    assert B.pick_trades(j, cfg, 4)[0] == []                       # without --redo nothing is picked
+    assert [t["id"] for t in B.pick_trades(j, cfg, 4, redo=True)[0]] == ["t4", "t3", "t1"]
+    assert B.redoable_ids(j) == {"t1", "t3", "t4"}                # t3 too: OpenAI's round 1 is still a non-answer
     ok = {"openai": Stub("openai", "ENTER", marker="O"), "claude": Stub("claude", "ENTER", marker="C")}
-    run(B.run(cfg, "live", 4, tmp_path / "o", dry_run=True, client=FakeOanda(), journal=j, providers=ok, redo=True))
-    assert q("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id IN ('t1','t4') AND action='ENTER'")[0][0] == 0
-    run(B.run(cfg, "live", 4, tmp_path / "o", client=FakeOanda(), journal=j, providers=ok, redo=True))
+    run(B.run(cfg, "live", 4, tmp_path / "o", dry_run=True, client=FakeOanda(POISON), journal=j, providers=ok, redo=True))
+    assert q("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id IN ('t1','t4') AND action='ENTER'")[0][0] == 0   # dry run changes nothing
+    assert not ok["openai"].seen and not ok["claude"].seen
+    run(B.run(cfg, "live", 4, tmp_path / "o", client=FakeOanda(POISON), journal=j, providers=ok, redo=True))
     for tid in ("t1", "t4"):
-        acts = {r[0] for r in q("SELECT action FROM dyn_reviews WHERE candidate_id=? AND round=1", tid)}
-        assert acts == {"ENTER"}
+        assert {r[0] for r in q("SELECT action FROM dyn_reviews WHERE candidate_id=? AND round=1", tid)} == {"ENTER"}
         assert q("SELECT source FROM dyn_candidates WHERE candidate_id=?", tid) == [("backfill",)]
+    # t3: Claude's WAIT is kept and not paid twice; OpenAI is asked again; both valid, so the exchange ran
+    assert q("SELECT action FROM dyn_reviews WHERE candidate_id='t3' AND provider='claude' AND round=1") == [("WAIT",)]
+    assert q("SELECT action FROM dyn_reviews WHERE candidate_id='t3' AND provider='openai' AND round=1") == [("ENTER",)]
+    assert len(ok["claude"].seen) == 2 and len(ok["openai"].seen) == 3            # t1,t4 for Claude; t1,t3,t4 for OpenAI
+    assert q("SELECT exchange_status FROM dyn_candidates WHERE candidate_id='t3'") == [("done",)]
+    assert q("SELECT COUNT(*) FROM dyn_reviews WHERE candidate_id='t3' AND round=2")[0][0] == 2
     assert q("SELECT * FROM dyn_reviews WHERE candidate_id='t2' ORDER BY provider, round") == live_before
-    assert q("SELECT * FROM dyn_reviews WHERE candidate_id='t3' ORDER BY provider, round") == t3_before
-    assert q("SELECT source FROM dyn_candidates WHERE candidate_id='t2'") == [("live",)]
-    # redo never touches a live row even when its reviews are all non-answers
     assert "t2" not in B.redoable_ids(j) and B.clear_backfill(j, ["t2"]) == 0
     assert q("SELECT COUNT(*) FROM dyn_candidates WHERE candidate_id='t2'")[0][0] == 1
+
+
+def test_redo_with_openai_enter_and_claude_abstain_calls_only_claude_then_runs_the_exchange(tmp_path):
+    first = {"openai": Stub("openai", "ENTER", marker="O"), "claude": Stub("claude", "ABSTAIN")}
+    code, j, cl, _ = go(tmp_path, n=1, stubs=first)
+    cid = "t4"
+    q = lambda sql, *a: [tuple(r) for r in j.db.execute(sql, a).fetchall()]
+    assert q("SELECT exchange_status FROM dyn_candidates WHERE candidate_id=?", cid)[0][0].startswith("skipped")
+    # stale round-2 rows and exchange fields from an earlier run must go too
+    j.db.execute("INSERT INTO dyn_reviews(candidate_id,provider,model,prompt_version,packet_hash,action,called,round) "
+                 "VALUES(?,?,?,?,?,?,?,?)", (cid, "openai", "x", "dyn-x1", "h", "CANCEL", 1, 2))
+    j.db.commit()
+    ok = {"openai": Stub("openai", "ENTER", marker="O"), "claude": Stub("claude", "ENTER", marker="C")}
+    stored = B.stored_answers(j, cid)
+    assert set(stored) == {"openai"} and stored["openai"]["action"] == "ENTER" and stored["openai"]["evidence"] == "O evidence"
+    code = run(B.run(bf_cfg(), "live", 1, tmp_path / "o", client=FakeOanda(POISON), journal=j, providers=ok, redo=True))
+    assert code == 0
+    assert ok["openai"].seen == [] and len(ok["claude"].seen) == 1                 # OpenAI round 1 not re-called
+    assert len(ok["openai"].seen2) == 1 and len(ok["claude"].seen2) == 1           # the exchange ran, both saw the other's answer
+    assert ok["claude"].seen2[0][2]["decisive_evidence"] == "O evidence"
+    assert q("SELECT action FROM dyn_reviews WHERE candidate_id=? AND round=1 ORDER BY provider", cid) == [("ENTER",), ("ENTER",)]
+    assert q("SELECT action, model FROM dyn_reviews WHERE candidate_id=? AND round=2 ORDER BY provider", cid) == [("ENTER", "stub"), ("ENTER", "stub")]
+    assert q("SELECT exchange_status, exchange_decision FROM dyn_candidates WHERE candidate_id=?", cid) == [("done", "enter")]
+
+
+def test_backfill_report_and_table_show_abstain_reasons(tmp_path):
+    stubs = {"openai": Stub("openai", "ENTER", marker="O"), "claude": Stub("claude", "ENTER", marker="C")}
+
+    async def boom(packet_json, candidate_id):
+        return PR.abstain("HTTP 400: " + "x" * 400)
+    stubs["claude"].review = boom
+    out = tmp_path / "rep"
+    code, j, cl, _ = go(tmp_path, n=2, stubs=stubs, out=out)
+    md = (out / "report.md").read_text()
+    assert "Why claude did not answer" in md and "| ABSTAIN | HTTP 400: x" in md and "| 2 |" in md
+    assert max(len(l) for l in md.splitlines() if "HTTP 400" in l and l.startswith("| ABSTAIN")) < 200
+    assert "ABSTAIN: HTTP 400" in md                                                # the per-trade table, short form
+    ab = S.abstain_reasons(j, source="backfill")
+    assert ab["claude"][0]["count"] == 2 and len(ab["claude"][0]["reason"]) <= 160 and S.abstain_reasons(j) == {}
+    assert S.scorecard(j, bf_cfg(), "live")["retrospective"]["abstain"] == ab
 
 
 def test_more_than_fifty_is_refused_before_anything_is_fetched(tmp_path, capsys):

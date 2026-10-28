@@ -92,6 +92,38 @@ def review_schema(strict: bool = False, exchange: bool = False) -> dict:
     return {"type": "object", "additionalProperties": False, "properties": props, "required": req}
 
 
+def _anyof(node):
+    """Anthropic's schema validator rejects enum values next to a type list ({"type": ["string","null"], "enum": [..., null]}).
+    Rewrite every node that has a type list as anyOf branches, the enum (if any) going on the non-null branch."""
+    if isinstance(node, list):
+        return [_anyof(x) for x in node]
+    if not isinstance(node, dict):
+        return node
+    node = {k: _anyof(v) for k, v in node.items()}
+    if isinstance(node.get("type"), list):
+        rest = {k: v for k, v in node.items() if k not in ("type", "enum")}
+        enum = node.get("enum")
+        branches = []
+        for t in node["type"]:
+            if t == "null":
+                branches.append({"type": "null"})
+            else:
+                b = {"type": t}
+                if enum is not None:
+                    b["enum"] = [e for e in enum if e is not None]
+                branches.append(b)
+        # null branch last, as in the documented shape
+        branches.sort(key=lambda b: b["type"] == "null")
+        return {**rest, "anyOf": branches}
+    return node
+
+
+def review_schema_claude(exchange: bool = False) -> dict:
+    """The schema sent to Anthropic: review_schema(strict=True) with nullable enums as anyOf (a type list next to an enum is
+    a 400 there). OpenAI keeps review_schema(True, ...) byte for byte."""
+    return _anyof(review_schema(True, exchange))
+
+
 def validate(obj, candidate_id: str) -> tuple[dict | None, str | None]:
     """(clean answer, None) or (None, reason). Over-long text is cut, not rejected: it changes no decision."""
     if not isinstance(obj, dict):
@@ -216,7 +248,7 @@ class Provider:
             async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout_s), transport=self.transport) as cl:
                 r = await cl.post(url, headers=headers, json=body)
             if r.status_code != 200:
-                return abstain(self.clean(f"HTTP {r.status_code}: {r.text[:160]}"), latency_ms=(time.monotonic() - t0) * 1000)
+                return abstain(self.clean(f"HTTP {r.status_code}: {r.text[:600]}"), latency_ms=(time.monotonic() - t0) * 1000)
             try:
                 payload = r.json()
             except ValueError:
@@ -244,7 +276,7 @@ class ClaudeProvider(Provider):
         headers = {"x-api-key": self.key(), "anthropic-version": "2023-06-01", "content-type": "application/json"}
         body = {"model": self.model, "max_tokens": 1024, "system": system,
                 "messages": [{"role": "user", "content": user}],
-                "output_config": {"format": {"type": "json_schema", "schema": review_schema(True, exchange)}}}
+                "output_config": {"format": {"type": "json_schema", "schema": review_schema_claude(exchange)}}}
         return self.URL, headers, body
 
     def parse(self, body):

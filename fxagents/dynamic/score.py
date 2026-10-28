@@ -133,6 +133,47 @@ def spend(journal, version: str = PROMPT_VERSION, source: str = "live") -> dict:
     return out
 
 
+REASON_CUT = 160
+
+
+def abstain_reasons(journal, version: str = PROMPT_VERSION, source: str = "live", ex_version: str = EXCHANGE_PROMPT_VERSION) -> dict:
+    """Why reviews were not answers: provider -> [{action, reason, count}] for ABSTAIN / NOT_REVIEWED rows of both rounds (one
+    source only), error text cut to ~160 chars, most frequent first."""
+    try:
+        if "source" in _cols(journal, "dyn_candidates"):
+            back = "candidate_id IN (SELECT candidate_id FROM dyn_candidates WHERE source='backfill')"
+            sf = back if source == "backfill" else "NOT " + back
+        else:
+            sf = "1=0" if source == "backfill" else "1=1"
+        rows = journal.db.execute(
+            "SELECT provider, action, error FROM dyn_reviews WHERE prompt_version IN (?,?) AND action IN ('ABSTAIN','NOT_REVIEWED') "
+            f"AND {sf}", (version, ex_version)).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    cnt: dict[tuple, int] = {}
+    for r in rows:
+        k = (r["provider"], r["action"], short_reason(r["error"]))
+        cnt[k] = cnt.get(k, 0) + 1
+    out: dict[str, list] = {}
+    for (p, a, why), n in sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0])):
+        out.setdefault(p, []).append({"action": a, "reason": why, "count": n})
+    return out
+
+
+def short_reason(err, n: int = REASON_CUT) -> str:
+    e = " ".join(str(err or "no reason recorded").split())
+    return e if len(e) <= n else e[: n - 1] + "…"
+
+
+def reasons_md(ab: dict | None) -> list[str]:
+    L = []
+    for p, rs in (ab or {}).items():
+        L += [f"Why {p} did not answer (ABSTAIN / NOT_REVIEWED, both rounds):", "", "| action | reason | count |", "|---|---|---|"]
+        L += [f"| {r['action']} | {r['reason'].replace('|', '/')} | {r['count']} |" for r in rs]
+        L.append("")
+    return L
+
+
 def merge_spend(spends: list[dict]) -> dict:
     out: dict[str, dict] = {}
     for sp in spends:
@@ -421,7 +462,7 @@ def scorecard(journal, cfg, book: str, version: str = PROMPT_VERSION, draws: int
     rows = collect(journal, cfg, book, version)
     out = score(rows, draws)
     out.update(book=book, prompt_version=version, spend=spend(journal, version),
-               spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION))
+               spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION), abstain=abstain_reasons(journal, version))
     out["retrospective"] = retro_scorecard(journal, cfg, book, version, draws)       # separate: never mixed into the above
     return out
 
@@ -431,7 +472,8 @@ def retro_scorecard(journal, cfg, book: str, version: str = PROMPT_VERSION, draw
     rows = collect(journal, cfg, book, version, source="backfill")
     out = score(rows, draws, retro=True)
     out.update(book=book, title=RETRO_TITLE, spend=spend(journal, version, "backfill"),
-               spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION, "backfill"), reviewed_candidates=backfill_count(journal))
+               spend_r2=spend(journal, EXCHANGE_PROMPT_VERSION, "backfill"), abstain=abstain_reasons(journal, version, "backfill"),
+               reviewed_candidates=backfill_count(journal))
     return out
 
 
@@ -572,7 +614,7 @@ def _spend_tables(sc: dict) -> list[str]:
                 L.append(f"| {p} | {d['model']} | {d['reviews']} | {d['calls']} | {d['ENTER']} | {d['WAIT']} | {d['CANCEL']} | {d['ABSTAIN']} | "
                          f"{d['NOT_REVIEWED']} | {_spend_cost(d)} |")
             L.append("")
-    return L
+    return L + reasons_md(sc.get("abstain"))
 
 
 def retro_md(sc: dict | None, heading: str = "##") -> list[str]:
@@ -585,7 +627,7 @@ def retro_md(sc: dict | None, heading: str = "##") -> list[str]:
           "decision rule.** Latency is not meaningful (calls were not made at the fill), so no latency or 30-second share is shown.", "",
           f"{sc['reviewed_candidates']} past trade(s) reviewed, {sc['candidates']} closed and scored.", ""]
     if not sc["candidates"]:
-        return L + ["Nothing to score yet.", ""]
+        return L + ["Nothing to score yet.", ""] + reasons_md(sc.get("abstain"))
     L += arm_table(sc) + ["", "Paired difference to A (skipping a trade removes its R; the API cost is subtracted):", ""] + diff_table(sc) + [""]
     if sc.get("exchange"):
         L += exchange_md(sc["exchange"], heading + "#")

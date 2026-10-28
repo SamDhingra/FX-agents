@@ -31,12 +31,16 @@ class ReviewRunner:
         """The trading day whose call count this review uses: the entry's own day (the review runs right then)."""
         return trading_day(pd.Timestamp(packet["candidate"]["entry_time_ny"], tz=self.cfg["timezone"]))
 
-    async def _review_all(self, cid: str, packet: dict) -> None:
+    async def _review_all(self, cid: str, packet: dict, prior: dict | None = None) -> None:
+        """`prior`: provider -> a valid round-1 result already stored for this packet (backfill --redo); that provider is not
+        called again and its stored row stays as it is."""
         try:
             text = canonical(packet)               # one text, byte-identical for every provider and both rounds
             t_start = time.monotonic()             # the hand-over: round 1 starts, the exchange clock starts
             names = list(self.providers)
-            r1 = await asyncio.gather(*[self._one(n, self.providers[n], cid, packet, text) for n in names])
+            prior = prior or {}
+            r1 = await asyncio.gather(*[(self._done(prior[n]) if n in prior else self._one(n, self.providers[n], cid, packet, text))
+                                        for n in names])
             first = dict(zip(names, r1))
             await self._exchange(cid, packet, text, first, t_start)
             store.set_status(self.ctx.journal, cid, "reviewed")
@@ -44,6 +48,10 @@ class ReviewRunner:
             raise
         except Exception as e:  # noqa: BLE001
             self.log.warning("dynamic review %s: %r", cid, e)
+
+    @staticmethod
+    async def _done(res: dict) -> dict:
+        return res
 
     async def _exchange(self, cid: str, packet: dict, text: str, first: dict, t_start: float) -> None:
         """Milestone 1b: when both round-1 answers are valid, each reviewer sees the other's round-1 answer once and answers
