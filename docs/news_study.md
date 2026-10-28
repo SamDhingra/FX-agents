@@ -24,3 +24,10 @@ Step 1 (explore) pointed to one consistent pattern: the first 30 minutes after a
 (pooled +0.89 ATR15 net, 10 of 12 release × instrument pairs). Registered as **news fade** (research/news_fade/), with Sam's choice
 of a size-matched no-release control as a required gate; `./fx.sh newsfade test` judges it once on 2023-11-17 → 2026-10-01.
 Backlog: indexes drifting up in the hour before CPI (+0.5 ATR15 vs −0.15 on no-release days) — too few CPI days for a test now.
+
+## Outcome (Oct 28 2026): closed
+- Registered news fade on 2023-11-17 → 2026-10-01: +0.16 ATR15 (−0.42..+0.77), halves +0.57 / −0.26, vs size-matched control
+  +0.05 → fail. Its 4 × ATR15 stop fired on 40% of trades (sized from pre-release volatility — a design mistake).
+- No-stop variant (addendum), judged once on 2016–2020: +0.10 ATR15 (−0.33..+0.55), −0.09 at 2× costs, vs control +0.51
+  (−0.05..+1.08) → fail. Price-only fading of the first 30 minutes after these releases does not pay after costs.
+- Backlog only: indexes drifting up in the hour before CPI (step 1; too few CPI days for a test now).

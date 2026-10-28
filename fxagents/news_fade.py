@@ -173,8 +173,9 @@ def run(period: str, hist: Path, out: Path, syms=SYMS, nostop: bool = False) -> 
          *(["**No-stop variant** (addendum of Oct 28 2026, after the registered rule failed on 2023–2026): exit only at T+150 / "
             "15:50, no stop. Its only test, judged once; weaker evidence than a confirmation.", ""] if nostop else []),
          "Registered Oct 28 2026 before this data was read (research/news_fade/PREREGISTRATION_2026-10-28.md). At T+30 after a "
-         "FOMC / CPI / NFP / PPI release, trade against the move from T−1 to T+30; exit at T+150 or 15:50 NY (first), emergency "
-         "stop 4 × ATR15, real bid/ask fills. Results in ATR15 net of the spread (R = 4 × ATR15).", "",
+         "FOMC / CPI / NFP / PPI release, trade against the move from T−1 to T+30; exit at T+150 or 15:50 NY (first), "
+         + ("no stop" if nostop else "emergency stop 4 × ATR15") + ", real bid/ask fills. Results in ATR15 net of the spread"
+         + ("." if nostop else " (R = 4 × ATR15).") , "",
          "| | trades | mean net ATR15 (95% range) | in R | halves | 2× costs | size-matched control (trades) | release − control (95% range) |",
          "|---|---|---|---|---|---|---|---|",
          f"| all releases | {len(rel)} | {fmt(main)} | {'—' if nostop else f'{main[0] / STOP_ATR:+.3f}'} | {halves[0]:+.2f} / {halves[1]:+.2f} | {two_x:+.2f} | "
