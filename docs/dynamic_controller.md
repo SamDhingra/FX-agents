@@ -151,3 +151,18 @@ repo's `.env` (like `weekly`), not `exec` (the new code needs the rebuilt image)
 - **`./fx.sh dynprobe`** (= `python -m fxagents.dynamic.probe`): one round-1 review per configured provider on a synthetic packet (`probe-<timestamp>`) through the real provider code; prints model, action or ABSTAIN + full error, latency, tokens, cost; stores nothing; exit 0 only if every provider answered.
 - **`--redo`** now redoes a backfill trade when ANY provider's round 1 is ABSTAIN / NOT_REVIEWED: valid round-1 rows (same packet hash) are kept and not paid for again, the other round-1 rows, all round-2 rows and the exchange fields are deleted, the missing round 1 is re-run, then the exchange. `source='live'` rows are never touched.
 - Reports and the dashboard list ABSTAIN / NOT_REVIEWED reasons per provider with counts (text cut to ~160 chars); the backfill per-trade table shows a short reason next to ABSTAIN.
+
+## Exchange off; reasons report; post-mortems of losers (Oct 27 2026)
+
+- **Exchange switched off** (`dynamic.exchange: false`): on 20 past trades neither reviewer changed its answer once in round 2, for over half the
+  review cost. Round 1 (sealed, both reviewers) still runs live and in backfill; the exchange status reads `skipped: exchange switched off`. Set
+  `true` to bring it back (same dyn-x1 prompt). E arms then have no data.
+- **`./fx.sh dynexplain [book]`** (`python -m fxagents.dynamic.explain`): journal only, no API calls. Per reviewed trade, each reviewer's full
+  answer (action, what a WAIT waits for and when it gives up, decisive / conflicting evidence, missing data) beside the outcome; a summary per
+  reviewer (ENTER / WAIT / CANCEL counts, R of each group, WAIT triggers with counts, losers it said ENTER on). → `data/year_test/dynamic_explain/report.md`.
+- **`./fx.sh dynpostmortem [book] [n=10] [dry]`** (`python -m fxagents.dynamic.postmortem`, prompt `pm-v1`): for reviewed losing trades with a stored
+  packet, each reviewer gets the packet, its own entry review and what happened (exit, R, mfe/mae, hold, 15m mid candles from entry to exit + 30 min,
+  OANDA read-only) and returns why it lost, whether a warning sign was in the packet at entry (with the numbers), a verdict on the entry judged on
+  the packet alone, ONE alternative from a fixed menu and ONE testable rule using only information available at decision time. Table
+  `dyn_postmortems`; failed answers are stored with the error and retried next run. n capped at 50. **Hindsight: hypotheses only** — a rule from here
+  goes through the normal research gates on data it was not drawn from before it can touch trading.

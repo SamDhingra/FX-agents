@@ -1048,6 +1048,16 @@ def test_dashboard_story_and_ask_show_round_two(tmp_path):
 
 def test_config_has_the_exchange_deadline():
     assert CFG["dynamic"]["exchange_deadline_s"] == 45
+    assert CFG["dynamic"]["exchange"] is False                     # Oct 27 2026: switched off
+
+
+def test_exchange_switched_off_runs_round_one_only(tmp_path):
+    o, c = Stub("openai", "ENTER"), Stub("claude", "WAIT")
+    ctx, ag = x_rig(tmp_path, o, c, exchange=False)
+    drain_submit(ag)
+    assert len(o.seen) == 1 and len(c.seen) == 1 and o.seen2 == [] and c.seen2 == []
+    assert reviews(ctx.journal, 2) == []
+    assert cand(ctx.journal)["exchange_status"].startswith("skipped: exchange switched off")
 
 
 def test_changed_is_computed_locally_and_the_models_report_is_kept_apart(tmp_path):

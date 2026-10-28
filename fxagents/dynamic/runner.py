@@ -58,6 +58,9 @@ class ReviewRunner:
         again, concurrently and sealed from the other's round 2. Records the exchange status, latency and decision."""
         j = self.ctx.journal
         try:
+            if not (self.cfg.get("dynamic") or {}).get("exchange", True):       # Oct 27 2026: switched off (no mind-changes)
+                store.set_exchange(j, cid, "skipped: exchange switched off (dynamic.exchange: false)")
+                return
             if len(self.providers) < 2:
                 have = ", ".join(self.providers) or "none"
                 store.set_exchange(j, cid, f"skipped: needs both reviewers (configured: {have})")

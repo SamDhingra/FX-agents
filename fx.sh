@@ -348,6 +348,21 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynbackfill-build.log 2>&1 || { echo "build failed — see logs/dynbackfill-build.log"; exit 1; }
              $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" $(for w_ in "${@:4}"; do case "$w_" in dry|--dry-run) echo --dry-run;; redo|--redo) echo --redo;; esac; done) </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dynexplain) # the reviewers' reasons in full, trade by trade (action, what a WAIT was waiting for, evidence for/against, missing
+             # data) next to what the trade did, plus a WAIT summary and any post-mortems. Journal only: no API calls, no network.
+             #   ./fx.sh dynexplain [book=live]  → data/year_test/dynamic_explain/report.md
+             mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynexplain-build.log 2>&1 || { echo "build failed — see logs/dynexplain-build.log"; exit 1; }
+             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.explain --book "${2:-live}" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dynpostmortem) # both reviewers look back at the book's reviewed LOSING trades (packet + their entry review + the 15m path after
+             # entry from OANDA) and say why it lost, whether it was visible at entry, and ONE testable alternative rule. Hindsight:
+             # hypotheses for the research loop, never evidence. Needs OANDA + provider keys from .env. n capped at 50 (~$0.03/trade).
+             #   ./fx.sh dynpostmortem [book=live] [n=10] [dry]  → data/year_test/dynamic_postmortem/report.md
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynpostmortem-build.log 2>&1 || { echo "build failed — see logs/dynpostmortem-build.log"; exit 1; }
+             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.postmortem --book "${2:-live}" --last "${3:-10}" $(for w_ in "${@:4}"; do case "$w_" in dry|--dry-run) echo --dry-run;; esac; done) </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   dynprobe)  # cheap live probe of the shadow review providers: ONE round-1 review each (Claude + OpenAI, real code path) on a small
              # synthetic packet ("probe-<timestamp>"); prints model, action or ABSTAIN + the full error, latency, tokens, cost.
              # Stores nothing. Exit 0 only if every configured provider answered ENTER/WAIT/CANCEL. Needs the keys from .env.
@@ -454,7 +469,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [dry] | dynprobe | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

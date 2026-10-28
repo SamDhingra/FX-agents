@@ -268,6 +268,37 @@ class Provider:
                            latency_ms=(time.monotonic() - t0) * 1000)
 
 
+    # ── a general structured question (Oct 27 2026, post-mortems): same key handling, accounting and never-raise rule ──
+    def request_json(self, system: str, user: str, schema: dict, name: str, max_tokens: int) -> tuple[str, dict, dict]:
+        raise NotImplementedError
+
+    async def ask_json(self, system: str, user: str, schema: dict, name: str = "answer", max_tokens: int = 3000,
+                       timeout_s: float | None = None) -> dict:
+        """One structured call with any schema (no review validation). Returns {obj, error, tokens_in, tokens_out,
+        cost_usd, latency_ms}; obj is None when error is set. The schema must suit both providers' strict modes: every
+        field required, additionalProperties false, no length/range keywords, enums never combined with a type list."""
+        out = {"obj": None, "error": None, "tokens_in": None, "tokens_out": None, "cost_usd": None, "latency_ms": None}
+        if not self.available():
+            return {**out, "error": f"no {self.env_key} in the environment"}
+        t0 = time.monotonic()
+        try:
+            url, headers, body = self.request_json(system, user, schema, name, max_tokens)
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_s or max(self.timeout_s, 60.0)), transport=self.transport) as cl:
+                r = await cl.post(url, headers=headers, json=body)
+            out["latency_ms"] = (time.monotonic() - t0) * 1000
+            if r.status_code != 200:
+                return {**out, "error": self.clean(f"HTTP {r.status_code}: {r.text[:600]}")}
+            obj, tin, tout, err = self.parse(r.json())
+            out.update(tokens_in=tin, tokens_out=tout, cost_usd=self.cost(tin, tout))
+            if err:
+                return {**out, "error": err}
+            if not isinstance(obj, dict):
+                return {**out, "error": "invalid: answer is not an object"}
+            return {**out, "obj": obj}
+        except Exception as e:  # noqa: BLE001 — never raises
+            return {**out, "error": self.clean(f"{type(e).__name__}: {str(e)[:200]}"), "latency_ms": (time.monotonic() - t0) * 1000}
+
+
 class ClaudeProvider(Provider):
     name, env_key = "claude", "ANTHROPIC_API_KEY"
     URL = "https://api.anthropic.com/v1/messages"
@@ -277,6 +308,12 @@ class ClaudeProvider(Provider):
         body = {"model": self.model, "max_tokens": 2048, "system": system,
                 "messages": [{"role": "user", "content": user}],
                 "output_config": {"format": {"type": "json_schema", "schema": review_schema_claude(exchange)}}}
+        return self.URL, headers, body
+
+    def request_json(self, system, user, schema, name, max_tokens):
+        headers = {"x-api-key": self.key(), "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        body = {"model": self.model, "max_tokens": int(max_tokens), "system": system, "messages": [{"role": "user", "content": user}],
+                "output_config": {"format": {"type": "json_schema", "schema": schema}}}
         return self.URL, headers, body
 
     def parse(self, body):
@@ -306,6 +343,13 @@ class OpenAIProvider(Provider):
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": "review", "strict": True, "schema": review_schema(True, exchange)}}}
+        return self.URL, headers, body
+
+    def request_json(self, system, user, schema, name, max_tokens):
+        headers = {"Authorization": "Bearer " + self.key(), "content-type": "application/json"}
+        body = {"model": self.model, "max_completion_tokens": int(max_tokens),
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "response_format": {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}}}
         return self.URL, headers, body
 
     def parse(self, body):
