@@ -185,7 +185,7 @@ def test_claude_and_openai_parse_valid_replies_and_price_the_tokens(monkeypatch)
     assert "tools" not in body and "tool_choice" not in body and "betas" not in body and "anthropic-beta" not in hd
     assert body["output_config"]["format"]["type"] == "json_schema" and set(body["output_config"]) == {"format"}
     assert_claude_schema(body["output_config"]["format"]["schema"])
-    assert body["messages"][-1]["role"] == "user" and body["max_tokens"] == 1024
+    assert body["messages"][-1]["role"] == "user" and body["max_tokens"] == 2048
     assert body["system"] == PR.SYSTEM_PROMPT and "PROMPT" not in body["messages"][0]["content"]
     url, hd, body = seen["openai"]
     assert str(url) == "https://api.openai.com/v1/chat/completions" and hd["authorization"] == "Bearer sk-oai-SECRET"

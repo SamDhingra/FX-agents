@@ -274,7 +274,7 @@ class ClaudeProvider(Provider):
 
     def request(self, system, user, exchange=False):
         headers = {"x-api-key": self.key(), "anthropic-version": "2023-06-01", "content-type": "application/json"}
-        body = {"model": self.model, "max_tokens": 1024, "system": system,
+        body = {"model": self.model, "max_tokens": 2048, "system": system,
                 "messages": [{"role": "user", "content": user}],
                 "output_config": {"format": {"type": "json_schema", "schema": review_schema_claude(exchange)}}}
         return self.URL, headers, body
