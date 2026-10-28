@@ -232,6 +232,8 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
             return done(mkt, "max_hold", j)
         # 2b) protection before the first target (exit study; all off by default)
         if step == 0:
+            if m.inval_exit and an is not None and an["inval"][j]:
+                return done(mkt, "m15_invalidation", j)
             if not early_done and ((m.early_partial_r > 0 and mfe >= m.early_partial_r)
                                    or (m.early_partial_pts > 0 and mfe * R >= m.early_partial_pts)):
                 early_done = True

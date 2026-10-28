@@ -55,6 +55,9 @@ class Mgmt:
     an_break: bool = False            # a closed 5m candle closes beyond the last confirmed 5m swing low (longs) / high
     an_stall_min: float = 0.0         # no new best price for this many minutes …
     an_stall_max_r: float = 0.5       # … while the trade is below this many R → out
+    # M15 timing test (Oct 28 2026; off by default = today's live rules): before the first target, out at market at the
+    # minute an["inval"][j] is true (fxagents/m15_timing.py builds it per trade)
+    inval_exit: bool = False
 
     @classmethod
     def from_cfg(cls, cfg, rr: float | None = None, bar_minutes: int = 5) -> "Mgmt":

@@ -386,6 +386,13 @@ case "${1:-help}" in
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/roomcheck-build.log 2>&1 || { echo "build failed — see logs/roomcheck-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.room_check --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  m15timing) # M15 timing (registered Oct 28 2026, research/m15_timing/): A late entry on the M15 turn, B early exit on M15
+             # invalidation, each trade replayed by the playbook's engine; paired vs as recorded, with random-timing controls.
+             # ./fx.sh m15timing [seen|vault] → data/year_test/m15_timing_<period>/report.md (vault only for a check that passed on seen)
+             need_env; mkdir -p logs; p_="${2:-seen}"
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/m15timing-build.log 2>&1 || { echo "build failed — see logs/m15timing-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.m15_timing --period "$p_" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
              # within 0.5 ATR 1H). Pre-registered; seen data only → data/year_test/liquidity/report.md
@@ -478,7 +485,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
