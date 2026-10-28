@@ -341,10 +341,10 @@ case "${1:-help}" in
              # trades that were never reviewed, rebuilt as of their entry minute from OANDA candles (needs OANDA_API_TOKEN and the
              # provider keys from .env, and network, like liqtoday/weekly). Stored as source='backfill', scored apart from the live
              # scorecard. Prints the trades and a cost estimate first. n is capped at 50.
-             #   ./fx.sh dynbackfill [book=live] [n=10]  → data/year_test/dynamic_backfill/report.md  (add --dry-run as a 4th word to only estimate)
+             #   ./fx.sh dynbackfill [book=live] [n=10]  → data/year_test/dynamic_backfill/report.md  (add dry as a 4th word to only estimate)
              need_env; mkdir -p logs
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynbackfill-build.log 2>&1 || { echo "build failed — see logs/dynbackfill-build.log"; exit 1; }
-             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" ${4:+"$4"} </dev/null || exit $?
+             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" $([[ "${4:-}" == dry || "${4:-}" == --dry-run ]] && echo --dry-run) </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   round3g)   # round-3, Gemini's four what-if checks (research/round3/gemini, unchanged) on the playbook's 3m/5m entries,
              # stricter judge. ./fx.sh round3g [seen|vault] → data/year_test/round3_gemini_<period>/report.md
