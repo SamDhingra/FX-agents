@@ -1,0 +1,28 @@
+{
+ "pass": false,
+ "first_four": false,
+ "gates": {
+  "\u2265 100 trades": true,
+  "95% range above 0": false,
+  "both halves > 0": false,
+  "2\u00d7 costs > 0": true,
+  "beats the size-matched control": false
+ },
+ "n": 361,
+ "mean": [
+  0.16151241315352222,
+  -0.42095895926160243,
+  0.7747260473238518
+ ],
+ "halves": [
+  0.5710829809119086,
+  -0.26425586067440504
+ ],
+ "two_x": 0.091764780564639,
+ "control": 0.11498460857174886,
+ "vs_control": [
+  0.04652780458177336,
+  -0.6367394021833821,
+  0.7470359744317634
+ ]
+}
