@@ -1,0 +1,140 @@
+{
+ "room_swing": {
+  "check": "room_swing",
+  "period": "seen",
+  "n": 10724,
+  "coverage": 1.0,
+  "flagged": 6519,
+  "flagged_avg": -0.0959,
+  "kept_avg": -0.0928,
+  "all_avg": -0.0946,
+  "halves": [
+   -0.0026,
+   0.0108
+  ],
+  "half_counts": [
+   [
+    3396,
+    2236
+   ],
+   [
+    3123,
+    1969
+   ]
+  ],
+  "split": "2023-11-17",
+  "diff": 0.0031,
+  "diff_ci": [
+   -0.041,
+   0.0479
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.0458,
+  "pass": false,
+  "why": "gates not met"
+ },
+ "room_last2": {
+  "check": "room_last2",
+  "period": "seen",
+  "n": 10724,
+  "coverage": 1.0,
+  "flagged": 6468,
+  "flagged_avg": -0.108,
+  "kept_avg": -0.0744,
+  "all_avg": -0.0946,
+  "halves": [
+   0.0242,
+   0.0497
+  ],
+  "half_counts": [
+   [
+    3288,
+    2344
+   ],
+   [
+    3180,
+    1912
+   ]
+  ],
+  "split": "2023-11-17",
+  "diff": 0.0336,
+  "diff_ci": [
+   -0.0064,
+   0.0733
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.0253,
+  "pass": false,
+  "why": "gates not met"
+ },
+ "info": {
+  "room_swing_x0.75": {
+   "check": "room_swing_x0.75",
+   "period": "seen",
+   "n": 10724,
+   "coverage": 1.0,
+   "flagged": 5892,
+   "flagged_avg": -0.0875,
+   "kept_avg": -0.1033,
+   "all_avg": -0.0946,
+   "halves": [
+    -0.013,
+    -0.0176
+   ],
+   "half_counts": [
+    [
+     3065,
+     2567
+    ],
+    [
+     2827,
+     2265
+    ]
+   ],
+   "split": "2023-11-17",
+   "diff": -0.0158,
+   "diff_ci": [
+    -0.0582,
+    0.0267
+   ],
+   "boot_valid": 1.0,
+   "strat_p": 0.25577,
+   "pass": false,
+   "why": "gates not met"
+  },
+  "room_swing_x1.5": {
+   "check": "room_swing_x1.5",
+   "period": "seen",
+   "n": 10724,
+   "coverage": 1.0,
+   "flagged": 7144,
+   "flagged_avg": -0.096,
+   "kept_avg": -0.0919,
+   "all_avg": -0.0946,
+   "halves": [
+    -0.0005,
+    0.011
+   ],
+   "half_counts": [
+    [
+     3717,
+     1915
+    ],
+    [
+     3427,
+     1665
+    ]
+   ],
+   "split": "2023-11-17",
+   "diff": 0.0041,
+   "diff_ci": [
+    -0.041,
+    0.0493
+   ],
+   "boot_valid": 1.0,
+   "strat_p": 0.07109,
+   "pass": false,
+   "why": "gates not met"
+  }
+ }
+}
