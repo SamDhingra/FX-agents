@@ -236,11 +236,13 @@ def setup_record(journal, strategy: str, before: pd.Timestamp) -> dict | None:
 
 
 def target_r_of(events: str | None) -> float | None:
-    """The target the position carried, when the journal shows it (the R of its first partial exit)."""
+    """The target R the position was opened with, from its "entry" event (logged there since Oct 28 2026), else None.
+    Never from a partial exit: a partial is only logged when the target was REACHED, so reading it leaked the outcome into
+    the packet (found Oct 28 2026: every loser had target_r null, every winner with a partial had it set)."""
     try:
         for e in json.loads(events or "[]"):
-            if e.get("kind") == "partial" and e.get("r") is not None:
-                return float(e["r"])
+            if e.get("kind") == "entry" and e.get("rr") is not None:
+                return float(e["rr"])
     except (ValueError, TypeError, AttributeError):
         pass
     return None

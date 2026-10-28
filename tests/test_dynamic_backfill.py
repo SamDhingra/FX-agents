@@ -101,7 +101,7 @@ def journal_with_trades(tmp_path, name="j"):
         j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,realized,qty_initial,entry,initial_stop,events) "
                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                      (tid, "XAUUSD", side, "macd_cross:5m@pb-x", "closed", opened, closed, r, r * 100, 100, entry, stop,
-                      json.dumps([{"kind": "partial", "r": 2.0}])))
+                      json.dumps([{"kind": "entry", "rr": 1.5}] + ([{"kind": "partial", "r": 2.0}] if r > 0 else []))))
     j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,entry,initial_stop,events) VALUES('open1','XAUUSD','LONG','x:5m@y','open',"
                  "'2026-10-26T10:00:00-04:00',2650,2648,'[]')")
     j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,entry,initial_stop,events) VALUES('nor','XAUUSD','LONG','x:5m@y','closed',"
@@ -141,7 +141,7 @@ def test_only_data_before_the_entry_minute_reaches_the_packet(tmp_path):
         text = json.dumps(pk)
         assert f"{9001 + i}" not in text and '"spread": 99' not in text        # this trade's own poisoned entry minute was never read
         assert pk["candidate"]["entry_time_ny"] == ts.strftime("%Y-%m-%d %H:%M")
-        if c["m15_forming"]:
+        if c["m15_forming"] and c["m15_forming"]["minutes_in"]:
             assert pd.Timestamp(c["m15_forming"]["start"], tz=TZ) + pd.Timedelta(minutes=c["m15_forming"]["minutes_in"]) == ts
     # nothing at or after an entry was even requested: every window ends at (or before) that trade's entry minute
     ends = {entry_of(t[2]).tz_convert("UTC") for t in TRADES}
@@ -178,7 +178,7 @@ def test_spread_cost_and_bias_come_from_the_data_before_the_entry(tmp_path):
     pk = json.loads(j.db.execute("SELECT packet FROM dyn_candidates WHERE candidate_id='t1'").fetchone()[0])
     assert pk["order"]["spread"] == SPREAD_BEFORE_T1 and pk["order"]["stop_distance"] == 2.0
     assert pk["order"]["cost_r"] == round(SPREAD_BEFORE_T1 / 2.0, 3) and pk["order"]["entry"] == 2650.0 and pk["order"]["stop"] == 2648.0
-    assert pk["order"]["target_r"] == 2.0                                 # from the journal's first partial exit
+    assert pk["order"]["target_r"] == 1.5                                 # from the entry event, never the (outcome-revealing) partial
     pk4 = json.loads(j.db.execute("SELECT packet FROM dyn_candidates WHERE candidate_id='t4'").fetchone()[0])
     assert pk4["candidate"]["side"] == "SHORT" and pk4["order"]["spread"] == SPREAD and pk4["order"]["cost_r"] == round(SPREAD / 2.0, 3)
     b = pk["bias"]
@@ -515,3 +515,18 @@ def test_fx_sh_has_the_command_and_the_docs_mention_it():
     assert "dynbackfill)" in sh and "python -m fxagents.dynamic.backfill --book" in sh and "dynbackfill [book] [n]" in sh
     assert "--redo" in sh and "redo|--redo" in sh
     assert "dynbackfill" in (root / "docs/dynamic_controller.md").read_text()
+
+
+def test_target_r_never_comes_from_a_partial_exit():
+    """Oct 28 2026: a partial is only logged when the target was reached, so it revealed the outcome."""
+    assert B.target_r_of(json.dumps([{"kind": "partial", "r": 2.0}])) is None
+    assert B.target_r_of(json.dumps([{"kind": "entry", "rr": 1.2}, {"kind": "partial", "r": 1.2}])) == 1.2
+    assert B.target_r_of(None) is None
+
+
+def test_packet_says_so_on_an_m15_boundary_and_without_a_target():
+    idx = pd.date_range("2026-10-20 08:00", "2026-10-20 09:59", freq="1min", tz=TZ)
+    m1 = pd.DataFrame({"open": 1.0, "high": 1.1, "low": 0.9, "close": 1.0, "volume": 1.0}, index=idx)
+    f = P.forming_m15(m1, pd.Timestamp("2026-10-20 10:00", tz=TZ), 2)
+    assert f["partial"] is False and f["minutes_in"] == 0 and f["ohlc"] is None and "boundary" in f["note"]
+    assert P.forming_m15(m1.iloc[:0], pd.Timestamp("2026-10-20 10:00", tz=TZ), 2) is None

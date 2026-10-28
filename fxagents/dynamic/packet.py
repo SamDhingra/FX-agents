@@ -76,10 +76,15 @@ def closed_bars(m1: pd.DataFrame, rule: str, ts: pd.Timestamp, n: int) -> pd.Dat
 
 
 def forming_m15(m1: pd.DataFrame, ts: pd.Timestamp, nd: int) -> dict | None:
-    """The 15-minute candle in progress at `ts`, built from the minutes closed so far; None on a 15-minute boundary."""
+    """The 15-minute candle in progress at `ts`, built from the minutes closed so far; None without minute data.
+    On a 15-minute boundary nothing of the new candle has traded: said explicitly (Oct 28 2026 — both reviewers had read the
+    bare null as missing data)."""
     start = ts.floor("15min")
-    if ts == start or m1 is None or not len(m1):
+    if m1 is None or not len(m1):
         return None
+    if ts == start:
+        return {"partial": False, "start": start.strftime("%Y-%m-%d %H:%M"), "minutes_in": 0, "ohlc": None,
+                "note": "entry on a 15-minute boundary: the last candle of m15_closed has just closed; nothing of the next one has traded yet"}
     seg = m1[(m1.index >= start) & (m1.index <= ts - MIN)]
     if not len(seg):
         return None
@@ -142,7 +147,8 @@ def build_packet(*, candidate_id: str, book: str, symbol: str, side: int, strate
                       "entry_time_utc": ts.tz_convert("UTC").strftime("%Y-%m-%d %H:%M"),
                       "entry_time_ny": ts.strftime("%Y-%m-%d %H:%M")},
         "order": {"entry": round(float(entry), nd), "stop": round(float(stop), nd), "stop_distance": round(stop_dist, nd),
-                  "target_r": _num(target_r, 2), "spread": _num(spread, nd + 1), "cost_r": _num(cost_r, 3),
+                  "target_r": _num(target_r, 2),
+                  **({} if target_r is not None else {"target_note": "no fixed target recorded for this entry"}), "spread": _num(spread, nd + 1), "cost_r": _num(cost_r, 3),
                   "tick_size": _num((instrument or {}).get("tick_size")), "price_decimals": nd},
         "bias": {"label": bias.get("label"), "score": _num(bias.get("score"), 3), "d": bias.get("d"), "h4": bias.get("h4"),
                  "h1": bias.get("h1"), "minutes_since_update": since, "h1_minutes": bias.get("h1_minutes"),

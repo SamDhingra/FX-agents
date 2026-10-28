@@ -166,3 +166,13 @@ repo's `.env` (like `weekly`), not `exec` (the new code needs the rebuilt image)
   the packet alone, ONE alternative from a fixed menu and ONE testable rule using only information available at decision time. Table
   `dyn_postmortems`; failed answers are stored with the error and retried next run. n capped at 50. **Hindsight: hypotheses only** — a rule from here
   goes through the normal research gates on data it was not drawn from before it can touch trading.
+
+## Packet fixes (Oct 28 2026, found reading the first reasons report)
+
+- **Backfill outcome leak fixed.** `target_r` for past trades came from the trade's first partial exit, which is only logged when the target was
+  reached: all 10 losers had `target_r` null and the winners with a partial had it set. Now it comes only from the `entry` event's `rr` (logged
+  from today); older trades get null for every trade alike. The 20 backfill reviews made before this fix saw the leak (reviewers said ENTER on 7 of
+  the 10 losers anyway, so it did not visibly help them) and are not used for any decision.
+- **Forming M15 on a boundary.** A 15m-setup entry at :00/:15/:30/:45 had `m15_forming: null`, which both reviewers read as missing data. It now
+  says so: `{partial: false, minutes_in: 0, ohlc: null, note: ...}`. Without a target the order carries `target_note`.
+- Prompt version stays `dyn-v1` (same prompt text and schema); live reviews before Oct 28 (2) used the older packet.

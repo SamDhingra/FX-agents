@@ -551,7 +551,7 @@ class RiskAgent(Agent):
             qty = pos.open_qty
         pos.log(now, "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),
                 bias=gate["mode"], bias_score=gate.get("score"), risk_mult=round(risk_mult, 3),
-                cost_r=round(cost_r, 3), over_cost_cap=over_cap, m15_live=pos.meta.get("m15_live"))
+                cost_r=round(cost_r, 3), over_cost_cap=over_cap, m15_live=pos.meta.get("m15_live"), rr=pos.rr)
         self.state.positions[pos.id] = pos
         self.ctx.journal.add_signal(rec | {"action": "taken", "why": f"qty {qty}, risk ${qty*pos.risk_per_unit*mult:,.0f}, "
                                            f"cost {cost_r:.2f}R" + (f" (over the {cap:.2f}R cap — log only)" if over_cap else "")})
