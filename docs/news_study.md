@@ -18,3 +18,9 @@ releases — by release type and instrument — that would be a niche edge?
 2. **Register** at most a few fixed rules from step 1, then judge them once on 2023-11-17 → 2026-10-01 (usual gates: ≥ 100
    trades, 95% range above 0, both halves, 2× costs, beat a control).
 3. **Confirm** a passer once on 2016–2020. No trading change before the Nov 5 review; the blackout stays as it is meanwhile.
+
+## Step 1 result and step 2 registration (Oct 28 2026)
+Step 1 (explore) pointed to one consistent pattern: the first 30 minutes after a release tend to reverse over the next two hours
+(pooled +0.89 ATR15 net, 10 of 12 release × instrument pairs). Registered as **news fade** (research/news_fade/), with Sam's choice
+of a size-matched no-release control as a required gate; `./fx.sh newsfade test` judges it once on 2023-11-17 → 2026-10-01.
+Backlog: indexes drifting up in the hour before CPI (+0.5 ATR15 vs −0.15 on no-release days) — too few CPI days for a test now.
