@@ -344,9 +344,11 @@ case "${1:-help}" in
              #   ./fx.sh dynbackfill [book=live] [n=10]  → data/year_test/dynamic_backfill/report.md  (add dry as a 4th word to only estimate)
              #   redo (or --redo) also redoes backfilled trades where ANY provider's round 1 is ABSTAIN/NOT_REVIEWED (keeps the valid round-1
              #   answers, deletes the rest + all round 2 of source='backfill' rows, never live ones, then re-runs the exchange); combine: ./fx.sh dynbackfill live 10 redo dry
+             #   fresh (or --fresh) reviews already-backfilled trades again from scratch on a newly built packet (old rows → dyn_archive):
+             #   ./fx.sh dynbackfill live 20 fresh [dry]
              need_env; mkdir -p logs
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dynbackfill-build.log 2>&1 || { echo "build failed — see logs/dynbackfill-build.log"; exit 1; }
-             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" $(for w_ in "${@:4}"; do case "$w_" in dry|--dry-run) echo --dry-run;; redo|--redo) echo --redo;; esac; done) </dev/null || exit $?
+             $DC run --rm --no-deps -T fxagents python -m fxagents.dynamic.backfill --book "${2:-live}" --last "${3:-10}" $(for w_ in "${@:4}"; do case "$w_" in dry|--dry-run) echo --dry-run;; redo|--redo) echo --redo;; fresh|--fresh) echo --fresh;; esac; done) </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   dynexplain) # the reviewers' reasons in full, trade by trade (action, what a WAIT was waiting for, evidence for/against, missing
              # data) next to what the trade did, plus a WAIT summary and any post-mortems. Journal only: no API calls, no network.
@@ -376,6 +378,13 @@ case "${1:-help}" in
              need_env; mkdir -p logs; p_="${2:-seen}"
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/round3g-build.log 2>&1 || { echo "build failed — see logs/round3g-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.round3_gemini --period "$p_" </dev/null
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  roomcheck) # room to the next M15 level (registered Oct 28 2026, research/room/): a trade whose nearest M15 swing on the target side
+             # is closer than its stop distance, on the playbook's 3m/5m entries, stricter judge. ./fx.sh roomcheck [seen|vault]
+             # → data/year_test/room_<period>/report.md (vault only if room_swing passed on seen)
+             need_env; mkdir -p logs; p_="${2:-seen}"
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/roomcheck-build.log 2>&1 || { echo "build failed — see logs/roomcheck-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.room_check --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   liqtest)   # higher-timeframe liquidity checks (fxagents/liquidity.py) on the playbook's 2021→Sep 2026 trades from
              # ./fx.sh pbtest: trap (4H+ level swept on the trade's side in the last hour) and no room (next 4H+ level
@@ -469,7 +478,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

@@ -119,7 +119,36 @@ def clear_backfill(journal, ids) -> int:
     return n
 
 
-def pick_trades(journal, cfg, n: int, redo: bool = False) -> tuple[list[dict], list[str]]:
+def fresh_ids(journal) -> set[str]:
+    """Backfill candidates (source='backfill'), for --fresh: reviewed again from scratch on a newly built packet. Never live rows."""
+    return {r[0] for r in journal.db.execute("SELECT candidate_id FROM dyn_candidates WHERE COALESCE(source,'live')='backfill'")}
+
+
+ARCHIVE_SQL = "CREATE TABLE IF NOT EXISTS dyn_archive(id INTEGER PRIMARY KEY AUTOINCREMENT, archived_at TEXT, why TEXT, tbl TEXT, candidate_id TEXT, row TEXT)"
+
+
+def archive_backfill(journal, ids, why: str, now: str) -> int:
+    """--fresh: copy these backfill trades' candidate row, reviews and post-mortems into dyn_archive (one JSON row each, so
+    nothing is lost), then delete them so the trade is reviewed again. source='backfill' only. Returns trades archived."""
+    journal.db.execute(ARCHIVE_SQL)
+    tables = {r[0] for r in journal.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    n = 0
+    for cid in ids:
+        if not journal.db.execute("SELECT 1 FROM dyn_candidates WHERE candidate_id=? AND COALESCE(source,'live')='backfill'", (cid,)).fetchone():
+            continue
+        for tbl in ("dyn_candidates", "dyn_reviews", "dyn_postmortems"):
+            if tbl not in tables:
+                continue
+            for r in journal.db.execute(f"SELECT * FROM {tbl} WHERE candidate_id=?", (cid,)).fetchall():
+                journal.db.execute("INSERT INTO dyn_archive(archived_at, why, tbl, candidate_id, row) VALUES(?,?,?,?,?)",
+                                   (now, why, tbl, cid, json.dumps(dict(r), default=str)))
+            journal.db.execute(f"DELETE FROM {tbl} WHERE candidate_id=?", (cid,))
+        n += 1
+    journal.db.commit()
+    return n
+
+
+def pick_trades(journal, cfg, n: int, redo: bool = False, fresh: bool = False) -> tuple[list[dict], list[str]]:
     """The last n closed trades with an R result and no review yet, newest close first. With redo, a trade whose backfill
     reviews are all non-answers counts as unreviewed too (it is cleared later, only once it has been rebuilt).
     (trades, notes about rows left out)"""
@@ -131,6 +160,12 @@ def pick_trades(journal, cfg, n: int, redo: bool = False) -> tuple[list[dict], l
         "AND id NOT IN (SELECT candidate_id FROM dyn_candidates)")]
     if redo:
         again = redoable_ids(journal)
+        rows += [dict(r) for r in journal.db.execute(
+            "SELECT id, symbol, side, strategy, opened, closed, entry, initial_stop, r_multiple, events, m15_live FROM trades "
+            "WHERE status='closed' AND r_multiple IS NOT NULL AND closed IS NOT NULL AND id IN (%s)" % ",".join("?" * len(again)),
+            tuple(again))] if again else []
+    if fresh:
+        again = fresh_ids(journal) - {r["id"] for r in rows}
         rows += [dict(r) for r in journal.db.execute(
             "SELECT id, symbol, side, strategy, opened, closed, entry, initial_stop, r_multiple, events, m15_live FROM trades "
             "WHERE status='closed' AND r_multiple IS NOT NULL AND closed IS NOT NULL AND id IN (%s)" % ",".join("?" * len(again)),
@@ -426,7 +461,7 @@ def say(*a) -> None:
 
 
 async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=None, journal=None, providers: dict | None = None,
-              redo: bool = False) -> int:
+              redo: bool = False, fresh: bool = False) -> int:
     """`client` (an OANDA-like object with `req`), `journal` and `providers` can be handed in (tests); otherwise they are made
     from the config and the environment."""
     from . import score
@@ -458,7 +493,7 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
     for x in notes:
         say("NOTE:", x)
 
-    trades, skipped = pick_trades(journal, cfg, n, redo)
+    trades, skipped = pick_trades(journal, cfg, n, redo, fresh)
     notes += skipped
     if not trades:
         say("no closed, unreviewed trade to backfill in book", book)
@@ -511,6 +546,11 @@ async def run(cfg, book: str, n: int, out: Path, dry_run: bool = False, client=N
     if dry_run:
         say("\n--dry-run: nothing was called or stored.")
         return 0
+    if fresh:
+        ids = [it["trade"]["id"] for it in items if it["trade"]["id"] in fresh_ids(journal)]
+        k = archive_backfill(journal, ids, "--fresh: reviewed again on a rebuilt packet", runner.now().isoformat(timespec="seconds"))
+        say(f"--fresh: {k} earlier backfill review(s) moved to dyn_archive (candidate row, reviews, post-mortems) and reviewed again from scratch")
+        redo_ids = [x for x in redo_ids if x not in ids]
     prior = prepare_redo(journal, {it["trade"]["id"]: it["packet"] for it in items if it["trade"]["id"] in redo_ids}, providers) if redo_ids else {}
     say("\nReviewing (same prompts, validation, budget and deadlines as the live gate)...")
     await runner.run([it["packet"] for it in items], prior)
@@ -542,6 +582,8 @@ def main(argv=None) -> int:
     ap.add_argument("--last", type=int, default=10, help=f"how many of the latest unreviewed closed trades (max {MAX_TRADES})")
     ap.add_argument("--dry-run", action="store_true", help="fetch, build the packets, print the trades and the cost estimate, call nothing")
     ap.add_argument("--redo", action="store_true", help="also redo backfilled trades where ANY provider's round 1 is ABSTAIN / NOT_REVIEWED: valid round-1 answers are kept, the rest (and all round 2) deleted and re-run (live rows never)")
+    ap.add_argument("--fresh", action="store_true", help="also review already-backfilled trades again from scratch on a newly built packet: "
+                    "their old candidate row, reviews and post-mortems go to dyn_archive first (live rows never)")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)
@@ -553,7 +595,7 @@ def main(argv=None) -> int:
     if cfg.get("broker") == "oanda":
         from ..reconcile import broker_cfg
         cfg = broker_cfg(cfg)               # paper/live view with OANDA's instrument values (the journal was booked with them)
-    return asyncio.run(run(cfg, a.book, a.last, Path(a.out), a.dry_run, redo=a.redo))
+    return asyncio.run(run(cfg, a.book, a.last, Path(a.out), a.dry_run, redo=a.redo, fresh=a.fresh))
 
 
 if __name__ == "__main__":

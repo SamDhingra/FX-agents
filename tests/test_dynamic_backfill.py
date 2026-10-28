@@ -530,3 +530,29 @@ def test_packet_says_so_on_an_m15_boundary_and_without_a_target():
     f = P.forming_m15(m1, pd.Timestamp("2026-10-20 10:00", tz=TZ), 2)
     assert f["partial"] is False and f["minutes_in"] == 0 and f["ohlc"] is None and "boundary" in f["note"]
     assert P.forming_m15(m1.iloc[:0], pd.Timestamp("2026-10-20 10:00", tz=TZ), 2) is None
+
+
+def test_fresh_reviews_backfilled_trades_again_and_archives_the_old_rows(tmp_path):
+    code, j, cl, stubs = go(tmp_path)
+    assert code == 0
+    live = mk_packet()[0]
+    live["candidate"]["id"] = "live9"
+    DS.add_candidate(j, live, "reviewed", "dyn-v1")                                  # a live row: never touched
+    j.db.execute("CREATE TABLE IF NOT EXISTS dyn_postmortems(candidate_id TEXT, provider TEXT, why_lost TEXT)")
+    j.db.execute("INSERT INTO dyn_postmortems VALUES('t2','claude','old')")
+    j.db.commit()
+    # dry: nothing archived, nothing called
+    seen_before = len(stubs["claude"].seen)
+    assert run(B.run(bf_cfg(), "live", 4, tmp_path / "o2", client=FakeOanda(), journal=j, providers=stubs, dry_run=True, fresh=True)) == 0
+    assert len(stubs["claude"].seen) == seen_before and j.db.execute("SELECT COUNT(*) FROM dyn_candidates").fetchone()[0] == 5
+    # without fresh: nothing left to backfill
+    assert run(B.run(bf_cfg(), "live", 4, tmp_path / "o2", client=FakeOanda(), journal=j, providers=stubs)) == 0
+    assert len(stubs["claude"].seen) == seen_before
+    assert run(B.run(bf_cfg(), "live", 4, tmp_path / "o2", client=FakeOanda(), journal=j, providers=stubs, fresh=True)) == 0
+    assert len(stubs["claude"].seen) == seen_before + 4
+    arch = j.db.execute("SELECT tbl, COUNT(DISTINCT candidate_id) FROM dyn_archive GROUP BY tbl").fetchall()
+    assert dict(arch) == {"dyn_candidates": 4, "dyn_reviews": 4, "dyn_postmortems": 1}
+    assert j.db.execute("SELECT COUNT(*) FROM dyn_postmortems").fetchone()[0] == 0
+    assert j.db.execute("SELECT source FROM dyn_candidates WHERE candidate_id='live9'").fetchone()[0] == "live"
+    assert {r[0] for r in j.db.execute("SELECT candidate_id FROM dyn_candidates WHERE source='backfill'")} == {"t1", "t2", "t3", "t4"}
+    assert not j.db.execute("SELECT 1 FROM dyn_archive WHERE candidate_id='live9'").fetchone()

@@ -176,3 +176,6 @@ repo's `.env` (like `weekly`), not `exec` (the new code needs the rebuilt image)
 - **Forming M15 on a boundary.** A 15m-setup entry at :00/:15/:30/:45 had `m15_forming: null`, which both reviewers read as missing data. It now
   says so: `{partial: false, minutes_in: 0, ohlc: null, note: ...}`. Without a target the order carries `target_note`.
 - Prompt version stays `dyn-v1` (same prompt text and schema); live reviews before Oct 28 (2) used the older packet.
+- **`--fresh`** (`./fx.sh dynbackfill live 20 fresh [dry]`): reviews already-backfilled trades again from scratch on a newly built packet. Their old
+  candidate row, reviews and post-mortems are copied to `dyn_archive` (one JSON row each) and deleted first; live rows are never touched. Used once on
+  Oct 28 2026 to replace the 20 reviews made on the leaky packet.
