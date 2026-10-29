@@ -1,0 +1,50 @@
+{
+ "live": {
+  "checked": 48,
+  "early": 0
+ },
+ "c10_afternoon": {
+  "checked": 0,
+  "early": 0
+ },
+ "daily_rsi2_adx2": {
+  "checked": 0,
+  "early": 0
+ },
+ "ema21_rsi55": {
+  "checked": 0,
+  "early": 0
+ },
+ "gold_breakout": {
+  "checked": 0,
+  "early": 0
+ },
+ "h1_vol_trend": {
+  "checked": 0,
+  "early": 0
+ },
+ "playbook": {
+  "checked": 64,
+  "early": 0
+ },
+ "playbook_allhours": {
+  "checked": 0,
+  "early": 0
+ },
+ "playbook_nobias": {
+  "checked": 0,
+  "early": 0
+ },
+ "playbook_regime": {
+  "checked": 22,
+  "early": 0
+ },
+ "setup_first": {
+  "checked": 0,
+  "early": 0
+ },
+ "shadow": {
+  "checked": 0,
+  "early": 0
+ }
+}
