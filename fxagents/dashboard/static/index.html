@@ -253,7 +253,8 @@ body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
 @media (max-width:760px){
   .sheet{position:fixed;left:10px;right:10px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:45;display:grid;gap:2px;padding:8px;
     background:var(--card);border:1px solid var(--line-2);border-radius:18px;box-shadow:var(--shadow);
-    opacity:0;transform:translateY(10px);pointer-events:none;transition:.18s}
+    opacity:0;transform:translateY(10px);pointer-events:none;transition:.18s;
+    max-height:calc(100dvh - 110px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
   .sheet.on{opacity:1;transform:none;pointer-events:auto}
   .sheet button,.sheet a{display:flex;align-items:center;gap:12px;padding:13px 12px;border:0;background:none;border-radius:12px;
     font:600 15px Inter,system-ui,sans-serif;color:var(--text);text-decoration:none;text-align:left}
@@ -271,7 +272,11 @@ body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
 .bookbtn[hidden]{display:none}
 .bookpane{position:fixed;z-index:46;background:var(--card);border:1px solid var(--line-2);border-radius:16px;padding:8px;display:none;
   box-shadow:0 18px 40px rgb(0 0 0 / .35);width:min(380px,calc(100vw - 20px))}
-.bookpane.on{display:block}
+.bookpane.on{display:flex;flex-direction:column}
+/* Oct 29 2026: more books than fit a phone screen → the list scrolls inside the panel, header and footer stay put */
+.bookpane{max-height:calc(100dvh - 24px - env(safe-area-inset-top))}
+.bookpane .blist{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;min-height:0;flex:1 1 auto}
+.bookpane h4,.bookpane .foot{flex:0 0 auto}
 .bookpane h4{margin:6px 10px 8px;font-size:13px;font-weight:600;color:var(--text-2)}
 .bookpane .bi{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:12px;width:100%;padding:12px 10px;border:0;background:none;border-radius:11px;text-align:left}
 .bookpane .bi:hover{background:var(--card-2)} .bookpane .bi.on{background:var(--card-2)}
@@ -347,7 +352,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .bn .it{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);font-size:13px}
 .seg button{white-space:nowrap}
 @media (max-width:760px){ a.btn.hide-m{display:none} .top{flex-wrap:wrap} .bookbtn{order:9;width:100%;justify-content:flex-start;min-height:42px;padding:8px 14px 8px 12px} .bookbtn .bk{margin-left:auto}
-  .bookpane{left:10px!important;right:10px;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom));width:auto;border-radius:20px;padding:10px 8px calc(8px + env(safe-area-inset-bottom))}
+  .bookpane{left:10px!important;right:10px;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom));width:auto;border-radius:20px;padding:10px 8px calc(8px + env(safe-area-inset-bottom));max-height:calc(100dvh - 60px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important}
+  .bookpane .bi{padding:9px 10px}.bookpane .bi b{font-size:14px}
   .vs td,.vs th{padding:9px 6px;font-size:12.5px} .fun .row{grid-template-columns:86px 1fr} .hrl span:nth-child(odd){visibility:hidden} .verdict b{font-size:17px} }
 
 /* ── responsive ── */
@@ -2832,19 +2838,22 @@ async function openBooks(){
   const pane = $("#bookPane"), btn = $("#bookBtn");
   const draw = () => {
     const rows = {}; ((LEAGUE && LEAGUE.rows) || []).forEach(r => rows[r.book] = r);
-    pane.innerHTML = `<h4>Books${LEAGUE && LEAGUE.since ? ` · since ${md(LEAGUE.since)}` : ""}</h4>` + ["live", ...BOOKS].map(b => {
+    const keep = pane.querySelector(".blist")?.scrollTop || 0;
+    pane.innerHTML = `<h4>Books${LEAGUE && LEAGUE.since ? ` · since ${md(LEAGUE.since)}` : ""}</h4><div class="blist">` + ["live", ...BOOKS].map(b => {
       const r = rows[b];
       const stat = r ? `<span class="num ${cls(r.sum_r)}">${sR(r.sum_r)}</span><small>${r.trades} trade${r.trades===1?"":"s"}${r.open?` · ${r.open} open`:""}</small>` : `<small>—</small>`;
       return `<button class="bi ${b===BOOK?"on":""}" role="option" aria-selected="${b===BOOK}" data-b="${b}"><i class="bd" style="background:${bookColor(b)}"></i>
         <span><b>${esc(bookLabel(b))}</b><small>${esc((b==="live"?({sim:"synthetic prices · simulated orders",paper:"practice account · broker practice orders",live:"live account · real money orders"}[S?.mode]||"account"):BOOK_ABOUT[b]||"paper book"))}</small></span><span class="bs">${stat}</span></button>`;
-    }).join("") + `<div class="foot">Paper books trade the same live prices with virtual fills. Compare them side by side under Compare.</div>`;
+    }).join("") + `</div><div class="foot">Paper books trade the same live prices with virtual fills. Compare them side by side under Compare.</div>`;
+    pane.querySelector(".blist").scrollTop = keep;
     pane.querySelectorAll(".bi").forEach(x => x.onclick = () => { closeBooks(); setBook(x.dataset.b); });
   };
   draw();
   if(!matchMedia("(max-width:760px)").matches){
     const r = btn.getBoundingClientRect();
     pane.style.top = (r.bottom + 8) + "px"; pane.style.left = Math.max(10, Math.min(r.right - 380, innerWidth - 390)) + "px";
-  } else { pane.style.left = ""; pane.style.top = ""; }
+    pane.style.maxHeight = Math.max(240, innerHeight - r.bottom - 20) + "px";
+  } else { pane.style.left = ""; pane.style.top = ""; pane.style.maxHeight = ""; }
   pane.classList.add("on"); $("#scrim").classList.add("on"); btn.setAttribute("aria-expanded", "true");
   try{ LEAGUE = (await (await fetch("api/compare?range=today",{credentials:"same-origin"})).json()).league; if(pane.classList.contains("on")) draw(); }catch(e){}
 }
@@ -3708,7 +3717,8 @@ function installApp(){
 }
 (() => { // pull down at the top to refresh — only in the home-screen app, where the browser's own pull-to-refresh is gone
   let y0 = null, pulled = 0; const ind = document.createElement("div"); ind.className = "ptr"; ind.textContent = "↓ Pull to refresh"; document.body.appendChild(ind);
-  addEventListener("touchstart", e => { if(standalone() && scrollY <= 0 && !document.querySelector("dialog[open]") && !$("#drawer").classList.contains("on")) y0 = e.touches[0].clientY; }, {passive:true});
+  addEventListener("touchstart", e => { if(standalone() && scrollY <= 0 && !document.querySelector("dialog[open]") && !$("#drawer").classList.contains("on")
+    && !$("#bookPane").classList.contains("on") && !$("#moreSheet").classList.contains("on")) y0 = e.touches[0].clientY; }, {passive:true});
   addEventListener("touchmove", e => { if(y0 == null) return; pulled = Math.max(0, e.touches[0].clientY - y0);
     ind.style.transform = `translate(-50%, ${Math.min(80, pulled/2) - 40}px)`; ind.style.opacity = Math.min(1, pulled/120); ind.textContent = pulled > 110 ? "↻ Release to refresh" : "↓ Pull to refresh"; }, {passive:true});
   addEventListener("touchend", async () => { if(y0 == null) return; const go_ = pulled > 110; y0 = null; pulled = 0;
