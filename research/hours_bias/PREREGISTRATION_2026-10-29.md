@@ -71,3 +71,21 @@ They cannot rescue a failed group.
 - A confirmed group is a candidate for the Nov 5 review only together with its forward record. The playbook itself is
   negative on 2021–2026 (every cell failed `pbtest`). Adding a passing group to it still leaves a losing playbook unless
   the group is large enough to carry it.
+
+## Outcome (Oct 29 2026): neither group passes, the vault is not touched
+
+Judged on 2021-01-01 → 2025-10-07, 16 cells (frozen eab009372932):
+
+| group | trades | avg R | 95% range | 2× costs |
+|---|---|---|---|---|
+| H (outside today's windows, aligned) | 2,963 | −0.063 | −0.12 to −0.01 | −0.133 |
+| B (inside windows, bias rule would refuse) | 18,000 | −0.097 | −0.12 to −0.07 | −0.182 |
+| base (today's playbook, reference) | 10,782 | −0.093 | −0.12 to −0.06 | −0.175 |
+
+- **H:** 00:00–02:00 is the worst block (−0.22R). 11:30–13:30 shows +0.036R in the clean years but −0.010R at 2× costs,
+  and it is a sub-slice, so it is not evidence.
+- **Not every cell gained hours.** 8 of the 16 cells (the ICT and some SMC/DTFX 3m/5m cells) produced no H trades at
+  all, because those setups carry their own session or killzone filter.
+- **B:** counter-bias −0.107R and neutral −0.080R, against −0.093R for aligned. The bias rule barely separates winners
+  from losers, but switching it off doesn't help either.
+- The paper books `playbook_allhours` and `playbook_nobias` keep running as a forward record until the Nov 5 review.
