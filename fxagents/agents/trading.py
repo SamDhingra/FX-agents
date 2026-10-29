@@ -285,6 +285,8 @@ class TraderAgent(Agent):
 
     def bias_precheck(self, sig: Signal) -> str | None:
         """Cheap hard-rule check BEFORE spending a Jev call (Risk re-checks everything)."""
+        if getattr(self.ctx, "ignore_bias", False):       # playbook_nobias shadow book (Oct 29 2026)
+            return None
         bc = self.cfg["bias"]
         b = self.state.bias_for(sig.symbol)               # this book's own loss guard (Oct 26 2026)
         if not b:
@@ -585,6 +587,11 @@ class RiskAgent(Agent):
             return None
 
     async def bias_gate(self, sig: Signal, grade: dict, now) -> dict:
+        if getattr(self.ctx, "ignore_bias", False):       # playbook_nobias shadow book (Oct 29 2026): no bias rule at all
+            b = self.state.bias_for(sig.symbol) or {}
+            sc = b.get("score")
+            rel = rule_check(sig.side, sc, self.cfg["bias"]["min_align"]) if sc is not None else "unknown"
+            return {"mode": f"ignored:{rel}", "risk_mult": 1.0, "score": sc}   # what the rule would have said, for the split
         bc = self.cfg["bias"]
         sg = bc["safeguards"]
         b = self.state.bias_for(sig.symbol)               # shared reading + THIS book's own loss guard (Oct 26 2026)

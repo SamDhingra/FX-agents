@@ -44,3 +44,11 @@ First milestone if we do it: fix the adviser items above, build the as-of snapsh
 locally rendered chart), then run independent reviews in SHADOW on a frozen candidate stream with one action policy
 (entry WAIT/CANCEL or open-trade EXIT, not both), every candidate and every API cost counted. Arms: baseline, +OpenAI,
 +Claude, +both. Needs an OpenAI API key on the server. Decide from net cash contribution after all review costs.
+
+## All-hours and no-bias playbook (Oct 29 2026, Sam — for the Nov 5 review)
+
+- Test registered and built: `./fx.sh hoursbias [seen|vault]`, research/hours_bias/PREREGISTRATION_2026-10-29.md.
+  H = the playbook's trades outside today's entry windows (entries 20:00 → 15:50), B = trades the bias rule refuses.
+- Paper books from Oct 29: `playbook_allhours`, `playbook_nobias` (trades tagged `ignored:aligned|neutral|counter`).
+- `./fx.sh candlecheck`: every journal's entries vs the close of the setup's own candle (Sam saw entries "before the
+  candle closed"; the code only scans on the entry candle's last minute — this checks the real trades).

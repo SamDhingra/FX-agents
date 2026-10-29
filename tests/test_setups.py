@@ -193,3 +193,22 @@ def test_dtfx_pullback_zone_variant(name):
     flip = pd.DataFrame({"open": k - df["open"], "high": k - df["low"], "low": k - df["high"],
                          "close": k - df["close"], "volume": df["volume"]}, index=df.index)
     assert {(s.i, s.side) for s in full} == {(s.i, -s.side) for s in st._scan_full(flip, Strategy._context(flip))}
+
+
+@pytest.mark.parametrize("name", ["dtfx_close_fib", "dtfx_close_origin"])
+def test_dtfx_drawing_shows_how_the_zone_was_made(name):
+    """Oct 29 2026: the trade chart shows the swing that was broken (up to the break candle), the break, and the
+    valid low/high, all at or before the signal bar (display only, never used for trading)."""
+    df = frame(6, days=15)
+    sigs = build_strategy({"class": name, "tf": "5min"}).scan(df)
+    assert sigs
+    for s in sigs[:30]:
+        d = s.features["draw"]
+        st = [x for x in d if x.get("role") == "structure"]
+        labels = " ".join(x["label"] for x in st)
+        assert "broken" in labels and ("valid low" in labels or "valid high" in labels)
+        assert ("valid low" in labels) == (s.side > 0)
+        t_sig = df.index[s.i]
+        assert all(pd.Timestamp(x["t0"]) <= t_sig and pd.Timestamp(x.get("t1", x["t0"])) <= t_sig for x in st)
+        brk = next(x for x in st if x["k"] == "line")
+        assert pd.Timestamp(brk["t0"]) < pd.Timestamp(brk["t1"])           # swing sits before the candle that broke it

@@ -40,3 +40,30 @@ def test_dashboard_book_routing():
     assert shadow_of(ctx, "setup_first") is b
     assert shadow_of(ctx, "shadow") is a           # older links/bookmarks
     assert shadow_of(ctx, "live") is None and shadow_of(ctx, None) is None and shadow_of(ctx, "x") is None
+
+
+def test_allhours_and_nobias_books():
+    """Oct 29 2026: playbook_allhours = entries 20:00 → 15:50 (own copy of the config); playbook_nobias = bias rule off."""
+    import asyncio
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    from fxagents.agents.setup_first import book_cfg
+    from fxagents.agents.trading import RiskAgent, TraderAgent
+    from fxagents.models import Signal
+    c = _cfg(modes=["playbook", "playbook_allhours", "playbook_nobias"])
+    assert shadow_modes(c) == ["playbook", "playbook_allhours", "playbook_nobias"]
+    a = book_cfg(c, "playbook_allhours")
+    assert a["sessions"]["entry_windows"] == [["20:00", "23:59"], ["00:00", "15:50"]]
+    assert c["sessions"]["entry_windows"] != a["sessions"]["entry_windows"]          # the main config is untouched
+    assert book_cfg(c, "playbook_nobias") is c
+    t0 = pd.Timestamp("2026-10-29 10:00", tz="America/New_York")
+    st = SimpleNamespace(bias_for=lambda s: {"score": -0.6, "suspended": True, "aligned_losses": 2, "label": "BEARISH"})
+    sig = Signal("NDQ", "x", 1, 100.0, 99.0, t0)
+    me = SimpleNamespace(cfg=c, state=st, ctx=SimpleNamespace(ignore_bias=True), now=lambda: t0)
+    g = asyncio.run(RiskAgent.bias_gate(me, sig, {"quality": 0.5}, t0))
+    assert g == {"mode": "ignored:counter", "risk_mult": 1.0, "score": -0.6}
+    assert TraderAgent.bias_precheck(me, sig) is None
+    me.ctx.ignore_bias = False
+    assert asyncio.run(RiskAgent.bias_gate(me, sig, {"quality": 0.5}, t0)).get("reject")

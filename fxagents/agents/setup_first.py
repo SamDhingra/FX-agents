@@ -15,6 +15,8 @@ Live vs Shadow side by side.
 """
 from __future__ import annotations
 
+import copy
+
 import logging
 from pathlib import Path
 
@@ -326,8 +328,22 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "h1_vol_trend", "ema21_rsi55", "gold_breakout",
-         "daily_rsi2_adx2", "c10_afternoon")
+MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "playbook_allhours", "playbook_nobias",
+         "h1_vol_trend", "ema21_rsi55", "gold_breakout", "daily_rsi2_adx2", "c10_afternoon")
+PLAYBOOK_MODES = ("playbook", "playbook_regime", "playbook_allhours", "playbook_nobias")
+# playbook_allhours (Oct 29 2026, Sam): the same cells with no gaps between sessions — entries 20:00 → 15:50 NY
+# (the 15:50 flatten and the "no entries in the last 20 minutes before it" rule still apply, so the last entry is
+# 15:29; the 17:00–20:00 daily break stays closed). News blackouts unchanged. Paper only.
+ALLHOURS_WINDOWS = [["20:00", "23:59"], ["00:00", "15:50"]]
+
+
+def book_cfg(cfg: dict, mode: str) -> dict:
+    """The config a shadow book runs with: the main config, except the allhours book's entry windows."""
+    if mode != "playbook_allhours":
+        return cfg
+    c = copy.deepcopy(cfg)
+    c["sessions"]["entry_windows"] = [list(w) for w in ALLHOURS_WINDOWS]
+    return c
 
 
 def shadow_db_path(main_path: str, mode: str | None = None) -> str:
@@ -377,7 +393,8 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     st.equity = st.equity_peak = st.day_start_equity = float(equity)
     mode = mode or (shadow_modes(cfg) or ["setup_first"])[0]
     journal = Journal(shadow_db_for(cfg, mode, first))
-    sctx = Ctx(cfg, bus, st, main.store, broker, journal, main.jev, main.book, main.news)
+    sctx = Ctx(book_cfg(cfg, mode), bus, st, main.store, broker, journal, main.jev, main.book, main.news)
+    sctx.ignore_bias = mode == "playbook_nobias"     # Oct 29 2026: the playbook with the hard bias rule switched off (paper)
     if mode == "h1_vol_trend":
         from .h1_trend_trader import H1VolTrendTrader
         trader = H1VolTrendTrader(sctx)
@@ -393,7 +410,7 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     elif mode == "gold_breakout":
         from .breakout_trader import BreakoutTrader
         trader = BreakoutTrader(sctx)
-    elif mode in ("playbook", "playbook_regime"):
+    elif mode in PLAYBOOK_MODES:
         from .playbook_trader import PlaybookHolder, PlaybookTrader
         sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
         sctx.regime_route = mode == "playbook_regime"     # same cells, plus the chop/trend routing (regime.py)

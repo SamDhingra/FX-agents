@@ -75,6 +75,14 @@ class _DTFX(_Fast):
                 out.append({"k": "line", "px": v.px(zone["deep"]), "i0": zone["start"], "i1": i, "label": "deep edge",
                             "role": "level"})
         out.append({"k": "line", "px": v.px(floor), "i0": zone["oi"], "i1": i, "label": "invalidation", "role": "invalid"})
+        # how the zone was made (Oct 29 2026): the swing that got broken, the break candle, the protected low/high
+        up = v.side > 0
+        if zone.get("src", -1) >= 0 and np.isfinite(zone.get("brk_lvl", np.nan)):
+            out.append({"k": "line", "px": v.px(zone["brk_lvl"]), "i0": zone["src"], "i1": zone["start"],
+                        "label": f"swing {'high' if up else 'low'} broken ({zone['kind']})", "role": "structure"})
+            out.append({"k": "mark", "px": v.px(zone["brk_lvl"]), "i0": zone["start"], "label": zone["kind"], "role": "structure"})
+        out.append({"k": "mark", "px": v.px(zone["origin"]), "i0": zone["oi"],
+                    "label": f"valid {'low' if up else 'high'}", "role": "structure"})
         return out
 
     def _scan(self, df, ctx):
@@ -96,7 +104,7 @@ class _DTFX(_Fast):
                     if hi - origin < p["min_leg_atr"] * a[i]:
                         continue
                     z = {"start": i, "origin": origin, "ext": hi, "brk_hi": hi, "kind": "BOS" if ev == BULL_BOS else "flip",
-                         "oi": oi}
+                         "oi": oi, "src": src, "brk_lvl": float(ms["brk"][i])}
                     if self.zone_kind == "origin":
                         k = next((k for k in range(oi, max(src, oi - 3) - 1, -1) if C[k] < O[k]), oi)
                         z["zhi"], z["zlo"], z["zk"] = H[k], min(L[k], origin), k
