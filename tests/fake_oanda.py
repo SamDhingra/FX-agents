@@ -194,6 +194,8 @@ class FakeOanda:
             parts = path[len(a) + 8:].split("/")
             tid = parts[0]
             t = self.trades.get(tid)
+            if tid.startswith("@"):                   # by client id (GET /trades/@{clientID})
+                t = next((x for x in self.trades.values() if (x.get("clientExtensions") or {}).get("id") == tid[1:]), None)
             if t is None:
                 return httpx.Response(404, json={"errorCode": "NO_SUCH_TRADE", "errorMessage": "Trade not found"})
             if len(parts) == 1:

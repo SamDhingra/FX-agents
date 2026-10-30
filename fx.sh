@@ -116,6 +116,12 @@ case "${1:-help}" in
              #   ./fx.sh reconcile [days=14]  → data/year_test/reconcile/report.md
              $DC exec -T fxagents python -m fxagents.reconcile --days "${2:-14}" </dev/null
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  tradeprobe) # read-only: what OANDA says about each open position's trades (by id, by the bot's client id, open and
+             # recently closed). Terminal only, nothing published.  ./fx.sh tradeprobe [trade ids…]
+             # works BEFORE ./fx.sh update (git pull is enough): it runs in a one-off container, the bot keeps running
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/tradeprobe-build.log 2>&1 || { echo "build failed — see logs/tradeprobe-build.log"; exit 1; }
+             $DC run --rm --no-deps -T fxagents python -m fxagents.trade_probe "${@:2}" </dev/null ;;
   repair)    # journal rows stuck at 'open' (lost in old restarts): dry run; ./fx.sh repair --apply to fix (backs up first)
              $DC exec -T fxagents python -m fxagents.journal_repair "${@:2}" </dev/null ;;
   holdout)   # score a frozen outside strategy package on a holdout export, sandboxed: no network, no .env/token,
@@ -514,7 +520,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

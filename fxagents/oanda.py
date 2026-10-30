@@ -99,6 +99,11 @@ class OandaClient:
         await self.http.aclose()
 
 
+def unknown_trade(e: OandaError) -> bool:
+    """OANDA has no trade with this id (as opposed to: it exists and is closed, which a read returns normally)."""
+    return e.status == 404 or "NO_SUCH_TRADE" in str(e) or "TRADE_DOESNT_EXIST" in str(e)
+
+
 def ambiguous(e: OandaError) -> bool:
     """A mutating request whose outcome is unknown: no response (network) or a server error."""
     return e.status == 0 or e.status >= 500
@@ -492,8 +497,10 @@ class OandaBroker(Broker):
         return px, tid, filled
 
     def _register(self, pos: Position, tid: str, filled: float) -> None:
-        pos.meta.setdefault("trades", []).append({"id": tid, "units": filled, "init": filled,
-                                                  "booked_units": 0.0, "booked_value": 0.0})
+        k = len(pos.meta.setdefault("trades", []))
+        cid = f"fxa-{pos.id}-{'initial' if k == 0 else 'pyramid'}{k}"     # the client id _market gave this leg
+        pos.meta["trades"].append({"id": tid, "units": filled, "init": filled, "cid": cid,
+                                   "booked_units": 0.0, "booked_value": 0.0})
         self.managed[tid] = pos
 
     async def open(self, pos, qty, ref_price):
@@ -546,6 +553,57 @@ class OandaBroker(Broker):
         if t["units"] <= 1e-9:
             self.managed.pop(t["id"], None)
 
+    async def _vanished(self, pos: Position, t: dict):
+        """OANDA answers 404 for this trade id on close AND on read: it has no trade with that id. (Oct 30 2026)
+        1) Look the leg up by the client id the bot gave it. Found → re-link the id; 'open' if it is still open
+           (the caller retries), else book what OANDA shows as closed.
+        2) Not found, and nothing OPEN on the instrument carries this position's tag → there is no exposure at the
+           broker. Book the remaining units at the last price, mark the position `close_unverified` and alert, so it
+           stops retrying forever and the P&L is flagged for ./fx.sh reconcile.
+        Never adopts an untagged trade by guesswork, and never sends an order here."""
+        old = str(t["id"])
+        legs = pos.meta.get("trades") or [t]
+        k = next((i for i, x in enumerate(legs) if x is t), 0)
+        cid = t.get("cid") or f"fxa-{pos.id}-{'initial' if k == 0 else 'pyramid'}{k}"      # legs from before Oct 30
+        tr = None
+        if self.client_ext:
+            try:
+                tr = (await self.c.req("GET", self.c.acct(f"/trades/@{cid}")))["trade"]
+            except OandaError as e:
+                if not unknown_trade(e):
+                    raise
+        if tr is not None and str(tr.get("id")) != old:
+            new = str(tr["id"])
+            self.managed.pop(old, None)
+            t["id"] = new
+            self.managed[new] = pos
+            pos.log(self.state.now, "broker_relinked", old=old, new=new)
+            log.warning("%s: trade %s unknown to OANDA; the leg %s is trade %s — re-linked", pos.symbol, old, cid, new)
+            if tr.get("state") == "OPEN":
+                return "open"
+            px, n = self._settle(t, tr, self.state.last_prices.get(pos.symbol, pos.entry))
+            self._done(t)
+            return px, n
+        mine = [x for x in await self._open_trades() if x.get("instrument") == self.names.get(pos.symbol)
+                and ((x.get("clientExtensions") or {}).get("id") or "").startswith(f"fxa-{pos.id}-")]
+        if mine:
+            raise OrderRejected(f"trade {old} unknown to OANDA but the position still has open trade(s) "
+                                f"{', '.join(str(x['id']) for x in mine)} — needs a look (./fx.sh tradeprobe)")
+        px = float(self.state.last_prices.get(pos.symbol) or pos.last_price or pos.entry)
+        n = t["units"]
+        self._mark(t, n, px)
+        self._done(t)
+        pos.meta["close_unverified"] = True
+        pos.log(self.state.now, "broker_missing", trade=old, qty=n, price=px)
+        msg = (f"{pos.symbol}: OANDA has no trade {old} (close and read both 404) and no open trade of this position. "
+               f"Closed in the bot at the last price {px:g}; P&L unverified — check OANDA's history (./fx.sh tradeprobe).")
+        log.warning(msg)
+        try:
+            await self.bus.publish("alert", {"msg": msg, "event": "broker", "title": "⚠ FX-Agents"})
+        except Exception:  # noqa: BLE001 — an alert must never stop the booking
+            pass
+        return px, n
+
     async def _close_trade(self, pos: Position, t: dict, units: str) -> tuple[float, float]:
         """Close `units` ('ALL' or a number) of one trade. Returns (price, units closed and booked here).
         Never re-sends a close whose outcome is unknown: it reads the trade and books what OANDA shows."""
@@ -559,7 +617,13 @@ class OandaBroker(Broker):
             try:
                 tr = (await self.c.req("GET", self.c.acct(f"/trades/{t['id']}")))["trade"]
             except OandaError as e2:
-                raise OrderRejected(f"close of trade {t['id']} unconfirmed ({e}); re-check failed: {e2}") from e2
+                if not unknown_trade(e2):
+                    raise OrderRejected(f"close of trade {t['id']} unconfirmed ({e}); re-check failed: {e2}") from e2
+                # OANDA has no trade with this id at all (Oct 30 2026: trade 803 retried every minute for hours)
+                res2 = await self._vanished(pos, t)
+                if res2 == "open":
+                    return await self._close_trade(pos, t, units)          # found under its client id, still open
+                return res2
             px, n = self._settle(t, tr, self.state.last_prices.get(pos.symbol, pos.entry))
             self._done(t)
             if n <= 0 and not gone:
@@ -818,7 +882,20 @@ class OandaBroker(Broker):
                 pos.meta["step_hit"] = max(int(pos.meta.get("step_hit", 0)), 1)   # the manager books it next bar
                 continue
             async with lock:
-                tr = (await self.c.req("GET", self.c.acct(f"/trades/{tid}")))["trade"]
+                try:
+                    tr = (await self.c.req("GET", self.c.acct(f"/trades/{tid}")))["trade"]
+                except OandaError as e:
+                    if not unknown_trade(e):
+                        raise
+                    r = await self._vanished(pos, t)
+                    if r == "open":
+                        continue                    # re-linked to the real, still open trade; checked next tick
+                    px, n = r
+                    if n > 0:
+                        self._book(pos, min(n, pos.open_qty), px)
+                        a = seen.setdefault(pos.id, [pos, 0.0, 0.0])
+                        a[1], a[2] = a[1] + n, a[2] + px * n
+                    continue
                 px, n = self._settle(t, tr, pos.stop)
                 self._done(t)
                 if n > 0:

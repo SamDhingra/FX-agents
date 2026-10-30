@@ -354,3 +354,57 @@ def test_optional_instrument_missing_at_the_broker_is_dropped_not_fatal():
         assert "AUDUSD" not in cfg["instruments"] and "XAUUSD" in cfg["instruments"]
     finally:
         SPECS["AUD_USD"] = saved
+
+
+def test_trade_unknown_to_oanda_is_booked_once_not_retried_forever():
+    """Oct 30 2026: close and read of trade 803 both answered 404 for hours. With nothing of the position open at
+    OANDA, the bot books it at the last price, flags it, alerts once, and stops managing it."""
+    cfg, fake, c, st, bus, feed, b = setup()
+    alerts = []
+    bus.subscribe("alert", lambda ev: alerts.append(ev))
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos()
+        await b.open(p, 1, 24500)
+        tid = p.meta["trades"][0]["id"]
+        fake.trades.pop(tid)                     # OANDA has no such trade any more
+        st.last_prices["NDQ"] = 24520.0
+        return p, await b.close(p, 24510)
+    p, px = run(go())
+    assert px == pytest.approx(24520.0) and p.open_qty == 0 and not b.managed
+    assert p.meta["close_unverified"] and any(e["kind"] == "broker_missing" for e in p.events)
+    assert len(alerts) == 1 and "no trade" in alerts[0]["msg"]
+
+
+def test_trade_id_out_of_step_is_relinked_by_client_id_and_closed():
+    cfg, fake, c, st, bus, feed, b = setup()
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos()
+        await b.open(p, 1, 24500)
+        real = p.meta["trades"][0]["id"]
+        b.managed.pop(real); p.meta["trades"][0]["id"] = "803"; p.meta["trades"][0].pop("cid"); b.managed["803"] = p
+        px = await b.close(p, 24510)
+        return p, real, px
+    p, real, px = run(go())
+    assert fake.trades[real]["state"] == "CLOSED" and p.open_qty == 0 and px == pytest.approx(24500.0, abs=200)
+    assert any(e["kind"] == "broker_relinked" and e.get("new") == real for e in p.events)
+    assert not p.meta.get("close_unverified")
+
+
+def test_unknown_trade_with_other_open_legs_is_not_booked_blind():
+    cfg, fake, c, st, bus, feed, b = setup()
+
+    async def go():
+        await feed.qualify(); await b.connect()
+        p = pos()
+        await b.open(p, 1, 24500)
+        await b.add(p, 1, 24500)
+        first = p.meta["trades"][0]
+        fake.trades.pop(first["id"])
+        first["cid"] = "fxa-nope-initial0"
+        await b.close(p, 24510)
+    with pytest.raises(OrderRejected, match="still has open trade"):
+        run(go())
