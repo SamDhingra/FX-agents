@@ -32,3 +32,17 @@ def test_flags_only_entries_before_their_own_candle_closed(tmp_path):
 def test_timeframe_parsing():
     assert CC.tf_minutes("smc_ifvg:15m@v1") == 15 and CC.tf_minutes("x:1h@v2") == 60
     assert CC.tf_minutes("gold_breakout", "5min") == 5 and CC.tf_minutes("gold_breakout") is None
+
+
+def test_by_symbol_groups_closed_trades_per_instrument(tmp_path):
+    """Oct 30 2026: the instrument × book table on Compare."""
+    from fxagents.dashboard.server import by_symbol
+    j = Journal(str(tmp_path / "j.sqlite"))
+    rows = [("a", "XAUUSD", "closed", "2026-10-29T10:00:00-04:00", 1.0, 100.0), ("b", "XAUUSD", "closed", "2026-10-30T10:00:00-04:00", -1.0, -90.0),
+            ("c", "NDQ", "closed", "2026-10-30T11:00:00-04:00", 0.5, 40.0), ("d", "NDQ", "open", None, None, None)]
+    for r in rows:
+        j.db.execute("INSERT INTO trades(id, symbol, status, closed, r_multiple, realized) VALUES (?,?,?,?,?,?)", r)
+    j.db.commit()
+    assert by_symbol(j, None) == {"XAUUSD": {"trades": 2, "wins": 1, "sum_r": 0.0, "pnl": 10.0},
+                                  "NDQ": {"trades": 1, "wins": 1, "sum_r": 0.5, "pnl": 40.0}}
+    assert by_symbol(j, "2026-10-30T00:00:00-04:00")["XAUUSD"]["trades"] == 1

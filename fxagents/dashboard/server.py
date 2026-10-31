@@ -108,8 +108,19 @@ def league(ctx, rng: str) -> dict:
         rows.append({"book": key, "mode": getattr(c, "selection_mode", ""), "trades": sm["trades"],
                      "wins": round(sm["trades"] * sm["win_rate"]), "win_rate": sm["win_rate"], "sum_r": sm["sum_r"],
                      "avg_r": sm.get("avg_r", 0.0), "pnl": sm["pnl"], "since": s_b,
-                     "open": sum(1 for p in c.state.positions.values() if p.status == "open")})
+                     "open": sum(1 for p in c.state.positions.values() if p.status == "open"),
+                     "symbols": by_symbol(c.journal, s_b)})
     return {"since": since, "rows": rows}
+
+
+def by_symbol(journal, since: str | None) -> dict:
+    """Closed trades per instrument for one book (Oct 30 2026: the instrument × book table on Compare)."""
+    q = ("SELECT symbol, COUNT(*), SUM(CASE WHEN r_multiple > 0 THEN 1 ELSE 0 END), COALESCE(SUM(r_multiple), 0), "
+         "COALESCE(SUM(realized), 0) FROM trades WHERE status='closed'" + (" AND closed>=?" if since else "") + " GROUP BY symbol")
+    out = {}
+    for sym, n, w, r, pnl in journal.db.execute(q, (since,) if since else ()):
+        out[sym] = {"trades": int(n), "wins": int(w or 0), "sum_r": round(float(r), 2), "pnl": round(float(pnl), 2)}
+    return out
 
 
 def compare(ctx, rng: str, sh=None) -> dict:

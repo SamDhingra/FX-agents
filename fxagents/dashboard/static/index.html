@@ -219,6 +219,14 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;font-family:var(
 .news-day{font-size:13px;font-weight:600;color:var(--text-2);margin:16px 0 8px}
 .ev{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--card-2);border:1px solid var(--line);margin-bottom:8px}
 .ev .tm{font-family:var(--mono);font-weight:600;min-width:48px}
+.symtbl table{min-width:0;width:100%;table-layout:auto}.symtbl td,.symtbl th{white-space:nowrap}
+.symtbl td .sub{display:block;font-size:10.5px;font-weight:500;margin-top:1px}
+.symtbl th.bk{font-weight:600;text-align:left;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.symtbl th.bk span{vertical-align:middle}.symtbl tfoot th,.symtbl tfoot td{border-top:2px solid var(--line-2)}
+.seg.mini button{min-height:28px!important;padding:2px 10px;font-size:12px}
+.symtbl .short{display:none}
+@media (max-width:760px){.symtbl th.bk{max-width:86px}.symtbl td,.symtbl th{padding:8px 4px;font-size:12.5px}.symtbl .long{display:none}.symtbl .short{display:inline}
+  .symtbl .dot{margin-right:4px}.symtbl td .sub{font-size:10px}}
 .dnews{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--card-2);font-size:12.5px}
 .dnews summary{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;list-style:none;min-width:0}
 .dnews summary::-webkit-details-marker{display:none}
@@ -385,6 +393,13 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;padding:6px;box-shadow:var(--shadow)}
   .tabbar button{border:0;background:none;display:grid;justify-items:center;gap:3px;padding:7px 0;font-size:10.5px;font-weight:600;color:var(--muted);border-radius:14px}
   .tabbar button svg{width:21px;height:21px}
+  /* Oct 30 2026: the book picker lives in the bottom bar on phones (thumb reach); the top button is hidden */
+  .tabbar.has-book{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .tabbar .tabbook{min-width:0}.tabbar .tabbook .bd{width:21px;height:21px;border-radius:50%;background:var(--book);box-shadow:inset 0 0 0 3px var(--card)}
+  .tabbar .tabbook span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+  .tabbar .tabbook[aria-expanded="true"]{background:var(--accent-soft);color:var(--text)}
+  .bookbtn{display:none!important}
+  .bookpane{bottom:calc(84px + env(safe-area-inset-bottom))!important}
   .tabbar button.on{color:var(--text);background:var(--accent-soft)} .tabbar button.on svg{color:var(--accent-2)}
   .toasts{bottom:calc(96px + env(safe-area-inset-bottom))}
   .banner{padding:12px}.count{font-size:15px}
@@ -1608,6 +1623,7 @@ html body{font-size:13.5px}
   <button data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
   <button data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
   <button data-p="more"><svg><use href="#i-bot"/></svg>More</button>
+  <button id="tabBook" class="tabbook" hidden aria-haspopup="listbox" aria-label="Choose book"><i class="bd"></i><span id="tabBookName">Book</span></button>
 </nav>
 
 <div class="sheet" id="moreSheet">
@@ -1622,7 +1638,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-21.3</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-30.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2208,6 +2224,30 @@ async function loadCompare(){
   if(cmpVs) $("#shCsv").href = "api/journal.csv?book=" + encodeURIComponent(cmpVs);
   renderCompare();
 }
+/* Oct 30 2026: every book × every instrument in one table (rows = books, columns = instruments + total) */
+let SYM_UNIT = (() => { try{ return localStorage.getItem("fx.symUnit") || "r"; }catch(e){ return "r"; } })();
+const SYM_SHORT = {XAUUSD:"Gold", NDQ:"NDQ", US30:"US30"};
+function instrumentTable(LG){
+  if(!LG.length || !LG.some(r => r.symbols)) return "";
+  const order = ["XAUUSD", "NDQ", "US30"];
+  const syms = [...new Set(LG.flatMap(r => Object.keys(r.symbols || {})))].sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99) || a.localeCompare(b));
+  const cols = syms.length ? syms : order;
+  const tot = {}; cols.forEach(k => tot[k] = {trades:0, wins:0, sum_r:0, pnl:0});
+  const cell = (x, strong) => { if(!x || !x.trades) return `<td class="r mut">—</td>`;
+    const v = SYM_UNIT === "r" ? x.sum_r : x.pnl;
+    return `<td class="r num ${cls(v)}">${strong ? "<b>" : ""}${SYM_UNIT === "r" ? (v > 0 ? "+" : "") + v.toFixed(1) : smoney(v)}${strong ? "</b>" : ""}<small class="mut sub">${x.trades} · ${Math.round(x.wins / x.trades * 100)}%</small></td>`; };
+  const rows = LG.map(r => { const S_ = r.symbols || {};
+    cols.forEach(k => { const x = S_[k]; if(x){ const t = tot[k]; t.trades += x.trades; t.wins += x.wins; t.sum_r += x.sum_r; t.pnl += x.pnl; } });
+    const all = Object.values(S_).reduce((a, x) => ({trades:a.trades + x.trades, wins:a.wins + x.wins, sum_r:a.sum_r + x.sum_r, pnl:a.pnl + x.pnl}), {trades:0, wins:0, sum_r:0, pnl:0});
+    return `<tr><th scope="row" class="bk"><i class="dot" style="background:${bookColor(r.book)}"></i><span class="long">${esc(r.book === "live" ? "Live" : ModeName(r.mode || r.book))}</span><span class="short">${esc(r.book === "live" ? "Live" : shortBook(r.mode || r.book))}</span></th>${cols.map(k => cell(S_[k])).join("")}${cell(all, true)}</tr>`; }).join("");
+  const sum = cols.map(k => cell(tot[k], true)).join("");
+  return `<div class="card c12 symtbl"><h3>By instrument, every book <span class="mut" style="font-weight:500;font-size:12px">&nbsp;${SYM_UNIT === "r" ? "R" : "P&amp;L"}</span><span class="sp"></span><span class="seg mini" id="symUnit"><button data-u="r" class="${SYM_UNIT === "r" ? "on" : ""}">R</button><button data-u="usd" class="${SYM_UNIT === "usd" ? "on" : ""}">$</button></span></h3>
+    <div class="tbl"><table><thead><tr><th>Book</th>${cols.map(k => `<th class="r">${esc(SYM_SHORT[k] || k)}</th>`).join("")}<th class="r">All</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr><th scope="row">All books</th>${sum}${cell(cols.reduce((a, k) => ({trades:a.trades + tot[k].trades, wins:a.wins + tot[k].wins, sum_r:a.sum_r + tot[k].sum_r, pnl:a.pnl + tot[k].pnl}), {trades:0, wins:0, sum_r:0, pnl:0}), true)}</tr></tfoot></table></div>
+    <div class="mut" style="font-size:12px;margin-top:8px">Closed trades in the period above (each book from its own start if later). Under each figure: trades · win rate. Paper books simulate fills; "All books" adds them up for comparison only.</div></div>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest("#symUnit button"); if(!b) return;
+  SYM_UNIT = b.dataset.u; try{ localStorage.setItem("fx.symUnit", SYM_UNIT); }catch(err){} renderCompare(); });
 function renderCompare(){
   const el = $("#cmpBody");
   if(!CMP){ el.innerHTML = `<div class="card"><div class="empty">Couldn't load the comparison.</div></div>`; return; }
@@ -2223,6 +2263,7 @@ function renderCompare(){
       <td class="r num">${r.trades}</td><td class="r num hide-m">${r.wins}</td><td class="r num hide-m">${r.trades?Math.round(r.win_rate*100)+"%":"—"}</td>
       <td class="r num ${cls(r.sum_r)}"><b>${sR(r.sum_r)}</b></td><td class="r num hide-m ${cls(r.avg_r)}">${sR(r.avg_r)}</td><td class="r num hide-m ${cls(r.pnl)}">${smoney(r.pnl)}</td><td class="r num hide-m">${r.open}</td></tr>`).join("")}</table></div>
     <div class="mut" style="font-size:12px;margin-top:8px">Every book is measured over this period, or from its own start if it began later (shown next to its name). Read total R together with the trade count: with fewer than about 20 trades, a lead can be luck.</div></div>` : "";
+  const bySym = instrumentTable(LG);
   const diff = +(G.sum_r - L.sum_r).toFixed(2), few = Math.min(L.trades, G.trades) < 20;
   let verdict;
   if(!L.trades && !G.trades) verdict = `<b>No closed trades yet</b><span class="mut">The comparison fills in as trades close in either book.</span>`;
@@ -2255,7 +2296,7 @@ function renderCompare(){
     return `<tr><td>${md(d.date)}</td><td class="r num hide-m">${d.live.trades}</td><td class="r num ${cls(d.live.r)}">${sR(d.live.r)}</td><td class="r num ${cls(d.live.pnl)} hide-m">${smoney(d.live.pnl)}</td>
       <td class="r num hide-m">${d.shadow.trades}</td><td class="r num ${cls(d.shadow.r)}">${sR(d.shadow.r)}</td><td class="r num ${cls(d.shadow.pnl)} hide-m">${smoney(d.shadow.pnl)}</td><td class="r">${better}</td></tr>`; }).join("");
   el.innerHTML = `
-    <div class="grid">${league}
+    <div class="grid">${league}${bySym}
       <div class="card c12"><div class="verdict">${verdict}</div>
         <div class="mut" style="font-size:12px;margin-top:6px">${CMP.started ? esc(gname) + " started " + md(CMP.started) + " " + hm(CMP.started) + " NY. " : ""}Both books trade the same live prices; paper fills are simulated with the measured spread.</div></div>
       <div class="card c5"><h3>Head to head</h3><table class="vs"><tr><th></th><th class="r l">${nl}</th><th class="r g">${ng}</th></tr>${vs}</table></div>
@@ -2826,11 +2867,17 @@ function paintBook(){
   document.documentElement.style.setProperty("--book-soft", c + "26");
   $("#bookName").textContent = bookLabel(BOOK);
   $("#bookKind").textContent = BOOK === "live" ? "account" : "paper";
+  const tb = $("#tabBookName"); if(tb) tb.textContent = BOOK === "live" ? (BOOKS.length ? "Live" : "Book") : shortBook(BOOK);
 }
+/* a short label for the bottom-bar book tab (≈ 8 characters) */
+const SHORT_BOOK = {playbook:"Playbook", playbook_regime:"Chop", playbook_allhours:"All hrs", playbook_nobias:"No bias",
+  h1_vol_trend:"Gold H1", ema21_rsi55:"EMA21", gold_breakout:"Gold BO", daily_rsi2_adx2:"RSI2", c10_afternoon:"C10", setup_first:"Setup 1st"};
+const shortBook = b => SHORT_BOOK[b] || modeName(b).slice(0, 9);
 function bookButtons(books){
   const sig = books.join(","); if(sig === BOOKS.join(",") && $("#bookBtn").dataset.ready) return;
   BOOKS = books; $("#bookBtn").dataset.ready = "1";
   $("#bookBtn").hidden = !books.length;
+  $("#tabBook").hidden = !books.length; document.querySelector(".tabbar").classList.toggle("has-book", !!books.length);
   paintBook();
 }
 let LEAGUE = null;
@@ -2854,14 +2901,14 @@ async function openBooks(){
     pane.style.top = (r.bottom + 8) + "px"; pane.style.left = Math.max(10, Math.min(r.right - 380, innerWidth - 390)) + "px";
     pane.style.maxHeight = Math.max(240, innerHeight - r.bottom - 20) + "px";
   } else { pane.style.left = ""; pane.style.top = ""; pane.style.maxHeight = ""; }
-  pane.classList.add("on"); $("#scrim").classList.add("on"); btn.setAttribute("aria-expanded", "true");
+  pane.classList.add("on"); $("#scrim").classList.add("on"); btn.setAttribute("aria-expanded", "true"); $("#tabBook").setAttribute("aria-expanded", "true");
   try{ LEAGUE = (await (await fetch("api/compare?range=today",{credentials:"same-origin"})).json()).league; if(pane.classList.contains("on")) draw(); }catch(e){}
 }
 function closeBooks(){
-  $("#bookPane").classList.remove("on"); $("#bookBtn").setAttribute("aria-expanded", "false");
+  $("#bookPane").classList.remove("on"); $("#bookBtn").setAttribute("aria-expanded", "false"); $("#tabBook").setAttribute("aria-expanded", "false");
   if(!$("#drawer").classList.contains("on")) $("#scrim").classList.remove("on");
 }
-$("#bookBtn").onclick = () => $("#bookPane").classList.contains("on") ? closeBooks() : openBooks();
+$("#bookBtn").onclick = $("#tabBook").onclick = () => $("#bookPane").classList.contains("on") ? closeBooks() : openBooks();
 $("#scrim").addEventListener("click", closeBooks);
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeBooks(); });
 function setBook(b){
