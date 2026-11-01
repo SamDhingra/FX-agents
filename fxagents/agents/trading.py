@@ -304,6 +304,8 @@ class TraderAgent(Agent):
         return None
 
     async def evaluate(self, sig: Signal, ctx: dict | None, df: pd.DataFrame):
+        if self.cfg["instruments"].get(sig.symbol, {}).get("trade", True) is False:
+            return              # watch-only symbol (live site: gold / US30): no Jev call, nothing to send to Risk
         why = self.bias_precheck(sig)
         if why:
             self.ctx.journal.add_signal({"ts": sig.ts.isoformat(), "symbol": sig.symbol, "strategy": sig.strategy,

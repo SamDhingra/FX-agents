@@ -126,7 +126,8 @@ async def build(cfg, args):
     sh_modes = shadow_modes(cfg)
     ctx.playbook = PlaybookHolder()
     playbook_agent = None
-    if "playbook" in (sel_mode, *sh_modes):
+    from fxagents.agents.setup_first import PLAYBOOK_MODES
+    if any(m in PLAYBOOK_MODES for m in (sel_mode, *sh_modes)):      # any playbook book needs the cells (Oct 31 2026)
         playbook_agent = PlaybookAgent(ctx, ctx.playbook)
     if sel_mode == "playbook":
         trader = PlaybookTrader(ctx)

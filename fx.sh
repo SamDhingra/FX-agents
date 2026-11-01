@@ -42,7 +42,7 @@ case "${1:-help}" in
                  docker network inspect fx-agents_fxnet >/dev/null 2>&1 || echo "note: start the practice stack first (cd ~/fx-agents && ./fx.sh up) — the tunnel lives there"
                  echo "next: edit .env.live, ./fx.sh live promote-playbook, ./fx.sh live up, ./fx.sh live add-owner <name>" ;;
                up)      [[ -f .env.live ]] || { echo "run ./fx.sh live setup first"; exit 1; }
-                        [[ -f data_live/playbook.json ]] || { echo "no data_live/playbook.json — run ./fx.sh live promote-playbook first"; exit 1; }
+                        [[ -f data_live/playbook.json ]] || echo "note: no data_live/playbook.json — the 'Playbook + chop filter' paper book stays empty until ./fx.sh live promote-playbook"
                         $LDC up -d --build && echo "live site on 127.0.0.1:8089 (and live.<your-domain> once the tunnel route exists)" ;;
                update)  git pull --ff-only || exit 1; $LDC up -d --build ;;
                stop)    $LDC stop ;;
@@ -69,7 +69,7 @@ print("promoting playbook as of", new.get("asof"))
 for c in sorted(ids(new) - ids(old)): print("  + " + c)
 for c in sorted(ids(old) - ids(new)): print("  - " + c)
 ndq = [c["id"] for c in new.get("cells", []) if c.get("sym") == "NDQ"]
-print(f"  {len(ndq)} NDQ cell(s) will trade real money; the rest are view-only on the live site")
+print(f"  {len(ndq)} NDQ cell(s) — paper only on the live site (the 'Playbook + chop filter' book)")
 PY
                         read -r -p "promote? [y/N] " a; [[ "$a" == y ]] || { echo "not promoted"; exit 1; }
                         cp "$src" data_live/playbook.json && echo "promoted — the live bot picks it up within 5 minutes" ;;

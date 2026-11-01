@@ -12,15 +12,15 @@ live_app:
   enabled: true                 # user accounts + authenticator codes, members, copy engine, live dashboard
 
 selector:
-  mode: playbook                # the practice account's book: the playbook's cells …
+  mode: hourly_pick             # same as the practice account: each hour's top strategy per symbol …
 
 instruments:                    # … real orders on NDQ only; gold and US30 are watched (prices, bias, charts), never traded
   XAUUSD: {trade: false}
   US30: {trade: false}
 
 playbook:
-  frozen: true                  # no automatic re-selection: cells change only when you promote a playbook.json
-                                # (./fx.sh live promote-playbook)
+  frozen: true                  # the "Playbook + chop filter" paper book: cells change only when you promote a
+                                # playbook.json (./fx.sh live promote-playbook)
 
 risk:
   risk_per_trade_pct: 0.0025    # 0.25% of equity at the stop for a first live week (practice uses 0.5%)
@@ -29,12 +29,15 @@ risk:
   daily_loss_limit_pct: 0.01    # −1% day → flatten and halt until tomorrow
   max_drawdown_pct: 0.05
 
-c10_account:
-  enabled: false                # C10 runs as a paper book here (shadow below); set enabled + allow_live to trade it
+c10_account:                    # C10 afternoon continuation on the live account, as on practice
+  enabled: true
+  allow_live: true
+  symbols: [NDQ]
+  risk_pct: 0.0025
 
 shadow:
   enabled: true
-  modes: [playbook_regime, c10_afternoon]   # paper books shown next to the live account
+  modes: [playbook_regime]      # paper book shown next to the live account (C10 trades on the account itself)
   notify_trades: false
 
 learner:

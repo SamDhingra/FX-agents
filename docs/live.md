@@ -8,9 +8,9 @@ folder and address. The practice bot and its dashboard stay exactly as they are.
 | | Practice (`~/fx-agents`, branch `main`) | Live (`~/fx-live`, branch `live`) |
 |---|---|---|
 | Account | OANDA practice | OANDA **live** |
-| Real orders | — | **NDQ only**; gold and US30 are view-only |
-| Paper books | all of them | Playbook + chop filter, C10 afternoon |
-| Playbook | re-selected automatically | **frozen**: changes only with `./fx.sh live promote-playbook` |
+| Real orders | — | **NDQ only**, from the same books as practice: hourly pick + C10 on the account; gold and US30 are view-only |
+| Paper books | all of them | Playbook + chop filter |
+| Playbook (paper book) | re-selected automatically | **frozen**: changes only with `./fx.sh live promote-playbook` |
 | Risk | 0.5% per trade, 3 open | 0.25% per trade, 1 open, −1% day halts (`config.live.yaml`) |
 | Sign-in | dashboard token | user name + password + **authenticator code** |
 | Backtests, Backtester | yes | removed (their endpoints answer 404) |
