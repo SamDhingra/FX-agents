@@ -129,7 +129,10 @@ class PlaybookAgent(Agent):
                     and not self.refreshing:
                 self.pins_mtime = pm                         # strategy-lab promotions reach the book within 5 minutes
                 self.select(now)
-        # once a day after the CME open, rebuild if the history cache is newer than the research
+        # once a day after the CME open, rebuild if the history cache is newer than the research — never on a frozen
+        # playbook (the live site: cells change only when the owner promotes a new playbook.json)
+        if (self.cfg.get("playbook") or {}).get("frozen"):
+            return
         if now.hour == 17 and now.minute >= 30 and self.last_check != day and not self.refreshing:
             self.last_check = day
             if self.stale():
@@ -214,6 +217,9 @@ class PlaybookTrader(TraderAgent):
         cells = self.holder.for_bar(sym, tf)
         if not cells:
             return
+        if self.cfg["instruments"].get(sym, {}).get("trade", True) is False:
+            return              # watch-only (live site: gold / US30 are view-only) — no Jev call, no entry
+
         if self.cfg["mode"] != "sim" and self.now() is not None and self.now() - ev["ts"] > pd.Timedelta("5min"):
             return
         df = self.ctx.store.tf(sym, tf).iloc[-self.window:]

@@ -654,6 +654,7 @@ class PositionManagerAgent(Agent):
         self.bus.subscribe("flatten_symbol", self.on_flatten_symbol)
         self.bus.subscribe("pre_news", self.on_pre_news)
         self.bus.subscribe("position_opened", self.on_opened)
+        self.bus.subscribe("manual", self.on_manual)
         self.m = self.cfg["management"]
 
     async def on_opened(self, pos: Position):
@@ -952,6 +953,62 @@ class PositionManagerAgent(Agent):
                                                                 "msg": f"pre-news ({ev['event']}): stop → {pos.stop}"})
             else:
                 await self.close(pos, px, f"pre-news: {ev['event']}")
+
+    async def on_manual(self, ev: dict):
+        """Owner actions from the dashboard (Oct 31 2026), routed through here like every other exit so the broker
+        rules still apply. ev = {action: close | breakeven | stop | partial, id, price?, frac?, by}. The outcome is
+        written back into ev["result"] = {ok, msg}. Stops still only move toward profit and must stay on the
+        protective side of the current price; a partial must leave something open."""
+        pos = self.state.positions.get(str(ev.get("id") or ""))
+        act, by = ev.get("action"), str(ev.get("by") or "dashboard")[:40]
+        res = ev.setdefault("result", {"ok": False, "msg": ""})
+        if pos is None or pos.status != "open":
+            res["msg"] = "no such open position"
+            return
+        now = self.now()
+        px = float(self.state.last_prices.get(pos.symbol, pos.last_price or pos.entry))
+        far = px - pos.side * self.half_spread(pos.symbol)          # where a stop would trigger right now
+        try:
+            if act == "close":
+                ok = await self.close(pos, px, f"manual close ({by})")
+                res.update(ok=ok, msg="closed" if ok else "close sent; OANDA hasn't confirmed — retrying every bar")
+                return
+            if act in ("breakeven", "stop"):
+                new = (pos.entry + pos.side * self.m["lock_r"] * pos.risk_per_unit) if act == "breakeven" else float(ev["price"])
+                new = self.ctx.broker.round_px(pos.symbol, new)
+                if (new - pos.stop) * pos.side <= 0:
+                    res["msg"] = "a stop may only move toward profit"
+                    return
+                if (far - new) * pos.side <= 0:
+                    res["msg"] = "price is already through that level — close the trade instead"
+                    return
+                await self.ctx.broker.move_stop(pos, new)
+                pos.log(now, "stop_moved", stop=pos.stop, why=f"manual {act} ({by})")
+                await self.bus.publish("position_updated", {"position": pos, "event": "manual_stop",
+                                                            "msg": f"stop → {pos.stop} (by hand, {by})"})
+                res.update(ok=True, msg=f"stop → {pos.stop}")
+                return
+            if act == "partial":
+                frac = float(ev.get("frac") or 0)
+                step, min_u = qty_rules(self.cfg["instruments"][pos.symbol])
+                qty = floor_step(pos.open_qty * frac, step)
+                if not 0 < frac < 1 or qty < min_u or qty >= pos.open_qty:
+                    res["msg"] = "that share is too small, or would close the whole trade (use Close)"
+                    return
+                before = pos.closed_qty
+                fill = await self.ctx.broker.reduce(pos, qty, px)
+                got = pos.closed_qty - before
+                if fill is None or got <= 1e-9:
+                    res["msg"] = "nothing was closed at OANDA"
+                    return
+                pos.log(now, "partial", price=fill, qty=got, why=f"manual ({by})")
+                await self.bus.publish("position_updated", {"position": pos, "event": "manual_partial", "frac": frac,
+                                                            "msg": f"banked {got:g} @ {fill} by hand ({by})"})
+                res.update(ok=True, msg=f"closed {got:g} @ {fill}")
+                return
+            res["msg"] = "unknown action"
+        except OrderRejected as e:
+            res["msg"] = str(e)[:200]
 
     async def on_flatten_all(self, why):
         for pos in list(self.state.positions.values()):

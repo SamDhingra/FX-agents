@@ -7,3 +7,5 @@ data
 .env.*
 !.env.cloud.example
 *.zip
+data_live
+!.env.live.example

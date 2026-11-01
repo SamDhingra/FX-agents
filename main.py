@@ -228,6 +228,20 @@ async def build(cfg, args):
         ctx.runtime_store = store
     supervisor.start()
     agents.append(supervisor)
+    if (cfg.get("live_app") or {}).get("enabled"):
+        # the live site (Oct 31 2026): members + copy engine. Needs LIVE_VAULT_KEY (encrypted member keys).
+        from pathlib import Path
+
+        from fxagents.live.copier import install as install_copier
+        from fxagents.live.members import MemberStore
+        from fxagents.live.vault import VaultError, vault_from_env
+        try:
+            vault = vault_from_env()
+        except VaultError as e:
+            sys.exit(f"live site: {e}")
+        ctx.members = MemberStore(Path(cfg["storage"]["db_path"]).parent / "members.sqlite", vault)
+        if real:
+            install_copier(ctx, ctx.members)
     return ctx, feed, agents, ib
 
 

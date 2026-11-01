@@ -112,7 +112,7 @@ class FakeOanda:
         return httpx.MockTransport(self.handle)
 
     def handle(self, req: httpx.Request) -> httpx.Response:
-        if req.headers.get("Authorization") != f"Bearer {TOKEN}":
+        if req.headers.get("Authorization") != f"Bearer {getattr(self, 'token', TOKEN)}":
             return httpx.Response(401, json={"errorMessage": "Insufficient authorization to perform request."})
         body = json.loads(req.content) if req.content else None
         path = req.url.path

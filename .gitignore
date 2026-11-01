@@ -6,3 +6,5 @@ __pycache__/
 config.local.yaml
 docs/ui-review/
 candles_key/
+.env.live
+data_live/

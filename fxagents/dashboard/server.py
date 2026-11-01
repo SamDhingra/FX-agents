@@ -195,7 +195,16 @@ def build_app(ctx) -> FastAPI:
     token = (ctx.cfg["dashboard"].get("token") or "").strip()
     tv_secret = (ctx.cfg["tradingview"].get("webhook_secret") or "").strip()
 
+    live_cfg = ctx.cfg.get("live_app") or {}
+    LIVE = bool(live_cfg.get("enabled"))
+    if LIVE:
+        # the live (real-money) site: user accounts with authenticator codes replace the shared token entirely
+        from ..live import web as live_web
+        gate = live_web.install(app, ctx)
+
     def authed(req_token: str | None) -> bool:
+        if LIVE:
+            return False                               # the shared token never opens the live site
         return not token or (req_token is not None and hmac.compare_digest(req_token, token))
 
     def tok(request: Request) -> str | None:
@@ -203,6 +212,9 @@ def build_app(ctx) -> FastAPI:
             request.headers.get("x-token")
 
     def need(request: Request, always: bool = False):
+        if LIVE:
+            gate.require(request, "owner")             # every older endpoint is owner-only on the live site
+            return
         if always and not token:
             raise HTTPException(403, "set DASHBOARD_TOKEN to enable controls")
         if not authed(tok(request)):
@@ -236,6 +248,8 @@ def build_app(ctx) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
+        if LIVE:
+            return gate.index(request, (STATIC / "index.html").read_text())
         qtok = request.query_params.get("token")
         if qtok is not None:
             # old ?token= links still work once: set the cookie and bounce to the clean address
@@ -250,6 +264,8 @@ def build_app(ctx) -> FastAPI:
 
     @app.post("/login")
     async def login(request: Request):
+        if LIVE:
+            return await gate.login_post(request)
         from urllib.parse import parse_qs
         form = parse_qs((await request.body()).decode(errors="ignore"))
         value = (form.get("token") or [""])[0].strip()
@@ -259,7 +275,9 @@ def build_app(ctx) -> FastAPI:
         return with_cookie(RedirectResponse("./", status_code=303), request, value)
 
     @app.get("/logout")
-    async def logout():
+    async def logout(request: Request):
+        if LIVE:
+            return gate.logout(request)
         resp = RedirectResponse("./", status_code=303)
         resp.delete_cookie("fx_token", path="/")
         return resp
@@ -536,7 +554,12 @@ def build_app(ctx) -> FastAPI:
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
         t = websocket.query_params.get("token") or websocket.cookies.get("fx_token")
-        if not authed(t):
+        if LIVE:
+            u = gate.ws_user(websocket)
+            ok = u is not None and u["role"] == "owner"
+        else:
+            ok = authed(t)
+        if not ok:
             await websocket.close(code=4401)
             return
         c = shadow_of(ctx, websocket.query_params.get("book")) or ctx

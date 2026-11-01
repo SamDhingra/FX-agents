@@ -19,6 +19,62 @@ case "${1:-help}" in
   restart)   $DC restart "${2:-fxagents}" ;;
   logs)      $DC logs -f --tail=200 "${2:-fxagents}" ;;
   status)    $DC ps; echo; curl -fsS localhost:8088/healthz && echo " ← app healthy" || echo "app not answering on :8088" ;;
+  live)      # the LIVE site — run these from the checkout of the `live` branch (~/fx-live), see docs/live.md
+             #   ./fx.sh live setup | up | update | stop | logs | status | add-owner NAME | reset-2fa NAME | users
+             #   ./fx.sh live promote-playbook [path to playbook.json, default ../fx-agents/data/playbook.json]
+             LDC="docker compose -f docker-compose.live.yml"
+             br=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+             sub="${2:-status}"
+             if [[ "$br" != live && "$sub" != status ]]; then echo "This checkout is on '$br'. The live site runs only from the 'live' branch:"; \
+               echo "  git clone -b live <repo> ~/fx-live && cd ~/fx-live && ./fx.sh live setup"; exit 1; fi
+             case "$sub" in
+               setup)
+                 [[ -f .env.live ]] || { cp .env.live.example .env.live; echo "created .env.live — fill in your LIVE OANDA token and account id"; }
+                 chmod 600 .env.live
+                 if ! grep -q '^LIVE_VAULT_KEY=.\+' .env.live; then
+                   k=$(docker run --rm --entrypoint python fx-agents:latest -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())" 2>/dev/null \
+                       || python3 -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())")
+                   [[ -n "$k" ]] || { echo "could not make a vault key (needs docker or python3 + cryptography)"; exit 1; }
+                   sed -i "s|^LIVE_VAULT_KEY=.*|LIVE_VAULT_KEY=$k|" .env.live
+                   echo "vault key written to .env.live — back it up somewhere safe (password manager); losing it means members re-enter keys"
+                 fi
+                 mkdir -p data_live && chmod 700 data_live
+                 docker network inspect fx-agents_fxnet >/dev/null 2>&1 || echo "note: start the practice stack first (cd ~/fx-agents && ./fx.sh up) — the tunnel lives there"
+                 echo "next: edit .env.live, ./fx.sh live promote-playbook, ./fx.sh live up, ./fx.sh live add-owner <name>" ;;
+               up)      [[ -f .env.live ]] || { echo "run ./fx.sh live setup first"; exit 1; }
+                        [[ -f data_live/playbook.json ]] || { echo "no data_live/playbook.json — run ./fx.sh live promote-playbook first"; exit 1; }
+                        $LDC up -d --build && echo "live site on 127.0.0.1:8089 (and live.<your-domain> once the tunnel route exists)" ;;
+               update)  git pull --ff-only || exit 1; $LDC up -d --build ;;
+               stop)    $LDC stop ;;
+               logs)    $LDC logs --tail "${3:-200}" -f fxlive ;;
+               status)  echo "branch: $br"; $LDC ps 2>/dev/null || true ;;
+               users)   $LDC exec -T fxlive python -m fxagents.live.auth list ;;
+               add-owner|reset-2fa)
+                        [[ -n "${3:-}" ]] || { echo "usage: ./fx.sh live $sub NAME"; exit 1; }
+                        $LDC exec fxlive python -m fxagents.live.auth "$sub" "$3" ;;
+               promote-playbook)
+                        src="${3:-../fx-agents/data/playbook.json}"
+                        [[ -f "$src" ]] || { echo "no $src"; exit 1; }
+                        mkdir -p data_live/playbook_history
+                        [[ -f data_live/playbook.json ]] && cp data_live/playbook.json "data_live/playbook_history/playbook_$(date +%F_%H%M).json"
+                        python3 - "$src" data_live/playbook.json <<'PY'
+import json, sys
+new = json.load(open(sys.argv[1]))
+try:
+    old = json.load(open(sys.argv[2]))
+except Exception:
+    old = {"cells": []}
+ids = lambda d: {c["id"] for c in d.get("cells", [])}
+print("promoting playbook as of", new.get("asof"))
+for c in sorted(ids(new) - ids(old)): print("  + " + c)
+for c in sorted(ids(old) - ids(new)): print("  - " + c)
+ndq = [c["id"] for c in new.get("cells", []) if c.get("sym") == "NDQ"]
+print(f"  {len(ndq)} NDQ cell(s) will trade real money; the rest are view-only on the live site")
+PY
+                        read -r -p "promote? [y/N] " a; [[ "$a" == y ]] || { echo "not promoted"; exit 1; }
+                        cp "$src" data_live/playbook.json && echo "promoted — the live bot picks it up within 5 minutes" ;;
+               *) echo "./fx.sh live setup|up|update|stop|logs|status|users|add-owner NAME|reset-2fa NAME|promote-playbook [path]"; exit 1 ;;
+             esac ;;
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              if [[ -d .git ]]; then git pull --ff-only || { echo; echo "git pull failed — nothing rebuilt (fix the above first)"; exit 1; }; fi
              $DC build fxagents && mkdir -p candles_key && { [[ -f "$HOME/.ssh/fx_results" ]] && install -m 600 "$HOME/.ssh/fx_results" candles_key/key || echo "note: candles won't be pushed until you run ./fx.sh publish-setup once"; }
@@ -520,7 +576,7 @@ case "${1:-help}" in
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | live setup|up|update|logs|users|add-owner|promote-playbook | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;

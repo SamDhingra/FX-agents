@@ -72,6 +72,13 @@ def load_config(path: str | Path = "config.yaml") -> Config:
     local = path.parent / LOCAL_NAME
     if local.exists() and path.name == "config.yaml" and not os.environ.get("FX_NO_LOCAL_CONFIG"):
         raw = deep_merge(raw, yaml.safe_load(local.read_text()) or {})
+    # the live site (Oct 31 2026): FX_CONFIG_OVERLAY=config.live.yaml goes on top of both
+    overlay = os.environ.get("FX_CONFIG_OVERLAY")
+    if overlay and path.name == "config.yaml":
+        op = Path(overlay) if Path(overlay).is_absolute() else path.parent / overlay
+        if not op.exists():
+            raise SystemExit(f"FX_CONFIG_OVERLAY={overlay}: file not found")
+        raw = deep_merge(raw, yaml.safe_load(op.read_text()) or {})
     # an instrument only named in config.local.yaml (e.g. one removed from config.yaml) has no contract spec
     for sym in [s for s, ic in (raw.get("instruments") or {}).items() if not isinstance(ic, dict) or "multiplier" not in ic]:
         import logging

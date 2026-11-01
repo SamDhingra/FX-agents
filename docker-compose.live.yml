@@ -1,0 +1,29 @@
+# The LIVE (real-money) site. Runs from its own checkout of the `live` branch (e.g. ~/fx-live), never from main:
+#   cd ~/fx-live && ./fx.sh live up
+# Own project, own image, own data folder (data_live/), own secrets (.env.live). It joins the practice stack's network
+# only so the existing Cloudflare tunnel can route live.<your-domain> → http://fxlive:8088.
+name: fx-live
+
+services:
+  fxlive:
+    build: .
+    image: fx-agents-live:latest
+    restart: unless-stopped
+    mem_limit: ${FX_LIVE_MEM:-900m}
+    env_file: .env.live                              # live OANDA key, LIVE_VAULT_KEY, I_UNDERSTAND_LIVE_TRADING=yes
+    environment:
+      FX_DB_PATH: /app/data/journal.sqlite
+      FX_CONFIG_OVERLAY: config.live.yaml
+    volumes:
+      - ./data_live:/app/data                        # never shares a file with the practice bot
+    ports:
+      - "127.0.0.1:8089:8088"                       # localhost only (SSH-tunnel fallback)
+    networks: [fxnet]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+networks:
+  fxnet:
+    external: true
+    name: fx-agents_fxnet                            # created by the practice stack (./fx.sh up in ~/fx-agents)

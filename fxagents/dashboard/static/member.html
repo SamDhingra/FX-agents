@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1016">
+<title>FX-Agents Live</title>
+<link rel="stylesheet" href="live.css">
+</head>
+<body class="mem">
+<div class="wrap">
+  <header><div class="brand" style="margin:0"><span class="live-dot"></span>FX-Agents <b>LIVE</b></div><span class="who" id="who"></span></header>
+
+  <section class="page on" id="pg-home">
+    <div class="card" id="acct"><h3>Your account</h3><div class="note">Loading…</div></div>
+    <div class="card" id="copyState"></div>
+    <div class="card"><h3>Your copied trades</h3><div class="kpis" id="sum"></div></div>
+    <div class="card"><h3>The bot right now</h3><div id="botOpen" class="note">Loading…</div></div>
+  </section>
+
+  <section class="page" id="pg-trades">
+    <div class="card"><h3>Copied onto your account</h3><div id="copies" class="note">Loading…</div></div>
+    <div class="card"><h3>The bot's recent trades <span class="note">(in R — 1R = the risk of one trade)</span></h3><div id="botRecent" class="note">Loading…</div></div>
+  </section>
+
+  <section class="page" id="pg-settings">
+    <div class="card" id="keyCard"><h3>OANDA connection</h3><div class="note">Loading…</div></div>
+    <div class="card" id="limCard"><h3>Your limits</h3></div>
+    <div class="card" id="copyCard"><h3>Copying</h3></div>
+    <div class="card"><h3>Password</h3>
+      <label>Current password<input id="pwOld" type="password" autocomplete="current-password"></label>
+      <label>New password (12+ characters)<input id="pwNew" type="password" autocomplete="new-password"></label>
+      <button class="btn ghost" id="pwSave">Change password</button><div id="pwMsg"></div></div>
+    <div class="card"><a class="btn ghost" href="logout" style="margin:0">Sign out</a></div>
+  </section>
+</div>
+<nav class="tabs" aria-label="Sections">
+  <button class="on" data-pg="home">Overview</button><button data-pg="trades">Trades</button><button data-pg="settings">Settings</button>
+</nav>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const R = x => x == null ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + "R";
+const cls = x => x > 0 ? "up" : x < 0 ? "down" : "";
+const money = (x, c = "") => x == null ? "—" : (x < 0 ? "−" : "") + Number(Math.abs(x)).toLocaleString(undefined, {maximumFractionDigits: 0}) + (c ? " " + c : "");
+const when = s => s ? new Date(typeof s === "number" ? s * 1000 : s).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}) : "";
+async function J(url, body, method){
+  const init = body === undefined && !method ? {credentials: "same-origin"} :
+    {method: method || "POST", credentials: "same-origin", headers: {"content-type": "application/json", "x-fx": "1"}, body: body === undefined ? undefined : JSON.stringify(body)};
+  const r = await fetch(url, init);
+  if(r.status === 401){ location.href = "./"; throw new Error("signed out"); }
+  let d = null; try{ d = await r.json(); }catch(e){}
+  if(!r.ok) throw new Error((d && d.detail) || "HTTP " + r.status);
+  return d;
+}
+let ME = null;
+
+$$("nav.tabs button").forEach(b => b.onclick = () => {
+  $$("nav.tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $$(".page").forEach(p => p.classList.toggle("on", p.id === "pg-" + b.dataset.pg));
+  ({home: loadHome, trades: loadTrades, settings: loadSettings})[b.dataset.pg]();
+  window.scrollTo(0, 0);
+});
+
+async function loadMe(){ ME = await J("api/m/me"); $("#who").textContent = ME.user; return ME; }
+
+async function loadHome(){
+  await loadMe();
+  const m = ME.member;
+  J("api/m/account").then(a => {
+    $("#acct").innerHTML = `<h3>Your account</h3>` + (!a.linked ? `<div class="note">No OANDA account linked yet. Add it under <b>Settings</b>.</div>` :
+      a.error ? `<div class="err">${esc(a.error)}</div><div class="note">Check your key under Settings.</div>` :
+      `<div class="kpis"><div class="kpi"><div class="l">Balance (NAV)</div><div class="v">${money(+a.nav, a.currency)}</div></div>
+       <div class="kpi"><div class="l">Account</div><div class="v" style="font-size:16px">${esc(a.alias || "OANDA")}<br><span class="note">${esc(a.environment)} · key ${esc(a.key)}</span></div></div></div>`);
+  }).catch(e => { $("#acct").innerHTML = `<h3>Your account</h3><div class="err">${esc(e.message)}</div>`; });
+  const on = m.copy_on && m.approved && ME.copy_global;
+  const why = !m.has_key ? "link your OANDA account first" : !m.approved ? "waiting for the owner to approve you" :
+    !ME.copy_global ? "copying is paused for everyone by the owner" : !m.copy_on ? "you switched it off" : "";
+  $("#copyState").innerHTML = `<h3>Copying <span class="pill ${on ? "on" : "off"}">${on ? "ON" : "OFF"}</span></h3>
+    <div class="note">${on ? `New ${esc((m.symbols || []).join(", "))} trades are placed on your account at ${(m.risk_pct * 100).toFixed(2)}% risk each, with the same stop.` : "Not copying: " + esc(why) + "."}</div>
+    ${m.last_error ? `<div class="err">Last problem: ${esc(m.last_error)}</div>` : ""}`;
+  const s = ME.summary_30d, a = ME.summary_all;
+  $("#sum").innerHTML = `<div class="kpi"><div class="l">Last 30 days</div><div class="v ${cls(s.sum_r)}">${R(s.sum_r)}</div><div class="note">${s.trades} trades · ${Math.round(s.win_rate * 100)}% win</div></div>
+    <div class="kpi"><div class="l">All time</div><div class="v ${cls(a.sum_r)}">${R(a.sum_r)}</div><div class="note">${a.trades} trades</div></div>`;
+  const f = await J("api/m/feed");
+  $("#botOpen").innerHTML = (f.open.length ? f.open.map(p => `<div class="row"><b>${esc(p.symbol)}</b><span class="pill">${esc(p.side)}</span>
+      <span class="grow note">${esc(p.setup)} · entry ${esc(p.entry)} · stop ${esc(p.stop)}</span><b class="${cls(p.r_now)}">${R(p.r_now)}</b></div>`).join("")
+    : `<div class="note">No open trade.</div>`) + `<div class="note" style="margin-top:8px">Bot entries are ${f.trading ? "on" : "paused"}.</div>`;
+}
+
+async function loadTrades(){
+  const [c, f] = await Promise.all([J("api/m/copies"), J("api/m/feed")]);
+  $("#copies").innerHTML = c.rows.length ? c.rows.map(x => `<div class="row"><span class="note" style="min-width:92px">${when(x.opened)}</span><b>${esc(x.symbol)}</b>
+      <span class="pill">${x.side > 0 ? "LONG" : "SHORT"}</span><span class="grow note">${esc(x.status)}${x.qty ? " · " + x.qty + " units" : ""}${x.error ? " · " + esc(x.error) : ""}</span>
+      <b class="${cls(x.r)}">${x.status === "closed" ? R(x.r) : ""}</b></div>`).join("") : `<div class="note">Nothing copied yet.</div>`;
+  $("#botRecent").innerHTML = f.recent.length ? f.recent.map(t => `<div class="row"><span class="note" style="min-width:92px">${when(t.closed)}</span><b>${esc(t.symbol)}</b>
+      <span class="pill">${esc(t.side)}</span><span class="grow note">${esc(t.setup)} · ${esc(t.exit || "")}</span><b class="${cls(t.r)}">${R(t.r)}</b></div>`).join("") : `<div class="note">No trades yet.</div>`;
+}
+
+async function loadSettings(){
+  await loadMe();
+  const m = ME.member;
+  $("#keyCard").innerHTML = `<h3>OANDA connection</h3>` + (m.has_key ? `<div class="row"><span class="grow">${esc(m.environment)} account <b>${esc(m.account_id)}</b><br><span class="note">key ${esc(m.token_mask)} · checked ${when(m.verified)}</span></span></div>
+      <button class="btn danger" id="keyDel">Remove my key</button>` : "") +
+    `<div class="note" style="margin-top:8px">${m.has_key ? "Replace it:" : "Create a key in OANDA (Manage API Access) and paste it here. It is checked once with OANDA, stored encrypted, and never shown again — only its last 4 characters."}</div>
+     <label>Account ID<input id="kAcct" placeholder="001-001-1234567-001" autocapitalize="none" spellcheck="false" value="${esc(m.account_id || "")}"></label>
+     <label>API token<input id="kTok" type="password" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+     <label>Account type<select id="kEnv"><option value="live">Live (real money)</option><option value="practice">Practice</option></select></label>
+     <button class="btn" id="keySave">Check and save</button><div id="keyMsg"></div>`;
+  if(m.environment) $("#kEnv").value = m.environment;
+  $("#keySave").onclick = async () => { const msg = $("#keyMsg"); msg.className = "note"; msg.textContent = "Checking with OANDA…";
+    try{ const r = await J("api/m/key", {account_id: $("#kAcct").value, token: $("#kTok").value, environment: $("#kEnv").value});
+      $("#kTok").value = ""; msg.className = "okm"; msg.textContent = `Linked: ${r.account.alias || "account"} (${r.account.currency}). Copying stays off until you switch it on.`; setTimeout(loadSettings, 1500); }
+    catch(e){ $("#kTok").value = ""; msg.className = "err"; msg.textContent = e.message; } };
+  if($("#keyDel")) $("#keyDel").onclick = async () => { if(!confirm("Remove your OANDA key? Copying stops.")) return; await J("api/m/key", undefined, "DELETE"); loadSettings(); };
+
+  $("#limCard").innerHTML = `<h3>Your limits</h3>
+    <label>Risk per trade (% of your balance at the stop, max ${(ME.cap * 100).toFixed(2)}%)<input id="lRisk" inputmode="decimal" value="${(m.risk_pct * 100).toFixed(2)}"></label>
+    <label>Most units per trade<input id="lMax" inputmode="decimal" value="${m.max_units}"></label>
+    <label>Stop copying for the day after losing (% of balance)<input id="lDay" inputmode="decimal" value="${(m.daily_loss_pct * 100).toFixed(1)}"></label>
+    <div class="note" style="margin-top:8px">Instruments: ${(ME.copy_symbols || []).map(s => `<label style="display:inline-flex;gap:6px;margin-right:12px"><input type="checkbox" data-sym="${esc(s)}" ${(m.symbols || []).includes(s) ? "checked" : ""} style="width:auto;margin:0"> ${esc(s)}</label>`).join("")}</div>
+    <button class="btn ghost" id="limSave">Save limits</button><div id="limMsg"></div>`;
+  $("#limSave").onclick = async () => { const msg = $("#limMsg");
+    try{ await J("api/m/limits", {risk_pct: parseFloat($("#lRisk").value) / 100, max_units: parseFloat($("#lMax").value),
+      daily_loss_pct: parseFloat($("#lDay").value) / 100, symbols: $$("[data-sym]").filter(x => x.checked).map(x => x.dataset.sym)});
+      msg.className = "okm"; msg.textContent = "Saved"; }
+    catch(e){ msg.className = "err"; msg.textContent = e.message; } };
+
+  $("#copyCard").innerHTML = `<h3>Copying <span class="pill ${m.copy_on ? "on" : "off"}">${m.copy_on ? "ON" : "OFF"}</span></h3>
+    ${m.copy_on ? `<div class="note">The bot places its trades on your account within your limits.</div><button class="btn danger" id="copyOff">Stop copying</button>` :
+    `<div class="consent"><input type="checkbox" id="consent" ${m.consent_ts ? "checked" : ""}><span>${esc(ME.statement)}</span></div>
+     <button class="btn" id="copyOn" ${m.has_key ? "" : "disabled"}>Start copying</button>`}
+    <div id="copyMsg"></div>${!m.approved ? `<div class="note" style="margin-top:8px">The owner still has to approve your account before anything is copied.</div>` : ""}`;
+  if($("#copyOn")) $("#copyOn").onclick = async () => { const msg = $("#copyMsg");
+    try{ await J("api/m/copy", {on: true, consent: $("#consent").checked}); loadSettings(); } catch(e){ msg.className = "err"; msg.textContent = e.message; } };
+  if($("#copyOff")) $("#copyOff").onclick = async () => { await J("api/m/copy", {on: false}); loadSettings(); };
+  $("#pwSave").onclick = async () => { const msg = $("#pwMsg");
+    try{ const r = await J("api/live/password", {old: $("#pwOld").value, new: $("#pwNew").value}); msg.className = "okm"; msg.textContent = r.msg; setTimeout(() => location.href = "./", 1500); }
+    catch(e){ msg.className = "err"; msg.textContent = e.message; } };
+}
+
+loadHome().catch(() => {});
+setInterval(() => { if(document.visibilityState === "visible" && $("#pg-home").classList.contains("on")) loadHome().catch(() => {}); }, 15000);
+})();
+</script>
+</body>
+</html>
