@@ -34,6 +34,7 @@ import pandas as pd
 
 from .broker import Broker, OrderRejected
 from .models import Bar, Leg, Position
+from .timeutil import tfloor
 
 log = logging.getLogger("oanda")
 
@@ -271,19 +272,38 @@ class OandaFeed:
         last_clock = 0.0
         next_poll = 0.0
         loop = asyncio.get_running_loop()
+        fails = 0
         while True:
-            now = pd.Timestamp.now(tz=self.tz)
-            # candles complete on the minute; poll a couple of seconds after, then every few seconds
-            # until every symbol has its bar. When nothing new arrives (weekend, daily break) back off.
-            if (now.second >= 2 or not self.last_ts) and loop.time() >= next_poll:
-                want = (now.floor("min") - pd.Timedelta("1min"))
-                if any(self.last_ts.get(s) is None or self.last_ts[s] < want for s in self.syms):
-                    got = await self.poll_once()
-                    next_poll = loop.time() + (0 if got else 30)
-            if loop.time() - last_clock >= 15:
-                last_clock = loop.time()
-                self.state.now = pd.Timestamp.now(tz=self.tz)
-                await self.bus.publish("clock", self.state.now)
+            # Nov 1 2026: one exception in here (a DST rounding error) ended this loop for good — no bars, no clock,
+            # every agent "down" while the web page still answered. Now any error is logged, alerted once, and the
+            # loop carries on after a short pause.
+            try:
+                now = pd.Timestamp.now(tz=self.tz)
+                # candles complete on the minute; poll a couple of seconds after, then every few seconds
+                # until every symbol has its bar. When nothing new arrives (weekend, daily break) back off.
+                if (now.second >= 2 or not self.last_ts) and loop.time() >= next_poll:
+                    want = (tfloor(now, "min") - pd.Timedelta("1min"))
+                    if any(self.last_ts.get(s) is None or self.last_ts[s] < want for s in self.syms):
+                        got = await self.poll_once()
+                        next_poll = loop.time() + (0 if got else 30)
+                if loop.time() - last_clock >= 15:
+                    last_clock = loop.time()
+                    self.state.now = pd.Timestamp.now(tz=self.tz)
+                    await self.bus.publish("clock", self.state.now)
+                fails = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                fails += 1
+                log.exception("price feed loop error (%d in a row) — continuing", fails)
+                if fails == 3:
+                    self.state.alert("error", f"price feed keeps failing: {type(e).__name__}: {str(e)[:120]}")
+                    try:
+                        await self.bus.publish("alert", {"msg": f"Price feed error, retrying: {type(e).__name__}",
+                                                         "event": "agent_down", "title": "⚠ FX-Agents"})
+                    except Exception:  # noqa: BLE001
+                        pass
+                await asyncio.sleep(min(30, 2 * fails))
             await asyncio.sleep(self.poll_seconds)
 
 

@@ -16,6 +16,7 @@ import pandas as pd
 
 from .. import usd_calendar
 from ..indicators import resample_ohlc
+from ..timeutil import tfloor
 
 NY = "America/New_York"
 MIN = pd.Timedelta("1min")
@@ -79,7 +80,7 @@ def forming_m15(m1: pd.DataFrame, ts: pd.Timestamp, nd: int) -> dict | None:
     """The 15-minute candle in progress at `ts`, built from the minutes closed so far; None without minute data.
     On a 15-minute boundary nothing of the new candle has traded: said explicitly (Oct 28 2026 — both reviewers had read the
     bare null as missing data)."""
-    start = ts.floor("15min")
+    start = tfloor(ts, "15min")
     if m1 is None or not len(m1):
         return None
     if ts == start:
@@ -126,7 +127,7 @@ def build_packet(*, candidate_id: str, book: str, symbol: str, side: int, strate
                  m15_live: bool | None = None, events: dict | None = None) -> dict:
     """The packet as a plain dict (JSON-safe, `packet_hash` included). `ts` is the entry time; nothing at or after
     it is read. `record` = {"trades": n, "avg_r": x} for the setup, if known."""
-    ts = _ny(ts).floor("min")
+    ts = tfloor(_ny(ts), "min")
     nd = decimals_for(instrument, symbol)
     bias = bias or {}
     updated = bias.get("updated")
