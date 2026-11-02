@@ -19,13 +19,14 @@ import pandas as pd
 
 from .packet import build_packet, canonical
 from .providers import ACTIONS, build_providers
+from ..timeutil import tfloor
 
 TZ = "America/New_York"
 
 
 def synthetic_packet(now: pd.Timestamp | None = None) -> dict:
     """A plausible but entirely made-up LONG XAUUSD candidate, with ~3 days of random-walk M1 candles before `now`."""
-    ts = (now or pd.Timestamp.now(tz=TZ)).tz_convert(TZ).floor("min")
+    ts = tfloor((now or pd.Timestamp.now(tz=TZ)).tz_convert(TZ), "min")
     idx = pd.date_range(ts - pd.Timedelta(days=3), ts - pd.Timedelta(minutes=1), freq="1min", tz=TZ)
     rng = np.random.default_rng(7)
     c = 2650.0 + np.cumsum(rng.normal(0, 0.3, len(idx)))

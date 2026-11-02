@@ -11,6 +11,7 @@ from ..bias import bias_frame, label
 from ..indicators import in_windows
 from ..structure import trading_day
 from .core import Agent
+from ..timeutil import tfloor
 
 
 log = logging.getLogger("bias")
@@ -118,7 +119,7 @@ class BookGuardAgent(GuardMixin, Agent):
 
 def hour_stats(idx: pd.DatetimeIndex, now: pd.Timestamp) -> tuple[int, bool]:
     """(1-minute bars present, complete) in the hour that closed last before `now`; shared with the retrospective backfill."""
-    end = now.floor("h")
+    end = tfloor(now, "h")
     start = end - pd.Timedelta("1h")
     win = idx[(idx >= start) & (idx < end)]
     n = len(win)
@@ -189,7 +190,7 @@ class BiasAgent(GuardMixin, Agent):
     async def on_clock(self, now: pd.Timestamp):
         self.beat()
         self._roll(now)                # 17:00 NY roll on the wall clock → loss streaks reset (saved with the guard)
-        hour = now.floor("h")
+        hour = tfloor(now, "h")
         self.last_hour = hour
         for sym in self.cfg["instruments"]:
             d = self.done.get(sym)
@@ -233,10 +234,10 @@ class BiasAgent(GuardMixin, Agent):
         if b is None:
             return
         n_min, full = self.hour_minutes(sym, now)
-        if n_min is not None and 0 < n_min < 55 and (sym, now.floor("h")) not in self.warned_short:
-            self.warned_short.add((sym, now.floor("h")))      # once per symbol-hour; an empty hour is a closed market
+        if n_min is not None and 0 < n_min < 55 and (sym, tfloor(now, "h")) not in self.warned_short:
+            self.warned_short.add((sym, tfloor(now, "h")))      # once per symbol-hour; an empty hour is a closed market
             self.log.warning("%s: the hour ending %s closed with only %d of 60 one-minute bars", sym,
-                             now.floor("h").strftime("%H:%M"), n_min)
+                             tfloor(now, "h").strftime("%H:%M"), n_min)
         g = self.guard[sym]
         # safeguard 3: lift suspension once the 1H structure prints a fresh break
         self._release(sym, b["h1"])
@@ -266,7 +267,7 @@ class BiasAgent(GuardMixin, Agent):
             g["in_doubt"] = False
         # safeguard 6: accuracy — did the bias call the next N hours? One sample per symbol per hour (Oct 26 2026)
         smp = self.samples[sym]
-        if not smp or smp[-1]["ts"].floor("h") != now.floor("h"):
+        if not smp or tfloor(smp[-1]["ts"], "h") != tfloor(now, "h"):
             smp.append({"ts": now, "score": b["score"], "price": b["price"]})
         hz = pd.Timedelta(hours=self.sg.get("accuracy_horizon_h", 4))
         judged = [(s, b["price"]) for s in smp if now - s["ts"] >= hz and abs(s["score"]) >= self.bc["min_align"]
@@ -277,7 +278,7 @@ class BiasAgent(GuardMixin, Agent):
         acc = round(sum(hits) / len(hits), 3) if hits else None
         state = "SUSPENDED" if g["suspended"] else ("IN DOUBT" if g["in_doubt"] else b["label"])
         prev = self.state.bias.get(sym) or {}
-        if prev.get("updated") and pd.Timestamp(prev["updated"]) > now.floor("min"):
+        if prev.get("updated") and pd.Timestamp(prev["updated"]) > tfloor(now, "min"):
             self._persist()                             # an update started later already published a newer reading
             return
         self.state.bias[sym] = b | {"state": state, "suspended": g["suspended"], "in_doubt": g["in_doubt"],

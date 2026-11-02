@@ -40,6 +40,7 @@ from . import store
 from .packet import build_packet, canonical
 from .providers import EXCHANGE_SYSTEM_PROMPT, PROMPT_VERSION, SYSTEM_PROMPT, build_providers
 from .runner import ReviewRunner
+from ..timeutil import tfloor
 
 log = logging.getLogger("dynamic.backfill")
 MAX_TRADES = 50
@@ -259,7 +260,7 @@ class RetroStore:
 
 
 def entry_minute(opened: str, tz: str) -> pd.Timestamp:
-    return pd.Timestamp(opened).tz_convert(tz).floor("min")
+    return tfloor(pd.Timestamp(opened).tz_convert(tz), "min")
 
 
 def setup_record(journal, strategy: str, before: pd.Timestamp) -> dict | None:

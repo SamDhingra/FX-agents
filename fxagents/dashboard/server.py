@@ -23,6 +23,7 @@ from .ask import Asker
 from .lessons import LessonWriter
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from ..timeutil import tfloor
 
 STATIC = Path(__file__).parent / "static"
 
@@ -594,7 +595,7 @@ def build_app(ctx) -> FastAPI:
             if now is not None:
                 syms = [symbol] if symbol in ctx.cfg["instruments"] else list(ctx.cfg["instruments"])
                 # this hour if it can trade, otherwise the next hour that can (weekdays only)
-                t, nxt = now.floor("h"), False
+                t, nxt = tfloor(now, "h"), False
                 for _ in range(24 * 4):
                     if t.dayofweek < 5 and t.hour in win:
                         break

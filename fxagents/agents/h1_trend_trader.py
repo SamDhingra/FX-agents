@@ -22,6 +22,7 @@ from ..astra_cfd import COST_GATE, FOMC, HOLIDAYS, EARLY_CLOSE, H1Ind, h1_initia
 from ..models import Bar, Position
 from .core import Agent
 from .trading import floor_step, half_spread, qty_rules
+from ..timeutil import tfloor
 
 STRATEGY = "astra_h1_vol_trend"
 DECISION_HOURS = (9, 10, 11, 12, 13)
@@ -50,7 +51,7 @@ class H1VolTrendTrader(Agent):
         sym = bar.symbol
         if sym not in self.symbols:
             return
-        boundary = (bar.ts + pd.Timedelta("1min")).floor("h")
+        boundary = tfloor(bar.ts + pd.Timedelta("1min"), "h")
         if self.last_hour.get(sym) is not None and boundary <= self.last_hour[sym]:
             return
         if bar.ts + pd.Timedelta("1min") - boundary > pd.Timedelta("5min"):
@@ -69,7 +70,7 @@ class H1VolTrendTrader(Agent):
         for pos in [p for p in self.state.positions.values() if p.symbol == sym and p.status == "open" and p.strategy == STRATEGY]:
             st = self.trail.setdefault(pos.id, {})
             t = len(ind.C) - 1
-            if pd.Timestamp(pos.opened_ts).floor("min") > self.last_hour[sym] - pd.Timedelta("1h"):
+            if tfloor(pd.Timestamp(pos.opened_ts), "min") > self.last_hour[sym] - pd.Timedelta("1h"):
                 continue                              # this hourly bar began before the entry minute
             ns = h1_trail(st, ind.C[t], ind.A[t], pos.entry, pos.risk_per_unit, pos.side, q)
             if ns is None or (ns - pos.stop) * pos.side <= 0:

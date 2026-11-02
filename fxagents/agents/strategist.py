@@ -26,6 +26,7 @@ from ..sim import Mgmt, backtest, stats
 from ..strategies import BUILTIN, Confluence, Strategy, build_strategy
 from .core import Agent
 from .trading import half_spread
+from ..timeutil import tfloor
 
 BIAS_FILTERS = ["dtfx_zone", "macd_cross", "rsi_pullback", "ict_ote"]
 
@@ -79,7 +80,7 @@ class StrategistAgent(Agent):
             m1 = pd.concat([hm1[hm1.index < m1.index[0]] if len(m1) else hm1, m1])
             h1 = pd.concat([hh1[hh1.index < h1.index[0]] if len(h1) else hh1, h1])
         now = self.now()                      # never look past "now" (a replay's history file holds the future)
-        m1, h1 = m1[m1.index < now], h1[h1.index < now.floor("h")]
+        m1, h1 = m1[m1.index < now], h1[h1.index < tfloor(now, "h")]
         cut = m1.index[-1] - pd.Timedelta(days=float(self.lc["history_days"])) if len(m1) else None
         if cut is not None:
             m1 = m1[m1.index >= cut]

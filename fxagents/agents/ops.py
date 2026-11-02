@@ -9,6 +9,7 @@ import httpx
 import pandas as pd
 
 from .core import Agent
+from ..timeutil import tfloor
 
 
 def header_title(title: str) -> str:
@@ -53,7 +54,7 @@ class JournalAgent(Agent):
         st.equity_peak = max(st.equity_peak or eq, eq)
         if not st.day_start_equity:
             st.day_start_equity = eq
-        key = now.floor("5min")
+        key = tfloor(now, "5min")
         if key != self._last_eq_min:
             self._last_eq_min = key
             st.equity_curve.append({"ts": now.isoformat(timespec="minutes"), "equity": round(eq, 2)})

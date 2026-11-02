@@ -15,6 +15,7 @@ from ..models import Bar, Position, Signal
 from ..mtf_whatif import live_m15_against
 from ..strategies import Strategy
 from .core import Agent
+from ..timeutil import tfloor
 
 
 def _hm(s: str) -> int:
@@ -141,7 +142,7 @@ class SelectorAgent(Agent):
     async def on_clock(self, now):
         self.beat()
         # select a few minutes before the hour so the hour starts with a decision
-        nxt = (now + pd.Timedelta("3min")).floor("h")
+        nxt = tfloor(now + pd.Timedelta("3min"), "h")
         if any(self.last_hour.get(s) != nxt for s in self.cfg["instruments"]):
             await self.select_all()
 
@@ -164,7 +165,7 @@ class SelectorAgent(Agent):
 
     async def select_all(self, force: bool = False):
         now = self.now()
-        hour_ts = (now + pd.Timedelta("3min")).floor("h")
+        hour_ts = tfloor(now + pd.Timedelta("3min"), "h")
         for sym in self.cfg["instruments"]:
             if not force and self.last_hour.get(sym) == hour_ts:
                 continue
@@ -840,7 +841,7 @@ class PositionManagerAgent(Agent):
         except ValueError:
             k = 5
         df = self.ctx.store.tf(pos.symbol, "1min")
-        df = df[df.index >= pd.Timestamp(pos.opened_ts).floor("1min")]
+        df = df[df.index >= tfloor(pd.Timestamp(pos.opened_ts), "1min")]
         if len(df) < 2 * k + 1:
             return None
         x = (df["low"] if pos.side > 0 else -df["high"]).to_numpy(float)
