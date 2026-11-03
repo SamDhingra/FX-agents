@@ -2858,7 +2858,7 @@ const BOOK_COLORS = {live:"#5b96ff", playbook:"#a593f5", playbook_regime:"#e48cc
   ema21_rsi55:"#e9a15b", gold_breakout:"#f0c94a", setup_first:"#8fc46b", hourly_pick:"#d7c45a"};
 const BOOK_SPARE = ["#8fc46b", "#d7c45a", "#6fb8f0", "#f08a7a"];
 const BOOK_ABOUT = {live:"practice account · real orders", playbook:"weekly picked cells", playbook_regime:"playbook, chop/trend filter", playbook_allhours:"playbook, entries 20:00 → 15:50", playbook_nobias:"playbook, bias rule off",
-  h1_vol_trend:"gold, hourly trend", ema21_rsi55:"gold + US30, 15m trend", gold_breakout:"gold, overnight-range breakout", setup_first:"best setup first", hourly_pick:"hourly strategy pick"};
+  h1_vol_trend:"gold, hourly trend", ema21_rsi55:"gold, 15m trend", gold_breakout:"gold, overnight-range breakout", setup_first:"best setup first", hourly_pick:"hourly strategy pick"};
 const bookColor = b => b === "live" ? getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() : BOOK_COLORS[b] || BOOK_SPARE[Math.abs([...String(b)].reduce((a,c)=>a+c.charCodeAt(0),0)) % BOOK_SPARE.length];
 const bookLabel = b => b === "live" ? ({sim:"Simulation",paper:"Practice",live:"Live account"}[S?.mode]||"Account") : (BOOKS.length > 1 ? ModeName(b) : "Shadow");
 function paintBook(){
