@@ -88,7 +88,12 @@ function renderDesk(){
   const keepInputs = {}; el.querySelectorAll("input[data-keep]").forEach(i => keepInputs[i.dataset.keep] = i.value);
   const used = a.loss_cap ? Math.min(1, a.loss_used / a.loss_cap) : 0;
   const tradable = d.markets.filter(m => m.trade).map(m => m.symbol);
-  const status = d.trading_enabled ? `<span class="lv-chip on">● Entries on</span>` : `<span class="lv-chip off">● Entries off — ${E(d.halt_reason || "paused")}</span>`;
+  const status = d.hold ? `<span class="lv-chip off">● ON HOLD — the live account opens no trades</span>`
+    : d.trading_enabled ? `<span class="lv-chip on">● Entries on</span>` : `<span class="lv-chip off">● Entries off — ${E(d.halt_reason || "paused")}</span>`;
+  const holdUi = d.hold ? `<div class="lv-switch" style="margin-top:12px"><div style="flex:1"><b>Live account on hold</b><small>Nothing new is opened until you release it. Paper books keep running.</small></div>
+      <input id="holdCode" data-keep="holdcode" inputmode="numeric" autocomplete="one-time-code" placeholder="Code" style="width:110px;padding:9px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--text);font-size:16px">
+      <button class="lv-btn pri" data-hold="off">Release — start trading</button></div>`
+    : `<div style="margin-top:10px"><button class="lv-btn" data-hold="on">Put the live account on hold</button></div>`;
   const head = `<div class="lv-card"><h3>Account <span class="sp"></span><span class="mut num" style="font-weight:500;font-size:12px">${E(hm(d.now))} NY · flat at ${E(d.flatten_at)}</span></h3>
     <div class="lv-kpis">
       <div class="lv-kpi"><div class="l">Equity</div><div class="v num">${money(a.equity, 0)}</div><div class="s">risk ${(a.risk_pct*100).toFixed(2)}% / trade</div></div>
@@ -100,7 +105,7 @@ function renderDesk(){
     <div class="lv-status">${status}<span class="sp" style="flex:1"></span>
       ${d.trading_enabled ? `<button class="lv-btn" data-ctl="pause">Pause entries</button>` : `<button class="lv-btn pri" data-ctl="resume">Resume entries</button>`}
       <button class="lv-btn danger ${armed.flatten ? "arm" : ""}" data-ctl="flatten">${armed.flatten ? "Tap again: close everything" : "Flatten all"}</button></div>
-    <div class="lv-msg" id="ctlMsg"></div></div>`;
+    ${holdUi}<div class="lv-msg" id="ctlMsg"></div></div>`;
   const pos = d.positions.length ? d.positions.map(posCard).join("") : `<div class="mut" style="font-size:13px">No open trades. The desk refreshes every 5 seconds.</div>`;
   const posCardHtml = `<div class="lv-card s8"><h3>Open trades</h3>${pos}</div>`;
   const check = `<div class="lv-card s4"><h3>Before the next trade</h3>${checklist(d)}</div>`;
@@ -141,6 +146,7 @@ function checklist(d){
   const out = [], sym = (d.markets.find(m => m.trade) || {}).symbol;
   const b = ((d.markets.find(m => m.symbol === sym) || {}).bias) || {};
   const row = (st, txt) => out.push(`<div class="${st}"><i>${st === "y" ? "✓" : st === "n" ? "✕" : "!"}</i><span>${txt}</span></div>`);
+  if(d.hold) row("n", "Live account is on hold");
   row(d.trading_enabled ? "y" : "n", d.trading_enabled ? "Entries are on" : "Entries are off");
   const used = d.account.loss_cap ? d.account.loss_used / d.account.loss_cap : 0;
   row(used < .5 ? "y" : used < 1 ? "w" : "n", `Daily loss used ${(used*100).toFixed(0)}% of the limit`);
@@ -158,6 +164,12 @@ function wireDesk(){
     if(a === "flatten" && !armed.flatten){ armed.flatten = true; renderDesk(); setTimeout(() => { armed.flatten = false; if(page === "desk") renderDesk(); }, 4000); return; }
     armed.flatten = false;
     try{ await J("api/control/" + a, {}); msg(a === "flatten" ? "Flatten sent — every position is being closed" : a === "pause" ? "New entries paused" : "Entries resumed", true); }
+    catch(e){ msg(e.message, false); }
+    loadDesk();
+  });
+  el.querySelectorAll("[data-hold]").forEach(b => b.onclick = async () => {
+    const on = b.dataset.hold === "on";
+    try{ await J("api/live/hold", {on, code: on ? "" : ($("#holdCode") || {}).value || ""}); msg(on ? "Live account on hold" : "Hold released — the live account can trade", true); }
     catch(e){ msg(e.message, false); }
     loadDesk();
   });

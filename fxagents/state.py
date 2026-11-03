@@ -24,6 +24,7 @@ class LiveState:
     halt_reason: str = ""
     trading_day: str = ""                       # NY trading date (rolls at 17:00) that day_start_equity belongs to
     entries_blocked: str = ""                   # set by the flatten supervisor near the session end
+    hold: str = ""                              # live site: the HOLD file exists → no new entries on the account
     last_prices: dict[str, float] = field(default_factory=dict)
     last_bar_ts: dict[str, str] = field(default_factory=dict)
     positions: dict[str, Any] = field(default_factory=dict)          # id -> Position

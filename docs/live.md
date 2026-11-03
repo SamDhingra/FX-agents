@@ -17,6 +17,21 @@ folder and address. The practice bot and its dashboard stay exactly as they are.
 | Data | `data/` | `data_live/` (journal, users, members; nothing shared) |
 | Secrets | `.env` | `.env.live` (live OANDA key, `LIVE_VAULT_KEY`) |
 
+## Hold (the live account starts on hold)
+
+`./fx.sh live setup` creates `data_live/HOLD`. While that file exists, the **live account opens no new trades**:
+- the hold survives restarts and new trading days, unlike Pause, which clears the next trading day;
+- open trades are still managed and closed as usual;
+- paper books keep trading.
+
+To release it, either:
+- press **Release — start trading** on the Live desk and enter your authenticator code, or
+- run `./fx.sh live release` on the server.
+
+To put the hold back, either:
+- press **Put the live account on hold** on the desk, or
+- run `./fx.sh live hold`.
+
 ## Promoting code to live
 
 The `live` branch only receives what you choose. Nothing reaches it automatically.

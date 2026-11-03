@@ -417,6 +417,8 @@ class RiskAgent(Agent):
             return self._reject(rec, f"trading halted: {self.state.halt_reason}")
         if getattr(self.state, "entries_blocked", ""):
             return self._reject(rec, f"entries blocked: {self.state.entries_blocked}")
+        if getattr(self.state, "hold", ""):
+            return self._reject(rec, self.state.hold)
         if self.cfg["instruments"].get(sig.symbol, {}).get("trade", True) is False:
             return self._reject(rec, f"instrument off: {sig.symbol} is watch-only (trade: false)")
         if not in_windows(now, s["entry_windows"]):

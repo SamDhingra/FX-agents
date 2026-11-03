@@ -20,7 +20,7 @@ case "${1:-help}" in
   logs)      $DC logs -f --tail=200 "${2:-fxagents}" ;;
   status)    $DC ps; echo; curl -fsS localhost:8088/healthz && echo " ← app healthy" || echo "app not answering on :8088" ;;
   live)      # the LIVE site — run these from the checkout of the `live` branch (~/fx-live), see docs/live.md
-             #   ./fx.sh live setup | up | update | stop | logs | status | add-owner NAME | reset-2fa NAME | users
+             #   ./fx.sh live setup | up | update | stop | logs | status | add-owner NAME | reset-2fa NAME | users | hold | release
              #   ./fx.sh live promote-playbook [path to playbook.json, default ../fx-agents/data/playbook.json]
              LDC="docker compose -f docker-compose.live.yml"
              br=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
@@ -39,6 +39,7 @@ case "${1:-help}" in
                    echo "vault key written to .env.live — back it up somewhere safe (password manager); losing it means members re-enter keys"
                  fi
                  mkdir -p data_live && chmod 700 data_live
+                 [[ -f data_live/HOLD ]] || { echo "held at setup" > data_live/HOLD; echo "live account starts ON HOLD (data_live/HOLD) — release it on the Live desk when ready"; }
                  docker network inspect fx-agents_fxnet >/dev/null 2>&1 || echo "note: start the practice stack first (cd ~/fx-agents && ./fx.sh up) — the tunnel lives there"
                  echo "next: edit .env.live, ./fx.sh live promote-playbook, ./fx.sh live up, ./fx.sh live add-owner <name>" ;;
                up)      [[ -f .env.live ]] || { echo "run ./fx.sh live setup first"; exit 1; }
@@ -49,6 +50,10 @@ case "${1:-help}" in
                logs)    $LDC logs --tail "${3:-200}" -f fxlive ;;
                status)  echo "branch: $br"; $LDC ps 2>/dev/null || true ;;
                users)   $LDC exec -T fxlive python -m fxagents.live.auth list ;;
+               hold)    touch data_live/HOLD && echo "live account ON HOLD — no new trades (takes effect within 15 s)" ;;
+               release) read -r -p "release the hold — the LIVE account may open real trades. Type yes: " a
+                        [[ "$a" == yes ]] || { echo "still on hold"; exit 1; }
+                        rm -f data_live/HOLD && echo "hold released — the live account can trade (within 15 s)" ;;
                add-owner|reset-2fa)
                         [[ -n "${3:-}" ]] || { echo "usage: ./fx.sh live $sub NAME"; exit 1; }
                         $LDC exec fxlive python -m fxagents.live.auth "$sub" "$3" ;;
@@ -73,7 +78,7 @@ print(f"  {len(ndq)} NDQ cell(s) — paper only on the live site (the 'Playbook 
 PY
                         read -r -p "promote? [y/N] " a; [[ "$a" == y ]] || { echo "not promoted"; exit 1; }
                         cp "$src" data_live/playbook.json && echo "promoted — the live bot picks it up within 5 minutes" ;;
-               *) echo "./fx.sh live setup|up|update|stop|logs|status|users|add-owner NAME|reset-2fa NAME|promote-playbook [path]"; exit 1 ;;
+               *) echo "./fx.sh live setup|up|update|stop|logs|status|users|hold|release|add-owner NAME|reset-2fa NAME|promote-playbook [path]"; exit 1 ;;
              esac ;;
   update)    # pull new code (git) or after you rsync'd files, rebuild and restart only the app
              if [[ -d .git ]]; then git pull --ff-only || { echo; echo "git pull failed — nothing rebuilt (fix the above first)"; exit 1; }; fi

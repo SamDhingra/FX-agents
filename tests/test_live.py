@@ -320,3 +320,34 @@ def test_member_key_flow_never_returns_the_token(tmp_path, monkeypatch):
     assert c.post("/api/m/copy", json={"on": True, "consent": True}, headers=h).json()["copy_on"] == 1
     assert MTOKEN not in c.get("/api/m/me").text
     assert c.delete("/api/m/key", headers=h).json()["member"]["has_key"] is False
+
+
+def test_hold_file_blocks_the_account_until_released_with_a_code(tmp_path, monkeypatch):
+    from fxagents.live import hold as H
+    c, ctx, au, so, sm = live_client(tmp_path, monkeypatch)
+    H.set_hold(ctx.cfg, True, "setup")
+    assert H.is_on(ctx.cfg)
+    login(c, "sam", "owner password 123", so)
+    h = {"x-fx": "1"}
+    assert c.post("/api/live/hold", json={"on": False, "code": "000000"}, headers=h).status_code == 403
+    assert H.is_on(ctx.cfg)
+    r = c.post("/api/live/hold", json={"on": False, "code": A.totp_at(so, int(time.time() // 30) + 1)}, headers=h)
+    assert r.status_code == 200 and not H.is_on(ctx.cfg) and ctx.state.hold == ""
+    assert c.post("/api/live/hold", json={"on": True}, headers=h).json()["hold"] is True
+    assert H.is_on(ctx.cfg) and ctx.state.hold == H.REASON
+    assert c.get("/api/live/desk").json()["hold"] is True
+
+
+def test_risk_refuses_entries_on_hold():
+    from fxagents.agents.trading import RiskAgent
+    from fxagents.live.hold import REASON
+    from fxagents.models import Signal
+    from tests.test_oanda import setup as osetup
+    cfg, fake, c, st, bus, feed, b = osetup()
+    st.hold = REASON
+    rejected = []
+    me = SimpleNamespace(cfg=cfg, state=st, now=lambda: st.now, beat=lambda: None,
+                         _reject=lambda rec, why: rejected.append(why), ctx=SimpleNamespace(news=None))
+    sig = Signal("NDQ", "x:5m@v1", 1, 24500.0, 24400.0, st.now)
+    run(RiskAgent.on_request(me, {"signal": sig, "record": {}, "grade": {}}))
+    assert rejected and "on hold" in rejected[0]
