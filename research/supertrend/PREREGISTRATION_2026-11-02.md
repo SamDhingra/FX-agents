@@ -67,3 +67,27 @@ None of these can rescue a failed primary:
 
 **No trading change before the Nov 5 review.** A rule that passes both the seen period and the vault becomes a paper
 book first.
+
+## Outcome (Nov 2, 2026, seen period): does not pass, the vault is not touched
+
+| | trades | avg R | 95% range | 2× costs | halves | random-timing control |
+|---|---|---|---|---|---|---|
+| st_ema_rsi (pooled) | 9,508 | +0.029 | −0.007 to +0.062 | −0.010 | +0.048 / +0.009 | +0.000 |
+
+The rule beats random timing, the halves are positive and the trade count is large. It fails because the 95% range
+touches 0 and twice the spread turns it negative.
+
+These figures are shown only, so they are not evidence:
+
+| slice | trades | avg R | 95% range | 2× costs | halves |
+|---|---|---|---|---|---|
+| NDQ alone | 3,242 | +0.067 | +0.009 to +0.123 | +0.035 | +0.095 / +0.036 |
+| US30 alone | | +0.015 | | | |
+| Gold alone | | +0.003 | | | |
+| SuperTrend alone, no EMA or RSI | | +0.021 | | | |
+| 5-minute candles | | −0.023 | | | |
+| 1-hour candles | | −0.015 | | | |
+| RSI exit | | +0.004 | | | |
+
+NDQ was picked after looking at these results, so its figure is a hypothesis, not a result. If it is tested, it gets a
+new registration and is judged once on 2016–2020.
