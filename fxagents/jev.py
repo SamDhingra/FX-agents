@@ -321,13 +321,23 @@ class JevScorer:
             questions["extend"] = Noul(instructions=(
                 f"Will price most likely move at least another 1R in the trade's direction ({side}) before "
                 f"{info.get('time_exit_ny')} New York, without first giving back half of the trade's open profit?"))
+            if info.get("target") is not None:     # payoff-aware second opinion (Nov 2 2026): where does it END?
+                questions["target"] = Noul(instructions=(
+                    f"Probability that this {side} trade reaches its target ({info.get('target')}) BEFORE its stop "
+                    f"({info.get('stop')}) and before {info.get('time_exit_ny')} New York."))
+                questions["stop"] = Noul(instructions=(
+                    f"Probability that this {side} trade hits its stop ({info.get('stop')}) BEFORE its target "
+                    f"({info.get('target')}) and before {info.get('time_exit_ny')} New York."))
         fb = {"worse": {"value": 0.5, "confidence": 0.0}, "extend": {"value": 0.5, "confidence": 0.0}}
         res = await self._ask("trade_advice", info, questions, fb, {"symbol": info.get("symbol"),
                                                                    "strategy": info.get("strategy")})
         a = res["answers"]
         w, e = a.get("worse", fb["worse"]), a.get("extend", fb["extend"])
-        return {"p_worse": w["value"], "conf_worse": w["confidence"], "p_extend": e["value"],
-                "conf_extend": e["confidence"], "source": res["source"], "fallback": res["fallback"]}
+        out = {"p_worse": w["value"], "conf_worse": w["confidence"], "p_extend": e["value"],
+               "conf_extend": e["confidence"], "source": res["source"], "fallback": res["fallback"]}
+        if "target" in a and "stop" in a:
+            out["p_target"], out["p_stop"] = a["target"]["value"], a["stop"]["value"]
+        return out
 
     # ── 5. learner: is a candidate's improvement real ────────────────────
     async def rate_candidate(self, info: dict) -> dict:

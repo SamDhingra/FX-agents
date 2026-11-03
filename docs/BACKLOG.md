@@ -23,15 +23,11 @@ hour completeness recorded, stale check in the precheck, 15m shadow tag.
 4. **Suspension release contract.** Decide whether release is "H1 direction flips" (today) or "any fresh structure
    break"; if changed, it is a policy change that needs its own replay.
 
-## Jev adviser fixes (found Oct 26 2026 in ChatGPT's dynamic-trading review; small)
+## Jev adviser fixes — DONE (Oct 26 + Nov 2 2026)
 
-Done Oct 26 2026 (1ce2105): the HOLD "helped" sign is fixed (dashboard column now "Advice right"), and the Jev call
-runs as a background task with a deadline, one per position, dropping replies for closed positions. Still open:
-
-- CUT is chosen when p_worse ≥ 0.6, which ignores payoff sizes (80% × −0.2R and 20% × +1R is still +0.04R). Collect
-  payoff-relevant forecasts before giving CUT any authority.
-- Prices and candles are rounded to 2 decimals in prompts; keep instrument precision if forex is ever added.
-- Action-level intervals resample rows independently; cluster by trade and use calendar blocks.
+Oct 26 (1ce2105): HOLD "helped" sign fixed; Jev call in the background with a deadline. Nov 2: payoff-aware second
+opinion (p_target / p_stop → expected R of holding → `action_ev`, scored next to the p_worse CUT, still no authority);
+prices and candles in prompts at the instrument's precision; scorecard 95% ranges resample whole trading days.
 
 ## Dynamic trading controller (research proposal, Oct 26 2026 — milestone 1 built: shadow review gate, see docs/dynamic_controller.md)
 
@@ -45,10 +41,16 @@ locally rendered chart), then run independent reviews in SHADOW on a frozen cand
 (entry WAIT/CANCEL or open-trade EXIT, not both), every candidate and every API cost counted. Arms: baseline, +OpenAI,
 +Claude, +both. Needs an OpenAI API key on the server. Decide from net cash contribution after all review costs.
 
-## All-hours and no-bias playbook (Oct 29 2026, Sam — for the Nov 5 review)
+## Open items from Oct 28 – Nov 2 2026
 
-- Test registered and built: `./fx.sh hoursbias [seen|vault]`, research/hours_bias/PREREGISTRATION_2026-10-29.md.
-  H = the playbook's trades outside today's entry windows (entries 20:00 → 15:50), B = trades the bias rule refuses.
-- Paper books from Oct 29: `playbook_allhours`, `playbook_nobias` (trades tagged `ignored:aligned|neutral|counter`).
-- `./fx.sh candlecheck`: every journal's entries vs the close of the setup's own candle (Sam saw entries "before the
-  candle closed"; the code only scans on the entry candle's last minute — this checks the real trades).
+1. **Wait before entry after an M15 candle closes against the trade** (Oct 28 m15_timing A: +0.018R/trade, but random
+   later entry did as well). Needs its own registration and one 2016–2020 judgement. Candidate for the Nov 5 review.
+2. **Members' view-only dashboard** on the live site (Sam asked whether members can see what he sees; proposal: same
+   pages, no controls, amounts in R). Waiting for Sam's answer.
+3. **Pre-CPI index drift** (news study): too few CPI days to test; revisit when more are recorded.
+4. **forexcom_probe test fails** (date-dependent, existed before Nov 2): repair the test.
+5. **Live site go-live checklist** (docs/live.md): Cloudflare route, vault-key backup, regulator check before members copy.
+
+Closed since Oct 28: room to next M15 level, M15 timing (late entry / early exit), news fade (both variants),
+all-hours and no-bias playbook (paper books keep running), SuperTrend + EMA + RSI (pooled, NDQ-only, held 1h/4h, as a
+filter in EMA21/RSI55), gold 06:00. Candle-close audit: no early entries.

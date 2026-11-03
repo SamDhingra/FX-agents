@@ -184,3 +184,25 @@ def test_scorecard_helped_is_action_specific(tmp_path):
     j.db.commit()
     h = {a["action"]: a["helped"] for a in ja.scorecard(j)["actions"]}
     assert h == {"hold": 1.0, "cut": 0.0, "add": 1.0}
+
+
+def test_payoff_aware_cut_precision_and_clustered_ranges(tmp_path):
+    """Nov 2 2026 backlog: CUT by expected R, prices at instrument precision, day-clustered 95% ranges."""
+    import numpy as np
+    # 80% × −0.2R and 20% × +1R from 0R: p_worse says CUT, expected R says HOLD
+    a = {"p_worse": 0.8, "p_extend": 0.1, "p_target": 0.2, "p_stop": 0.0}
+    assert ja.action_of(a, 0.0, 0.6, 0.6) == "cut"
+    ev = ja.ev_hold({"p_target": 0.2, "p_stop": 0.0}, 0.0, 1.0, -1.0)
+    assert ja.action_ev_of(ev, 0.0) == "hold"
+    assert ja.action_ev_of(ja.ev_hold({"p_target": 0.1, "p_stop": 0.8}, 0.3, 2.0, -1.0), 0.3) == "cut"
+    assert ja.ev_hold({"p_target": None, "p_stop": None}, 0.0, 1.0, -1.0) is None
+    assert ja.ev_hold({"p_target": 0.9, "p_stop": 0.9}, 0.0, 1.0, -1.0) == 0.0      # normalised to 1
+    cfg = copy.deepcopy(CFG)
+    cfg["instruments"]["XAUUSD"]["tick_size"] = 0.001
+    cfg["instruments"]["NDQ"]["tick_size"] = 0.1
+    assert ja.decimals(cfg, "XAUUSD") == 3 and ja.decimals(cfg, "NDQ") == 2
+    rng = np.random.default_rng(1)
+    v = np.r_[np.full(50, 1.0), np.full(50, -1.0)]
+    lo_i, hi_i = ja._ci(v, rng)
+    lo_c, hi_c = ja._ci(v, np.random.default_rng(1), ["a"] * 50 + ["b"] * 50)     # two days: far wider
+    assert (hi_c - lo_c) > (hi_i - lo_i)

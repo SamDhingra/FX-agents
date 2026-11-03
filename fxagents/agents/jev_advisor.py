@@ -8,6 +8,10 @@ judgement beats doing nothing, on the paper book, before it is ever allowed to t
 Each call (at every 15-minute close while a trade is open, from 15 minutes after entry) asks two questions
 (jev.manage_trade): p_worse = will the trade finish worse than it stands now?  p_extend = will it run another 1R first?
 The advice: CUT if p_worse >= cut_at; else ADD if p_extend >= add_at and the trade is in profit; else HOLD.
+Payoff-aware second opinion (Nov 2 2026, backlog): p_worse ignores HOW MUCH worse — 80% × −0.2R and 20% × +1R still
+favours holding. Jev is also asked p_target (target before stop / time exit) and p_stop (stop first); expected R of
+holding = p_target × R_target + p_stop × R_stop + rest × R_now. `action_ev` = CUT when that is below R_now − 0.05R.
+Both are scored side by side; neither has any authority over the trade.
 Logged on the trade's timeline and in the journal's `jev_advice` table. When the trade closes, every call is scored:
   value_cut = R if closed at that moment − R the trade really finished with    (> 0: cutting then would have helped)
   value_add = R a second, same-size unit bought at that moment would have made to the real exit, after the spread
@@ -39,7 +43,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS jev_advice(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, pos_id TEXT, symbol TEXT, strategy TEXT, source TEXT, action TEXT,
   p_worse REAL, conf_worse REAL, p_extend REAL, conf_extend REAL, r_now REAL, r_if_exit REAL, price REAL, mfe REAL,
-  held_min REAL);
+  held_min REAL, p_target REAL, p_stop REAL, ev_hold REAL, action_ev TEXT);
 CREATE TABLE IF NOT EXISTS jev_advice_outcome(
   advice_id INTEGER PRIMARY KEY, pos_id TEXT, strategy TEXT, source TEXT, action TEXT, r_if_exit REAL, final_r REAL,
   value_cut REAL, value_add REAL);
@@ -49,7 +53,41 @@ CREATE INDEX IF NOT EXISTS ix_jev_advice_pos ON jev_advice(pos_id);
 
 def ensure_schema(journal) -> None:
     journal.db.executescript(SCHEMA)
+    cols = {r[1] for r in journal.db.execute("PRAGMA table_info(jev_advice)")}
+    for c, t in (("p_target", "REAL"), ("p_stop", "REAL"), ("ev_hold", "REAL"), ("action_ev", "TEXT")):
+        if c not in cols:
+            journal.db.execute(f"ALTER TABLE jev_advice ADD COLUMN {c} {t}")
     journal.db.commit()
+
+
+EV_MARGIN = 0.05
+
+
+def ev_hold(a: dict, r_now: float, r_target: float | None, r_stop: float) -> float | None:
+    """Expected R of holding from Jev's target/stop probabilities (None when Jev didn't answer them). The remainder
+    of the probability ends at the time exit, taken as today's R."""
+    pt, ps = a.get("p_target"), a.get("p_stop")
+    if pt is None or ps is None or r_target is None:
+        return None
+    pt, ps = max(0.0, float(pt)), max(0.0, float(ps))
+    if pt + ps > 1:
+        pt, ps = pt / (pt + ps), ps / (pt + ps)
+    return pt * r_target + ps * r_stop + (1 - pt - ps) * r_now
+
+
+def action_ev_of(ev: float | None, r_now: float) -> str | None:
+    if ev is None:
+        return None
+    return "cut" if ev < r_now - EV_MARGIN else "hold"
+
+
+def decimals(cfg, sym: str) -> int:
+    """Price decimals from the instrument's tick size (2 at least): gold 0.001 → 3, forex 0.00001 → 5."""
+    t = float((cfg["instruments"].get(sym) or {}).get("tick_size", 0.01) or 0.01)
+    d = 0
+    while d < 6 and abs(round(t * 10 ** d) - t * 10 ** d) > 1e-9:
+        d += 1
+    return max(2, d)
 
 
 def action_of(a: dict, r_now: float, cut_at: float, add_at: float) -> str:
@@ -60,10 +98,10 @@ def action_of(a: dict, r_now: float, cut_at: float, add_at: float) -> str:
     return "hold"
 
 
-def candles(df: pd.DataFrame, n: int, tz: str) -> list:
+def candles(df: pd.DataFrame, n: int, tz: str, dp: int = 2) -> list:
     d = df.iloc[-n:]
-    return [[t.tz_convert(tz).strftime("%H:%M"), round(float(r.open), 2), round(float(r.high), 2), round(float(r.low), 2),
-             round(float(r.close), 2)] for t, r in d.iterrows()]
+    return [[t.tz_convert(tz).strftime("%H:%M"), round(float(r.open), dp), round(float(r.high), dp), round(float(r.low), dp),
+             round(float(r.close), dp)] for t, r in d.iterrows()]
 
 
 class JevAdvisorAgent(Agent):
@@ -140,22 +178,23 @@ class JevAdvisorAgent(Agent):
         loc = now.tz_convert(tz)
         today = b15[b15.index.tz_convert(tz).normalize() == loc.normalize()]
         r_now = pos.r_now(price)
+        dp = decimals(self.cfg, sym)
         info = {"symbol": sym, "strategy": pos.strategy, "side": "LONG" if pos.side > 0 else "SHORT",
                 "thesis": THESIS.get(pos.strategy, pos.reason), "entry_reason": pos.reason,
                 "time_ny": loc.strftime("%H:%M"), "time_exit_ny": TIME_EXIT.get(pos.strategy, "15:50"),
-                "entry": round(pos.entry, 2), "stop": round(pos.stop, 2),
-                "target": round(pos.meta["target"], 2) if pos.meta.get("target") else None,
-                "price": round(price, 2), "r_now": round(r_now, 2), "best_r": round(pos.mfe_r, 2),
+                "entry": round(pos.entry, dp), "stop": round(pos.stop, dp),
+                "target": round(pos.meta["target"], dp) if pos.meta.get("target") else None,
+                "price": round(price, dp), "r_now": round(r_now, 2), "best_r": round(pos.mfe_r, 2),
                 "worst_r": round(pos.mae_r, 2), "minutes_held": round(held),
-                "today_open_0930": round(float(today[today.index.tz_convert(tz).strftime("%H:%M") == "09:30"].open.iloc[0]), 2)
+                "today_open_0930": round(float(today[today.index.tz_convert(tz).strftime("%H:%M") == "09:30"].open.iloc[0]), dp)
                 if (today.index.tz_convert(tz).strftime("%H:%M") == "09:30").any() else None,
-                "candles_15m_today": candles(today, 32, tz), "candles_5m_recent": candles(b5, 12, tz)}
+                "candles_15m_today": candles(today, 32, tz, dp), "candles_5m_recent": candles(b5, 12, tz, dp)}
         ps = PARTNER.get(sym)
         if ps:
             try:
                 p15 = store.tf(ps, "15min")
                 pt = p15[p15.index.tz_convert(tz).normalize() == loc.normalize()]
-                info["other_index"] = {"symbol": ps, "candles_15m_today": candles(pt, 32, tz)}
+                info["other_index"] = {"symbol": ps, "candles_15m_today": candles(pt, 32, tz, decimals(self.cfg, ps))}
             except Exception:  # noqa: BLE001
                 pass
         nw = getattr(self.ctx, "news", None)
@@ -172,19 +211,28 @@ class JevAdvisorAgent(Agent):
 
     def snapshot(self, pos, price: float, now: pd.Timestamp, held: float) -> dict:
         """Everything advice needs as of the bar close, taken before the (slow) model call (Oct 26 2026)."""
+        tgt, rpu = pos.meta.get("target"), getattr(pos, "risk_per_unit", 0) or 0
+        entry, stop = getattr(pos, "entry", None), getattr(pos, "stop", None)
+        r_target = ((tgt - entry) * pos.side / rpu) if tgt and rpu and entry is not None else None
+        r_stop = ((stop - entry) * pos.side / rpu) if rpu and entry is not None and stop is not None else -1.0
         return {"info": self.info_for(pos, price, now, held), "price": price, "now": now, "held": held,
-                "r_now": pos.r_now(price), "r_exit": self.r_if_exit(pos, price), "mfe": pos.mfe_r}
+                "r_now": pos.r_now(price), "r_exit": self.r_if_exit(pos, price), "mfe": pos.mfe_r,
+                "r_target": r_target, "r_stop": r_stop}
 
     def record(self, pos, snap: dict, a: dict) -> dict:
         """Journal + timeline the answer, using the snapshot values; the advice time is the bar end it was asked for."""
         now, price, held, r_now = snap["now"], snap["price"], snap["held"], snap["r_now"]
         act = action_of(a, r_now, self.cut_at, self.add_at)
+        ev = ev_hold(a, r_now, snap.get("r_target"), snap.get("r_stop", -1.0))
+        act_ev = action_ev_of(ev, r_now)
         rec = (now.isoformat(), pos.id, pos.symbol, pos.strategy, a["source"], act, a["p_worse"], a["conf_worse"],
                a["p_extend"], a["conf_extend"], round(r_now, 3), round(snap["r_exit"], 3), price,
-               round(snap["mfe"], 3), round(held, 1))
+               round(snap["mfe"], 3), round(held, 1), a.get("p_target"), a.get("p_stop"),
+               None if ev is None else round(ev, 3), act_ev)
         j = self.ctx.journal
         j.db.execute("INSERT INTO jev_advice(ts,pos_id,symbol,strategy,source,action,p_worse,conf_worse,p_extend,conf_extend,"
-                     "r_now,r_if_exit,price,mfe,held_min) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rec)
+                     "r_now,r_if_exit,price,mfe,held_min,p_target,p_stop,ev_hold,action_ev) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rec)
         j.db.commit()
         prev = pos.meta.get("jev_advice")
         if act != prev:
@@ -218,10 +266,22 @@ class JevAdvisorAgent(Agent):
         j.db.commit()
 
 
-def _ci(v: np.ndarray, rng) -> tuple[float, float]:
+def _ci(v: np.ndarray, rng, clusters=None) -> tuple[float, float]:
+    """95% range of the mean. With `clusters` (one label per value, e.g. the trading day), whole clusters are
+    resampled: calls about the same trade or the same day are not independent (Nov 2 2026, backlog)."""
+    v = np.asarray(v, float)
     if len(v) < 2:
         return (float(v[0]), float(v[0])) if len(v) else (float("nan"), float("nan"))
-    b = v[rng.integers(0, len(v), (2000, len(v)))].mean(1)
+    if clusters is None:
+        b = v[rng.integers(0, len(v), (2000, len(v)))].mean(1)
+        return float(np.quantile(b, 0.025)), float(np.quantile(b, 0.975))
+    lab = pd.factorize(pd.Series(list(clusters)))[0]
+    k = lab.max() + 1
+    if k < 2:
+        return float(v.mean()), float(v.mean())
+    sums, cnt = np.bincount(lab, v, k), np.bincount(lab, None, k)
+    pick = rng.integers(0, k, (2000, k))
+    b = sums[pick].sum(1) / np.maximum(cnt[pick].sum(1), 1)
     return float(np.quantile(b, 0.025)), float(np.quantile(b, 0.975))
 
 
@@ -230,33 +290,43 @@ def scorecard(journal, seed: int = 11) -> dict:
     Plus the 'follow the first CUT' policy: average final R if every trade had been closed at its first CUT call,
     against what the trades really did (the bar Jev has to beat)."""
     ensure_schema(journal)
-    rows = [dict(r) for r in journal.db.execute("SELECT * FROM jev_advice_outcome")]
+    rows = [dict(r) for r in journal.db.execute(
+        "SELECT o.*, a.ts, a.action_ev FROM jev_advice_outcome o LEFT JOIN jev_advice a ON a.id = o.advice_id")]
     rng = np.random.default_rng(seed)
     jev = [r for r in rows if r["source"] == "jev"]
     out = {"n_trades": len({r["pos_id"] for r in jev}), "n_calls": len(jev),
            "n_heuristic": len(rows) - len(jev), "actions": []}
     # "helped" = share of calls where the advice was right: CUT value_cut > 0, HOLD value_cut < 0, ADD value_add > 0
     # (HOLD was inverted before; Oct 26 2026).
-    for act, key, meaning in (("cut", "value_cut", "closing then vs holding to the real exit"),
-                              ("hold", "value_cut", "closing then vs holding (negative = holding was right)"),
-                              ("add", "value_add", "a second unit added then, to the real exit")):
-        v = np.array([r[key] for r in jev if r["action"] == act], float)
+    day = lambda r: str(r.get("ts") or r["pos_id"])[:10]
+    for act, key, meaning, col in (("cut", "value_cut", "closing then vs holding to the real exit", "action"),
+                                   ("hold", "value_cut", "closing then vs holding (negative = holding was right)", "action"),
+                                   ("add", "value_add", "a second unit added then, to the real exit", "action"),
+                                   ("cut_ev", "value_cut", "payoff-aware CUT: closing then vs holding", "action_ev"),
+                                   ("hold_ev", "value_cut", "payoff-aware HOLD (negative = holding was right)", "action_ev")):
+        want = act.replace("_ev", "")
+        sel = [r for r in jev if r.get(col) == want]
+        v = np.array([r[key] for r in sel], float)
         if not len(v):
             continue
-        lo, hi = _ci(v, rng)
+        lo, hi = _ci(v, rng, [day(r) for r in sel])
         out["actions"].append({"action": act, "n": int(len(v)), "avg_value_r": round(float(v.mean()), 3),
-                               "lo": round(lo, 3), "hi": round(hi, 3), "helped": round(float(((v < 0) if act == "hold" else (v > 0)).mean()), 3),
+                               "lo": round(lo, 3), "hi": round(hi, 3), "helped": round(float(((v < 0) if act.startswith("hold") else (v > 0)).mean()), 3),
                                "meaning": meaning})
     by_pos: dict[str, dict] = {}
     for r in sorted(jev, key=lambda x: x["advice_id"]):
-        d = by_pos.setdefault(r["pos_id"], {"final": r["final_r"], "cut": None})
+        d = by_pos.setdefault(r["pos_id"], {"final": r["final_r"], "cut": None, "cut_ev": None, "day": day(r)})
         if r["action"] == "cut" and d["cut"] is None:
             d["cut"] = r["r_if_exit"]
+        if r.get("action_ev") == "cut" and d["cut_ev"] is None:
+            d["cut_ev"] = r["r_if_exit"]
     if by_pos:
         real = np.array([d["final"] for d in by_pos.values()], float)
-        pol = np.array([d["final"] if d["cut"] is None else d["cut"] for d in by_pos.values()], float)
-        lo, hi = _ci(pol - real, rng)
-        out["policy"] = {"trades": len(real), "actual_avg_r": round(float(real.mean()), 3),
+        days = [d["day"] for d in by_pos.values()]
+        for name, key in (("policy", "cut"), ("policy_ev", "cut_ev")):
+            pol = np.array([d["final"] if d[key] is None else d[key] for d in by_pos.values()], float)
+            lo, hi = _ci(pol - real, rng, days)
+            out[name] = {"trades": len(real), "actual_avg_r": round(float(real.mean()), 3),
                          "follow_first_cut_avg_r": round(float(pol.mean()), 3),
                          "difference": round(float((pol - real).mean()), 3), "lo": round(lo, 3), "hi": round(hi, 3)}
     out["recent"] = [dict(r) for r in journal.db.execute(
