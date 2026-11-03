@@ -1,0 +1,66 @@
+{
+ "vault": {
+  "n": 9120,
+  "flagged": 2461,
+  "changed": 1757,
+  "base": -0.14739672557402464,
+  "rule": -0.13819662159662385,
+  "d": {
+   "mean": 0.009200103977400759,
+   "lo": 0.0014527228702413983,
+   "hi": 0.0165582450523357
+  },
+  "halves": [
+   0.010261218043114393,
+   0.008223879036944215
+  ],
+  "d_2x": 0.0202628132485887,
+  "match": 1.0,
+  "why": {
+   "entered": 2113,
+   "stop_first": 218,
+   "session": 107,
+   "no_confirm": 23
+  },
+  "gates": {
+   "engine check \u2265 98%": true,
+   "changed \u2265 100": true,
+   "95% range above 0": true,
+   "both halves > 0": true,
+   "2\u00d7 costs > 0": true
+  },
+  "pass": true
+ },
+ "seen": {
+  "n": 10724,
+  "flagged": 2802,
+  "changed": 1895,
+  "base": -0.09463788639474928,
+  "rule": -0.0928143940168713,
+  "d": {
+   "mean": 0.0018234923778779847,
+   "lo": -0.005222867693417841,
+   "hi": 0.008878677056623291
+  },
+  "halves": [
+   0.0006529749485059496,
+   0.003118141663467792
+  ],
+  "d_2x": 0.009106987156655876,
+  "match": 1.0,
+  "why": {
+   "entered": 2472,
+   "stop_first": 212,
+   "session": 114,
+   "no_confirm": 4
+  },
+  "gates": {
+   "engine check \u2265 98%": true,
+   "changed \u2265 100": true,
+   "95% range above 0": false,
+   "both halves > 0": true,
+   "2\u00d7 costs > 0": true
+  },
+  "pass": false
+ }
+}
