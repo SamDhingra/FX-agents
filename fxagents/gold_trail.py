@@ -43,7 +43,7 @@ def arrays(m1: pd.DataFrame) -> dict:
 
 
 def entries(a: dict) -> list[tuple]:
-    """(j, side, entry, stop, risk, spread, t1) per broker day, exactly as breakout_test.run (pct stop, 20:00 close)."""
+    """(j, side, entry, stop, risk, spread, t1, rh, rl) per broker day, exactly as breakout_test.run (pct stop, 20:00 close)."""
     bday, bmin = to_broker(a["idx"])
     starts = np.r_[0, np.nonzero(np.diff(bday))[0] + 1]
     ends = np.r_[starts[1:], len(bday)]
@@ -77,7 +77,7 @@ def entries(a: dict) -> list[tuple]:
         stop = entry * (1 - side * SL_PCT / 100)
         risk = side * (entry - stop)
         if risk > 0:
-            out.append((j, side, entry, stop, risk, spread, t1))
+            out.append((j, side, entry, stop, risk, spread, t1, rh, rl))
     return out
 
 
@@ -125,7 +125,7 @@ def walk(a: dict, j0: int, j_end: int, side: int, entry: float, stop: float, ris
 def trades(m1: pd.DataFrame) -> pd.DataFrame:
     a = arrays(m1)
     rows = []
-    for j, side, entry, stop, risk, spread, t1 in entries(a):
+    for j, side, entry, stop, risk, spread, t1, *_ in entries(a):
         r = {"entry_time": a["idx"][j], "side": side, "entry": entry, "risk": risk, "spread": spread}
         for mode in MODES:
             jx, px, why = walk(a, j, t1, side, entry, stop, risk, mode)
