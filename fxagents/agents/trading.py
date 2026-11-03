@@ -507,6 +507,11 @@ class RiskAgent(Agent):
                        jev_source=req["grade"]["source"], reason=sig.reason,
                        bias_mode=gate["mode"], risk_mult=round(risk_mult, 3))
         pos.meta["m15_live"] = self.m15_tag(sig)                         # shadow tag, never used to decide (Oct 26 2026)
+        w = self.m15_wait_tag(sig)                                      # shadow tag, never used to decide (Nov 2 2026)
+        if w is not None:
+            pos.meta["m15_wait"] = w
+            if w:
+                pos.log(now, "m15_wait_tag", note="last M15 candle closed against: m15_wait1 would wait one M15 candle")
         if sig.features.get("draw"):
             pos.meta["draw"] = sig.features["draw"]                      # what the setup saw, for the trade chart
         if bound:
@@ -576,6 +581,23 @@ class RiskAgent(Agent):
             rv.submit_entry(sig=sig, pos=pos, price=px, spread=spread, cost_r=cost_r)
         except Exception as e:  # noqa: BLE001 — a review must never stop or delay an entry
             self.log.warning("dynamic review hook: %r", e)
+
+    def m15_wait_tag(self, sig: Signal) -> bool | None:
+        """m15_wait1 shadow tag (Nov 2 2026, research/m15_wait): did the last COMPLETED 15m candle close against a 3m/5m
+        entry? The rule (wait for the next M15 close) passed its single 2016–2020 judgement narrowly (+0.009R); it is
+        only recorded here. None for other timeframes or without bars."""
+        m = re.search(r":(\d+)m@", sig.strategy or "")
+        if not m or int(m.group(1)) not in (3, 5) or self.ctx.store is None:
+            return None
+        try:
+            b = self.ctx.store.tf(sig.symbol, "15min")
+            b = b[b.index + pd.Timedelta("15min") <= pd.Timestamp(sig.ts)]
+            if not len(b):
+                return None
+            o, c = float(b["open"].iloc[-1]), float(b["close"].iloc[-1])
+            return bool((c - o) * sig.side < 0)
+        except Exception:  # noqa: BLE001 — a tag must never stop an entry
+            return None
 
     def m15_tag(self, sig: Signal) -> bool | None:
         """Shadow tag (Oct 26 2026): is the 15m candle in progress moving against a 3m / 5m entry? Not confirmed on

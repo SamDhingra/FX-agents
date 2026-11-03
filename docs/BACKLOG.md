@@ -44,8 +44,9 @@ locally rendered chart), then run independent reviews in SHADOW on a frozen cand
 ## Open items from Oct 28 – Nov 2 2026
 
 1. **Wait before entry after an M15 candle closes against the trade** (Oct 28 m15_timing A: +0.018R/trade, but random
-   later entry did as well). Registered and built Nov 2 as `m15_wait1` (research/m15_wait/): judged once on 2016–2020
-   with `./fx.sh m15wait`.
+   later entry did as well). `m15_wait1` passed its 2016–2020 judgement narrowly (+0.009R, range +0.001..+0.017;
+   2021–2026 +0.002R) — weak evidence (that data was already used once for the related m15_live). Shadow tag
+   `m15_wait` on live 3m/5m entries from Nov 2; for the Nov 5 review.
 2. **Members' view-only dashboard** on the live site (Sam asked whether members can see what he sees; proposal: same
    pages, no controls, amounts in R). Waiting for Sam's answer.
 3. **Pre-CPI index drift** (news study): too few CPI days to test; revisit when more are recorded.

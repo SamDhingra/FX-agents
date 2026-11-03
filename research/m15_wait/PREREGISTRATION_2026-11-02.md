@@ -48,3 +48,23 @@ The same rule on 2021–2026 is shown for reference only; that period is where t
 
 The playbook averages −0.095R per trade, so even a confirmed +0.01–0.02R would leave it losing. The rule matters only as
 part of a playbook that is positive in its own right.
+
+## Outcome (Nov 2, 2026): passes its 2016–2020 judgement, narrowly
+
+| period | trades changed | mean d (95% range) | halves | 2× costs |
+|---|---|---|---|---|
+| 2016–2020 (judged) | 1,757 of 9,120 | +0.009 (+0.001 to +0.017) | +0.010 / +0.008 | +0.020 |
+| 2021–2026 (shown) | 1,895 of 10,724 | +0.002 (−0.005 to +0.009) | +0.001 / +0.003 | +0.009 |
+
+Engine check 100% in both periods.
+
+**Correction to the "untouched" claim above.** Round 3 (Oct 26) declared that the "counterflow" family shares one
+use of the 2016–2020 data: m15_live (the 15-minute candle in progress against the trade), A1, and a wait-for-the-15m
+policy. That use went to m15_live's confirmation, which failed. m15_wait1 itself had never been run on those years,
+but a closely related signal had. This narrow pass is therefore weaker evidence than a first use would be.
+
+The exact rule is also near zero on 2021–2026 (+0.002R). The earlier +0.013R came from the confirm-or-wait version.
+
+**Decision, as registered:** a shadow tag only. Live trades record `m15_wait` (whether the last completed M15 candle
+closed against the entry) and a `m15_wait_tag` timeline event. Any trading change is for the review, and even a real
++0.01R leaves the playbook below zero.
