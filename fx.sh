@@ -470,6 +470,12 @@ PY
              if [[ "$p_" == nostop ]]; then a_=(--period vault --nostop); else a_=(--period "$p_"); fi
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.news_fade "${a_[@]}" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  m15wait)   # wait one M15 candle before entering against a fresh M15 close (registered Nov 2 2026, research/m15_wait/):
+             # judged ONCE on 2016–2020, 2021–2026 shown. ./fx.sh m15wait → data/year_test/m15_wait/report.md
+             need_env; mkdir -p logs
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/m15wait-build.log 2>&1 || { echo "build failed — see logs/m15wait-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.m15_wait </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   supertrend) # SuperTrend(10,3) + EMA 200 + RSI 14 (registered Nov 2 2026, research/supertrend/): 15m, NDQ + gold + US30, real
              # bid/ask, vs a random-timing control. ./fx.sh supertrend [seen|vault] → data/year_test/supertrend_<period>/report.md
              need_env; mkdir -p logs; p_="${2:-seen}"
@@ -589,7 +595,7 @@ PY
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | live setup|up|update|logs|users|add-owner|promote-playbook | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | supertrend [seen|vault] | trendhold [seen|vault] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | live setup|up|update|logs|users|add-owner|promote-playbook | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | m15wait | supertrend [seen|vault] | trendhold [seen|vault] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
