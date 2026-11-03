@@ -77,3 +77,30 @@ Each primary that passes is judged once on 2016–2020 (`old_m1`), on its own.
 
 A diagnostic is also shown: how many of the 25 days of ≥ 2R had reached +0.5R within 2, 3 and 4 hours (the days a
 no-progress exit would have cut).
+
+## Outcome (Nov 3, 2026): neither primary passes on 2021–2026; the vault is not touched
+
+The book today: 1,461 days, +0.055R, 50% win.
+
+**A. No-progress exit**
+
+| rule | changed | avg R | vs today (95% range) | halves |
+|---|---|---|---|---|
+| 3h, never +0.5R (primary) | 1,247 | +0.018 | −0.037 (−0.070 to −0.011) | −0.017 / −0.057 |
+| 2h | 1,328 | +0.014 | −0.041 | −0.018 / −0.066 |
+| 4h | 1,171 | +0.023 | −0.032 | −0.017 / −0.047 |
+| 3h, below entry | 728 | +0.028 | −0.027 | −0.014 / −0.039 |
+
+The losing days improved from −0.53R to −0.16R. But only 16 of the 25 big days had reached +0.5R by 3 hours, so the rule
+cut 9 of them, along with other slow winners.
+
+**B. Add on resumption** (per add, in the day's R)
+
+| rule | adds | win | avg | 95% range | halves | 2× costs |
+|---|---|---|---|---|---|---|
+| armed at +1R, stop at pullback extreme (primary) | 154 | 37% | +0.016 | −0.104 to +0.130 | −0.009 / +0.027 | −0.008 |
+| armed at +0.5R | 406 | 43% | +0.051 | −0.023 to +0.126 | +0.101 / +0.014 | +0.025 |
+| stop at the original stop | 154 | 45% | +0.014 | −0.017 to +0.046 | −0.016 / +0.029 | +0.010 |
+
+The add fired on 20 of the 25 big days and earned +0.97R on them, but the other adds gave most of that back. The
++0.5R-armed version looks best, but it is information only here and is not promoted from these years.
