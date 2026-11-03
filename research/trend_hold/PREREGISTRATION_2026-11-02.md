@@ -83,3 +83,25 @@ No trading change follows before the Nov 5 review. A rule that passes both becom
 - ER with SuperTrend's stop, trail and exit instead of the EMA exit;
 - ER by instrument × entry hour;
 - ER with the SuperTrend filter by instrument × entry hour.
+
+## Outcome, seen period 2021-01-01 to 2026-09-30 (Nov 2, 2026): nothing passes
+
+| primary | trades | avg R | 95% range | control |
+|---|---|---|---|---|
+| held SuperTrend, 1h | 2,764 | −0.023 | −0.072 to +0.035 | −0.015 |
+| held SuperTrend, 4h | 728 | −0.029 | −0.125 to +0.081 | +0.076 |
+| held EMA21/RSI55, 1h | 2,506 | −0.001 | −0.042 to +0.035 | −0.041 |
+| held EMA21/RSI55, 4h | 656 | +0.004 | −0.058 to +0.086 | −0.031 |
+| EMA21/RSI55 + SuperTrend filter | 3,427 | −0.021 | −0.056 to +0.014 | −0.008 (plain) |
+| EMA21/RSI55, gold, 06:00 only | 114 | −0.205 | −0.304 to −0.086 | −0.017 (gold, other hours) |
+
+- **Financing.** Held trades are about break-even before financing (+0.006 to +0.030R) and turn negative once the 5%
+  financing is charged.
+- **SuperTrend filter.** The filter makes EMA21/RSI55 slightly worse.
+- **Gold at 06:00.** The 06:00 hour is gold's worst hour over 2021–2026, which contradicts the forward record from
+  October 2026.
+- **Plain EMA21/RSI55, 15-minute (shown only).** Gold about −0.03R per trade (2,022 trades), US30 about +0.01R
+  (2,585 trades).
+
+The NDQ-only SuperTrend check (part 2) is still to be judged once with `./fx.sh trendhold vault`. No other primary
+goes to the vault.
