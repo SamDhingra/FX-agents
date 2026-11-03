@@ -433,6 +433,48 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     return sctx, agents, feed
 
 
+def rebuild_balance(sctx: Ctx, now) -> float | None:
+    """A paper book's balance after a restart (Nov 3 2026). It used to restart at the practice account's equity, so after
+    each update every paper book showed the same number. Now: the book's starting capital (its journal's first equity
+    reading) + everything its trades have realized since. Today's start = that minus what closed today; the peak is the
+    highest balance after any close. Returns the balance, or None when the book has no history yet (fresh book)."""
+    db = sctx.journal.db
+    first = db.execute("SELECT ts, equity FROM equity ORDER BY ts ASC LIMIT 1").fetchone()
+    if not first or not first[1] or first[1] <= 0:
+        return None
+    ts0, base = str(first[0]), float(first[1])
+    rows = db.execute("SELECT closed, COALESCE(realized, 0), status FROM trades WHERE opened >= ? ORDER BY COALESCE(closed, '9999')",
+                      (ts0,)).fetchall()
+    st, broker = sctx.state, sctx.broker
+    cash, peak = base, base
+    from ..structure import trading_day as _tday
+    tz = sctx.cfg.get("timezone", "America/New_York")
+    ny = lambda x: (lambda t: t.tz_convert(tz) if t.tz is not None else t)(pd.Timestamp(x))
+    try:
+        day0 = _tday(ny(now))                                     # 17:00 NY trading day the clock is in
+    except Exception:  # noqa: BLE001
+        day0 = None
+    today_real = 0.0
+    for closed, realized, status in rows:
+        cash += float(realized)
+        if status == "closed":
+            peak = max(peak, cash)
+            if day0 is not None and closed:
+                try:
+                    if _tday(ny(closed)) == day0:
+                        today_real += float(realized)
+                except Exception:  # noqa: BLE001
+                    pass
+    broker.cash = cash
+    st.equity = cash + sum(p.unrealized(st.last_prices.get(p.symbol, p.entry), broker.mult(p.symbol))
+                           for p in broker.open_positions.values())
+    st.equity_peak = max(peak, st.equity)
+    st.day_start_equity = cash - today_real
+    log.info("shadow %s: balance rebuilt from its journal: %.2f (start %.2f, %d trades)",
+             getattr(sctx, "book_key", ""), cash, base, len(rows))
+    return cash
+
+
 def restore_shadow(sctx: Ctx, journal_path: str) -> int:
     """Shadow books keep their positions in memory, so an update/restart used to drop every open paper trade
     (Oct 21 2026). Each book now saves its open positions — with their management state (stage, partial done,
@@ -461,6 +503,10 @@ def restore_shadow(sctx: Ctx, journal_path: str) -> int:
         n += 1
     if halt:
         st.trading_enabled, st.halt_reason = False, halt
+    try:
+        rebuild_balance(sctx, now)
+    except Exception as e:  # noqa: BLE001 — a bad journal must never stop the app
+        log.warning("shadow %s: could not rebuild the balance (%s)", getattr(sctx, "book_key", ""), e)
     for topic in ("position_opened", "position_updated", "position_closed", "stop_filled", "clock"):
         sctx.bus.subscribe(topic, lambda _ev, store=store, st=st: store.save(st))
     sctx.runtime_store = store
