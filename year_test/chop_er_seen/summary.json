@@ -1,0 +1,140 @@
+{
+ "er15": {
+  "check": "er15",
+  "period": "seen",
+  "n": 10724,
+  "coverage": 1.0,
+  "flagged": 6556,
+  "flagged_avg": -0.1043,
+  "kept_avg": -0.0795,
+  "all_avg": -0.0946,
+  "halves": [
+   0.0191,
+   0.029
+  ],
+  "half_counts": [
+   [
+    3488,
+    2144
+   ],
+   [
+    3068,
+    2024
+   ]
+  ],
+  "split": "2023-11-17",
+  "diff": 0.0248,
+  "diff_ci": [
+   -0.0226,
+   0.0734
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.0215,
+  "pass": false,
+  "why": "gates not met"
+ },
+ "er1h": {
+  "check": "er1h",
+  "period": "seen",
+  "n": 10724,
+  "coverage": 1.0,
+  "flagged": 5921,
+  "flagged_avg": -0.1004,
+  "kept_avg": -0.0875,
+  "all_avg": -0.0946,
+  "halves": [
+   -0.0197,
+   0.0449
+  ],
+  "half_counts": [
+   [
+    3191,
+    2441
+   ],
+   [
+    2730,
+    2362
+   ]
+  ],
+  "split": "2023-11-17",
+  "diff": 0.0129,
+  "diff_ci": [
+   -0.0347,
+   0.0605
+  ],
+  "boot_valid": 1.0,
+  "strat_p": 0.16348,
+  "pass": false,
+  "why": "gates not met"
+ },
+ "info": {
+  "chop15_skip": {
+   "check": "chop15_skip",
+   "period": "seen",
+   "n": 10724,
+   "coverage": 1.0,
+   "flagged": 1252,
+   "flagged_avg": -0.0795,
+   "kept_avg": -0.0966,
+   "all_avg": -0.0946,
+   "halves": [
+    -0.1051,
+    0.078
+   ],
+   "half_counts": [
+    [
+     644,
+     4988
+    ],
+    [
+     608,
+     4484
+    ]
+   ],
+   "split": "2023-11-17",
+   "diff": -0.0171,
+   "diff_ci": [
+    -0.089,
+    0.0541
+   ],
+   "boot_valid": 1.0,
+   "strat_p": 0.52295,
+   "pass": false,
+   "why": "gates not met"
+  },
+  "adx15": {
+   "check": "adx15",
+   "period": "seen",
+   "n": 10724,
+   "coverage": 1.0,
+   "flagged": 4128,
+   "flagged_avg": -0.1141,
+   "kept_avg": -0.0825,
+   "all_avg": -0.0946,
+   "halves": [
+    0.0407,
+    0.0202
+   ],
+   "half_counts": [
+    [
+     2196,
+     3436
+    ],
+    [
+     1932,
+     3160
+    ]
+   ],
+   "split": "2023-11-17",
+   "diff": 0.0317,
+   "diff_ci": [
+    -0.0212,
+    0.0841
+   ],
+   "boot_valid": 1.0,
+   "strat_p": 0.12589,
+   "pass": false,
+   "why": "gates not met"
+  }
+ }
+}
