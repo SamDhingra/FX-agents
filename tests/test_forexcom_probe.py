@@ -42,7 +42,8 @@ def test_probe_reads_spreads_and_never_orders(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("FOREXCOM_PASSWORD", "secret-pw")
     monkeypatch.setenv("FOREXCOM_APPKEY", "k")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["probe", "--days", "2", "--out", str(tmp_path / "out")])
+    # 7 days back always includes weekdays (2 days failed on Sundays / early Mondays, Nov 2 2026)
+    monkeypatch.setattr(sys, "argv", ["probe", "--days", "7", "--out", str(tmp_path / "out")])
     P.main()
     out = capsys.readouterr().out
     rep = (tmp_path / "out" / "report.md").read_text()

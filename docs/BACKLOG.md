@@ -48,7 +48,7 @@ locally rendered chart), then run independent reviews in SHADOW on a frozen cand
 2. **Members' view-only dashboard** on the live site (Sam asked whether members can see what he sees; proposal: same
    pages, no controls, amounts in R). Waiting for Sam's answer.
 3. **Pre-CPI index drift** (news study): too few CPI days to test; revisit when more are recorded.
-4. **forexcom_probe test fails** (date-dependent, existed before Nov 2): repair the test.
+4. ~~forexcom_probe test fails~~ — fixed Nov 2 (looked back 2 days, which are all weekend on Sundays / early Mondays).
 5. **Live site go-live checklist** (docs/live.md): Cloudflare route, vault-key backup, regulator check before members copy.
 
 Closed since Oct 28: room to next M15 level, M15 timing (late entry / early exit), news fade (both variants),
