@@ -54,3 +54,18 @@ its net pips are shown alongside.
 - **If not:** the book keeps its rule.
 
 Today's trade is not part of either period.
+
+## Outcome (Nov 3, 2026): fails on 2021–2026; the vault is not touched; the book keeps its rule
+
+No trail: 1,461 trades, 50% win, +0.055R, 29,999 pips.
+
+| variant | changed | win | avg R | vs no trail (95% range) | halves | net pips |
+|---|---|---|---|---|---|---|
+| trail 0.5R after +0.5R (primary) | 506 | 58% | +0.028 | −0.027 (−0.050 to −0.006) | −0.023 / −0.031 | 17,133 |
+| break-even at +0.5R | 260 | 40% | +0.034 | −0.021 (−0.039 to −0.004) | −0.014 / −0.028 | 18,719 |
+| trail 1R after +1R | 85 | 51% | +0.051 | −0.004 (−0.017 to +0.008) | +0.004 / −0.013 | 26,059 |
+| chandelier 3 × ATR15 | 1,415 | 33% | −0.009 | −0.064 (−0.101 to −0.034) | −0.044 / −0.085 | 392 |
+
+The trail did turn 119 Nov-3-style givebacks from −0.44R into +0.23R on average. It also cut the 25 trades of 2R or more
+from +2.68R to +0.94R. The strategy's edge is in those few large days, so every trail tested lowers it. This closes the
+trailing-stop family for this book.
