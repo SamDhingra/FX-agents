@@ -91,3 +91,21 @@ hold:
 
 - **If `ladder` is confirmed on 2016–2020:** it goes on the `gold_breakout` paper book as a separate shadow book first.
 - **If it is not confirmed:** the book keeps its rule.
+
+## Outcome (Nov 3, 2026): fails on 2021–2026; the vault is not touched; the book keeps its rule
+
+No management: 1,461 days, +0.055R.
+
+| version | win | avg R | vs no management (95% range) | halves | 2× costs |
+|---|---|---|---|---|---|
+| ladder (primary) | 8% | −0.009 | −0.064 (−0.102 to −0.032) | −0.028 / −0.100 | −0.065 |
+| literal 100 / 50 pips | 8% | −0.007 | −0.062 | −0.026 / −0.099 | −0.063 |
+| no re-entry | 14% | −0.008 | −0.063 | −0.028 / −0.099 | −0.063 |
+| no setup-broken rule | 53% | +0.036 | −0.019 (−0.029 to −0.009) | −0.013 / −0.025 | −0.024 |
+
+- **The setup-broken rule did most of the damage.** Gold breakouts usually close back inside the range at some 15-minute
+  candle (a retest), so the rule cut almost every day. Without it the ladder costs −0.019R.
+- **The big days do pull back hard.** On the 25 days of 2R or more, the deepest pullback after first reaching +0.5R and
+  before the final peak had a median of 0.98R (about 400 pips at today's price). 24 of the 25 pulled back more than
+  0.5R. The trail was applied as specified; it is simply tighter than the market's normal swing on its best days.
+- Nothing here is re-tuned on these years. Any new management idea needs its own registration.
