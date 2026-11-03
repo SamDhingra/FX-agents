@@ -243,6 +243,8 @@ async def build(cfg, args):
         ctx.members = MemberStore(Path(cfg["storage"]["db_path"]).parent / "members.sqlite", vault)
         if real:
             install_copier(ctx, ctx.members)
+        from fxagents.live.hold import install as install_hold
+        install_hold(ctx)                  # data_live/HOLD → the live account opens nothing until you release it
     return ctx, feed, agents, ib
 
 

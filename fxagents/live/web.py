@@ -263,6 +263,20 @@ def install(app, ctx) -> Gate:
         auth.log(u["id"], f"manual_{act}", f"{ev['id']} {res.get('msg', '')}"[:200])
         return res
 
+    @app.post("/api/live/hold")
+    async def hold_switch(request: Request):
+        """Release (needs a fresh authenticator code: real money starts) or put back the live account's hold."""
+        from . import hold as H
+        u = gate.require(request, "owner")
+        b = await request.json()
+        on = bool(b.get("on"))
+        if not on and not auth.check_code(u["id"], str(b.get("code", ""))):
+            raise HTTPException(403, "authenticator code needed to release the hold")
+        H.set_hold(ctx.cfg, on, u["name"])
+        ctx.state.hold = H.REASON if on else ""
+        auth.log(u["id"], "hold_on" if on else "hold_released", "")
+        return {"hold": on}
+
     @app.get("/api/live/review")
     async def review(request: Request, days: int = 30):
         gate.require(request, "owner")
@@ -494,6 +508,7 @@ def desk_data(ctx) -> dict:
                         "risk_pct": float(risk.get("risk_per_trade_pct", 0)),
                         "max_open": int(risk.get("max_open_positions", 0))},
             "trading_enabled": st.trading_enabled, "halt_reason": st.halt_reason, "today": today,
+            "hold": bool(getattr(st, "hold", "")),
             "positions": pos, "markets": markets, "signals": sig, "news": news, "news_block": blocked,
             "flatten_at": cfg["sessions"]["flatten_at"],
             "members": {"copy_enabled": bool(mem.setting("copy_enabled")) if mem else False,

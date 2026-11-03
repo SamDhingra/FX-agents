@@ -233,6 +233,8 @@ class C10Trader(Agent):
         r = self.cfg["risk"]
         if getattr(self.state, "entries_blocked", ""):
             return f"entries blocked: {self.state.entries_blocked}"
+        if getattr(self.state, "hold", ""):
+            return self.state.hold
         if self.cfg["instruments"].get(sym, {}).get("trade", True) is False:
             return f"instrument off: {sym} is watch-only (trade: false)"
         open_pos = [p for p in self.state.positions.values() if p.status == "open"]
