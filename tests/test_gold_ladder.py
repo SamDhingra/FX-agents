@@ -58,3 +58,14 @@ def test_vault_refuses_without_a_seen_pass(tmp_path, monkeypatch):
     monkeypatch.setitem(L.OUT, "seen", tmp_path / "seen")
     with pytest.raises(SystemExit, match="only if ladder passed"):
         L.run("vault", out=tmp_path / "vault", m1=two_days([100.0] * 1440))
+
+
+def test_full_report_runs(tmp_path):
+    rng = np.random.default_rng(3)
+    px = 2000 + np.cumsum(rng.normal(0, 0.8, 1440 * 15))
+    from tests.test_breakout import frame
+    m1 = frame(px, start="2021-03-01 21:00", spread=0.3)
+    m1 = m1[m1.index.dayofweek < 5]
+    res = L.run("seen", out=tmp_path / "s", m1=m1)
+    assert set(res) == set(L.MODES)
+    assert (tmp_path / "s" / "report.md").read_text().startswith("# Gold overnight breakout: ladder")

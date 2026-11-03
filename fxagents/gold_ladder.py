@@ -159,6 +159,7 @@ def run(period: str, out: Path | None = None, m1: pd.DataFrame | None = None) ->
         for mode in MODES:
             m = manage(a, end15, j, t1, side, entry, stop, risk, rh, rl, mode)
             r[f"R_{mode}"], r[f"re_{mode}"] = m["R"], m["reentry"]
+            r[f"pts_{mode}"] = m["R"] * risk
         rows.append(r)
     t = pd.DataFrame(rows)
     out.mkdir(parents=True, exist_ok=True)
