@@ -52,3 +52,14 @@ The result is d = the add's result per add. All of these are required:
 - **If it is not confirmed:** adding on the resumption is closed for this book.
 
 On 2021–2026 it is worth about +0.014R per day across all days, a small gain even if real.
+
+## Outcome (Nov 3, 2026): NOT CONFIRMED on 2016–2020; adding on the resumption is closed for this book
+
+| adds | win | avg per add | 95% range | halves | 2× costs | per day, all days |
+|---|---|---|---|---|---|---|
+| 194 | 32% | −0.075 | −0.145 to −0.008 | −0.112 / −0.044 | −0.121 | −0.011 |
+
+The add lost on these years, with its whole range below zero. Its result on 2021–2026 (+0.051) did not carry over.
+
+The breakout itself averaged only +0.006R a day on 2016–2020, against +0.055R on 2021–Sep 2026. It had already failed its
+2021–Sep 2024 holdout (+0.022R), so its edge is concentrated in the recent gold trend.
