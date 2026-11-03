@@ -50,3 +50,16 @@ The 0.30 threshold is the common rule of thumb for "choppy" with this measure. I
 - **If it is not confirmed:** the ER filter is closed.
 
 The current CHOP routing stays as it is either way until the review.
+
+## Outcome (Nov 3, 2026): does not pass on 2021–2026; the vault is not touched
+
+| check | skipped | skipped avg R | kept avg R | kept − skipped (95% range) | halves | random-skip p |
+|---|---|---|---|---|---|---|
+| er15 (primary) | 6,556 of 10,724 | −0.104 | −0.080 | +0.025 (−0.023 to +0.073) | +0.019 / +0.029 | 0.022 |
+| er1h | 5,921 | −0.100 | −0.087 | +0.013 (−0.035 to +0.060) | −0.020 / +0.045 | 0.16 |
+| CHOP ≥ 61.8 (info) | 1,252 | −0.080 | −0.097 | −0.017 | −0.105 / +0.078 | 0.52 |
+| ADX < 20 (info) | 4,128 | −0.114 | −0.083 | +0.032 (−0.021 to +0.084) | +0.041 / +0.020 | 0.13 |
+
+By ER(12) 15m bucket, average R runs between −0.059 and −0.119 from 0.0 to 1.0 with no steady slope. Every bucket is
+below zero, so no threshold, fixed or moving, leaves a positive set of kept trades. The current CHOP routing stays
+until the review. The 2016–2020 vault is still unused for this family.
