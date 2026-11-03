@@ -105,3 +105,12 @@ No trading change follows before the Nov 5 review. A rule that passes both becom
 
 The NDQ-only SuperTrend check (part 2) is still to be judged once with `./fx.sh trendhold vault`. No other primary
 goes to the vault.
+
+## Outcome, part 2 (vault 2016–2020, judged once): NDQ-only SuperTrend is not confirmed
+
+| | trades | avg R | 95% range | 2× costs | halves | random-timing control |
+|---|---|---|---|---|---|---|
+| NDQ SuperTrend, 15m | 2,838 | −0.037 | −0.095 to +0.026 | −0.108 | −0.039 / −0.034 | −0.025 |
+
+The +0.067R on 2021–2026 did not hold up on data it was not picked from. Spread was 5% of the stop in 2016–2020,
+against 2% in 2021–2026. The SuperTrend family is closed.
