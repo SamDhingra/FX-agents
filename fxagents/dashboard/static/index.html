@@ -1407,6 +1407,15 @@ html body{font-size:13.5px}
 .sample-rose{background:linear-gradient(135deg,#140d17,#271b33)}.sample-rose i{background:#33243f!important}.sample-rose b{background:#f472b6!important;border-color:#f9a8d4!important}.sample-rose em{background:linear-gradient(160deg,transparent 50%,#4ade80 51%,transparent 56%),#1f1528!important;border-color:#463356!important}
 .sample-dune{background:linear-gradient(135deg,#f5efe6,#fffcf7)}.sample-dune i{background:#2a2118!important}.sample-dune b{background:#c2410c!important;border-color:#a8370a!important}.sample-dune em{background:linear-gradient(160deg,transparent 50%,#15803d 51%,transparent 56%),#fffcf7!important;border-color:#d3c5b0!important}
 .sample-paper{background:linear-gradient(135deg,#f6f6f4,#ffffff)}.sample-paper i{background:#141414!important}.sample-paper b{background:#2563eb!important;border-color:#1d4ed8!important}.sample-paper em{background:linear-gradient(160deg,transparent 50%,#059669 51%,transparent 56%),#fff!important;border-color:#cfcfc9!important}
+
+/* Nov 4 2026: on tablets the theme list is taller than the screen and the × / Done scrolled out of reach —
+   header and footer stay pinned, and a tap outside the panel closes it */
+@media (min-width:761px){
+  #appearanceDialog{padding-top:0;padding-bottom:0}
+  #appearanceDialog .appearance-header{position:sticky;top:0;z-index:3;background:var(--card);margin:0 -26px;padding:18px 26px 12px;border-bottom:1px solid var(--line)}
+  #appearanceDialog .appearance-footer{position:sticky;bottom:0;z-index:3;background:var(--card);margin:20px -26px 0;padding:14px 26px 18px}
+  #appearanceDialog .appearance-intro{margin-top:14px}
+}
 </style>
 </head>
 <body>
@@ -1755,7 +1764,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.2</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.3</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -3649,6 +3658,12 @@ for(const d of [$("#appearanceDialog"), $("#askDialog"), $("#recapDialog")]){
     if(history.state && history.state.dlg === d.id) history.back();
   });
   d.querySelectorAll("[data-dlgback]").forEach(b => b.onclick = () => d.close());
+  d.addEventListener("click", e => {          // a tap on the backdrop (outside the panel) closes it (Nov 4 2026)
+    if(e.target !== d) return;
+    const r = d.getBoundingClientRect();
+    if(e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+  });
+  d.addEventListener("keydown", e => { if(e.key === "Escape") d.close(); });
 }
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const d = [...$$("dialog.sheetdlg[open]")].pop(); if(d){ e.preventDefault(); d.close(); } } });
 window.addEventListener("popstate", () => { for(const d of $$("dialog[open]")) if(["appearanceDialog","askDialog","recapDialog"].includes(d.id)) d.close(); });
