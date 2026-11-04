@@ -35,3 +35,19 @@ def test_old_index_rules_flag(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(pbk, "playbook_path", lambda cfg: tmp_path / "none.json")
     CW.main(["sr_rejection", "--days", "2", "--old-index-rules"])
     assert "max_cells=4" in capsys.readouterr().out
+
+
+def test_signals_section(monkeypatch, tmp_path, capsys):
+    from fxagents.journal import Journal
+    cube = pbk.CellCube(_trades())
+    monkeypatch.setattr(pbk, "load_cube", lambda cfg: cube)
+    monkeypatch.setattr(pbk, "playbook_path", lambda cfg: tmp_path / "none.json")
+    j = Journal(str(tmp_path / "journal_playbook.sqlite"))
+    j.add_signal({"ts": "2026-11-02T10:30", "symbol": "US30", "strategy": "sr_rejection:30m@pb-us30-d-trend", "side": "long",
+                  "entry": 1.0, "stop": 0.9, "action": "skipped", "why": "bias: counter-trend"})
+    import fxagents.cell_why as m
+    real = m.load_config
+    monkeypatch.setattr(m, "load_config", lambda p: {**real(p), "storage": {"db_path": str(tmp_path / "journal.sqlite")}})
+    CW.main(["sr_rejection", "--days", "1"])
+    out = capsys.readouterr().out
+    assert "journal_playbook.sqlite" in out and "bias: counter-trend" in out

@@ -61,6 +61,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Why isn't a setup trading? (read-only)")
     ap.add_argument("setup", nargs="?", default="sr_rejection")
     ap.add_argument("--days", type=int, default=14)
+    ap.add_argument("--since", default="2026-10-29", help="signals from this date on")
+    ap.add_argument("--signals", type=int, default=15, help="signals shown per journal")
     ap.add_argument("--old-index-rules", action="store_true",
                     help="judge with the NDQ/US30 rules in force before Nov 4 2026 (stricter than gold)")
     a = ap.parse_args(argv)
@@ -110,6 +112,21 @@ def main(argv=None):
         except sqlite3.Error:
             continue
         print(f"- {f.name}: {r[1]} trades, last opened {r[0] or '—'}")
+    print("\n## Its signals since the playbook last picked it up, per playbook book (what each book did and why)\n")
+    for f in sorted(db.parent.glob(db.stem + "*.sqlite")):
+        try:
+            con = sqlite3.connect(f"file:{f}?mode=ro", uri=True)
+            rows = con.execute("SELECT ts, symbol, side, action, why FROM signals WHERE strategy LIKE ? AND ts >= ? "
+                               "ORDER BY ts DESC LIMIT ?", (f"{a.setup}%", a.since, a.signals)).fetchall()
+            con.close()
+        except sqlite3.Error:
+            continue
+        if not rows:
+            continue
+        print(f"### {f.name}\n")
+        for ts, sym, side, act, why in rows:
+            print(f"- {str(ts)[:16]} {sym} {side} → {act}: {(why or '')[:160]}")
+        print()
 
 
 if __name__ == "__main__":
