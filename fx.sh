@@ -35,7 +35,9 @@ case "${1:-help}" in
                    k=$(docker run --rm --entrypoint python fx-agents:latest -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())" 2>/dev/null \
                        || python3 -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())")
                    [[ -n "$k" ]] || { echo "could not make a vault key (needs docker or python3 + cryptography)"; exit 1; }
-                   sed -i "s|^LIVE_VAULT_KEY=.*|LIVE_VAULT_KEY=$k|" .env.live
+                   if grep -q '^LIVE_VAULT_KEY=' .env.live; then sed -i "s|^LIVE_VAULT_KEY=.*|LIVE_VAULT_KEY=$k|" .env.live
+                   else printf '\nLIVE_VAULT_KEY=%s\n' "$k" >> .env.live; fi           # line missing (hand-written .env.live)
+                   grep -q '^LIVE_VAULT_KEY=.\+' .env.live || { echo "could not write the vault key to .env.live"; exit 1; }
                    echo "vault key written to .env.live — back it up somewhere safe (password manager); losing it means members re-enter keys"
                  fi
                  mkdir -p data_live && chmod 700 data_live
