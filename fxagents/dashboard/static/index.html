@@ -1320,6 +1320,16 @@ html body{font-size:13.5px}
 .bt2 .meter span{white-space:nowrap}.bt2 .pill2{padding:3px 8px;font-size:10.5px}.bt2 .meter .mdots i{width:11px}
 
 /* ══ Nov 4 2026: Analysis page ══ */
+.anfilt{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:0 0 12px}
+.anfilt label{display:grid;gap:3px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.anfilt select{min-height:34px;padding:5px 28px 5px 10px;border-radius:9px;border:1px solid var(--line-2);background:var(--card);color:var(--text);font:inherit;font-size:13px;text-transform:none;letter-spacing:0;max-width:220px}
+.anfilt select.set{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
+.anfilt .btn{min-height:34px}
+.ancurve{width:100%;height:170px;display:block}.ancurve .z{stroke:var(--line-2);stroke-dasharray:3 4}.ancurve .l{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.antbl tr.anpick{cursor:pointer}.antbl tr.anpick:hover td{background:var(--card-2)}.ancard[data-setup]{cursor:pointer}
+.ankv{display:grid;grid-template-columns:1fr auto;gap:8px 14px;font-size:13px}.ankv span{color:var(--text-2)}.ankv b{font-variant-numeric:tabular-nums;text-align:right}
+.anftog{flex:1 1 100%}.anfilt.folded label{display:none}
+@media (max-width:760px){.anfilt label{flex:1 1 44%}.anfilt select{max-width:none;width:100%;font-size:16px}}
 .anrange{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.anrange .anbook{margin-left:auto;font-size:12px}
 .anbar{display:grid;grid-template-columns:minmax(90px,150px) 1fr 76px;gap:10px;align-items:center;font-size:12.5px;margin:7px 0}
 .anbar>span:first-child{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.anbar>span:last-child{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -1663,13 +1673,23 @@ html body{font-size:13.5px}
     <!-- ANALYSIS (Nov 4 2026) -->
     <section class="page" id="p-analysis">
       <div class="filters anrange" id="anRange"><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
+      <div class="anfilt" id="anFilt"></div>
       <div class="kcards" id="anK"></div>
       <div class="grid hrows">
-        <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals</span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
+        <div class="card c12"><h3>Running total <span class="mut heading-note">cumulative R by close time</span><span class="sp"></span><span class="mut heading-note" id="anCurveNote"></span></h3><div id="anCurve"></div></div>
+        <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals · tap a row to filter</span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
         <div class="card c6"><h3>Why signals weren't taken</h3><div id="anRef"></div></div>
         <div class="card c6"><h3>Gave back +1R <span class="mut heading-note">reached +1R, closed at or below 0</span></h3><div id="anGive"></div></div>
+        <div class="card c6"><h3>By instrument</h3><div class="tbl" id="anSym"></div></div>
+        <div class="card c6"><h3>Long vs short</h3><div class="tbl" id="anSide"></div></div>
+        <div class="card c6"><h3>By session <span class="mut heading-note">Asia 18–03 · London 03–08 · New York 08–18 (NY time)</span></h3><div class="tbl" id="anSess"></div></div>
+        <div class="card c6"><h3>Holding time</h3><div class="tbl" id="anHold"></div></div>
         <div class="card c6"><h3>By hour <span class="mut heading-note">entry time, New York · avg R</span></h3><div id="anHour"></div></div>
         <div class="card c6"><h3>By weekday <span class="mut heading-note">avg R</span></h3><div id="anDow"></div></div>
+        <div class="card c6"><h3>Result distribution <span class="mut heading-note">trades per result band</span></h3><div id="anDist"></div></div>
+        <div class="card c6"><h3>How much of the move was kept <span class="mut heading-note">best price reached vs result</span></h3><div id="anExc"></div></div>
+        <div class="card c6"><h3>Timeframe</h3><div class="tbl" id="anTf"></div></div>
+        <div class="card c6"><h3>Exit profile <span class="mut heading-note">standard · scalp · trend (first target 2R)</span></h3><div class="tbl" id="anProf"></div></div>
         <div class="card c6"><h3>How trades ended</h3><div class="tbl" id="anExit"></div></div>
         <div class="card c6"><h3>Bias rule <span class="mut heading-note">with, against, or rule off</span></h3><div class="tbl" id="anBias"></div></div>
       </div>
@@ -1735,7 +1755,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.1</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.2</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -5331,9 +5351,30 @@ try{ const d = +localStorage.getItem("fx-an-days"); if([7,30,90,365].includes(d)
 $$("#anRange .fchip").forEach(b => { b.classList.toggle("on", +b.dataset.d === AN.days); b.onclick = () => {
   AN.days = +b.dataset.d; try{ localStorage.setItem("fx-an-days", AN.days); }catch(e){}
   $$("#anRange .fchip").forEach(x => x.classList.toggle("on", x === b)); loadAnalysis(); }; });
+AN.f = {};
+try{ AN.f = JSON.parse(localStorage.getItem("fx-an-f") || "{}") || {}; }catch(e){}
+const AN_FIELDS = [["symbol","Instrument"],["setup","Setup"],["side","Direction"],["tf","Timeframe"],["profile","Exit profile"],["session","Session"],["bias","Bias"]];
+function anSetFilter(patch){
+  AN.f = {...AN.f, ...patch}; Object.keys(AN.f).forEach(k => { if(!AN.f[k]) delete AN.f[k]; });
+  try{ localStorage.setItem("fx-an-f", JSON.stringify(AN.f)); }catch(e){}
+  loadAnalysis();
+}
+function anFilters(opts){
+  const lab = (k, v) => k === "symbol" ? iname(v) : k === "side" ? (v === "LONG" ? "Long" : v === "SHORT" ? "Short" : v) : k === "bias" ? anMode(v) : v;
+  const n = Object.keys(AN.f).length;
+  const phone = matchMedia("(max-width:760px)").matches;
+  $("#anFilt").classList.toggle("folded", phone && !AN.open);
+  $("#anFilt").innerHTML = (phone ? `<button class="btn anftog" id="anTog" type="button">${AN.open ? "Hide filters" : "Filters"}${n ? ` · ${n} on` : ""}</button>` : "") + AN_FIELDS.map(([k, name]) => { const list = [...new Set([...(opts[k] || []), ...(AN.f[k] ? [AN.f[k]] : [])])];
+      return `<label>${name}<select data-k="${k}" class="${AN.f[k] ? "set" : ""}"><option value="">All</option>${list.map(v => `<option value="${esc(v)}" ${AN.f[k] === v ? "selected" : ""}>${esc(lab(k, v))}</option>`).join("")}</select></label>`; }).join("")
+    + (n ? `<button class="btn" id="anClear" type="button">Clear ${n} filter${n > 1 ? "s" : ""}</button>` : "");
+  $$("#anFilt select").forEach(x => x.onchange = () => anSetFilter({[x.dataset.k]: x.value}));
+  if($("#anTog")) $("#anTog").onclick = () => { AN.open = !AN.open; anFilters(opts); };
+  if(n) $("#anClear").onclick = () => { AN.f = {}; anSetFilter({}); };
+}
 async function loadAnalysis(){
   $("#anBook").textContent = (BOOK === "live" ? "Practice account" : bookName(BOOK));
-  try{ AN.data = await api(q("api/analysis?days=" + AN.days)); renderAnalysis(); }
+  const qs = Object.entries(AN.f).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join("");
+  try{ AN.data = await api(q("api/analysis?days=" + AN.days + qs)); anFilters(AN.data.options || {}); renderAnalysis(); }
   catch(e){ $("#anSetups").innerHTML = `<div class="empty">Couldn't load the analysis (${esc(e.message)}).</div>`; }
 }
 const anBar = (label, w, right, kind = "a") => `<div class="anbar"><span title="${esc(label)}">${esc(label)}</span><div class="tr"><i class="${kind}" style="width:${Math.max(0, Math.min(100, w))}%"></i></div><span>${right}</span></div>`;
@@ -5358,13 +5399,13 @@ function renderAnalysis(){
   const sc = d.scorecard || [];
   if(sc.length && matchMedia("(max-width:760px)").matches){       // phone: one card per setup instead of a wide table
     $("#anSetups").innerHTML = sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
-      return `<div class="ancard"><div class="ah"><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span><span class="sp"></span><b class="${cls(r.sum)}">${sR(r.sum, 1)}</b></div>
+      return `<div class="ancard" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><div class="ah"><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span><span class="sp"></span><b class="${cls(r.sum)}">${sR(r.sum, 1)}</b></div>
         <div class="mut am">${r.n} trades · ${anPct(r.win)} won · avg <span class="${cls(r.avg)}">${sR(r.avg)}</span>${r.givebacks ? ` · ${r.givebacks} gave back` : ""}${r.signals ? ` · signals ${r.taken}/${r.signals}` : ""}</div>
         ${ref.length ? `<div>${ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("")}</div>` : ""}</div>`; }).join("");
   } else
   $("#anSetups").innerHTML = sc.length ? `<table class="antbl"><tr><th>Setup</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th><th class="hm">Gave back</th><th class="hm">Signals</th><th>Why not taken</th><th class="hm">Last trade</th></tr>` +
     sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
-      return `<tr class="${(r.sum || 0) < 0 ? "neg" : ""}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span></td><td>${r.n}</td><td>${anPct(r.win)}</td>
+      return `<tr class="anpick ${(r.sum || 0) < 0 ? "neg" : ""}" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span></td><td>${r.n}</td><td>${anPct(r.win)}</td>
         <td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td><td class="hm">${r.givebacks || ""}</td>
         <td class="hm">${r.signals ? `${r.taken}/${r.signals}` : "—"}</td>
         <td class="why">${ref.length ? ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("") : `<span class="mut">—</span>`}</td>
@@ -5384,6 +5425,31 @@ function renderAnalysis(){
   const dw = d.by_weekday || [], mD = Math.max(0.25, ...dw.map(h => Math.abs(h.avg || 0)));
   $("#anDow").innerHTML = dw.length ? dw.map(h => anDiv(h.day + " · " + h.n, h.avg, sR(h.avg), mD)).join("") : `<div class="empty">No trades in this range.</div>`;
   $("#anExit").innerHTML = anSmall(d.exits, r => r.reason.replace(/_/g, " "), "Exit");
+  $("#anSym").innerHTML = anSmall(d.by_symbol, r => iname(r.symbol), "Instrument");
+  $("#anSide").innerHTML = anSmall(d.by_side, r => r.side === "LONG" ? "Long" : r.side === "SHORT" ? "Short" : r.side, "Direction");
+  $("#anSess").innerHTML = anSmall(d.by_session, r => r.session, "Session");
+  $("#anHold").innerHTML = anSmall(d.by_hold, r => r.hold, "Held");
+  $("#anTf").innerHTML = anSmall(d.by_tf, r => r.tf, "Timeframe");
+  $("#anProf").innerHTML = anSmall(d.by_profile, r => r.profile, "Profile");
+  const ds = d.distribution || [], dmx = Math.max(1, ...ds.map(x => x.n)), dn = ds.reduce((a, x) => a + x.n, 0);
+  $("#anDist").innerHTML = dn ? ds.map((x, i) => anBar(x.bucket, x.n / dmx * 100, `${x.n} · ${Math.round(x.n / dn * 100)}%`, i < 3 ? "n" : "p")).join("") : `<div class="empty">No trades in this range.</div>`;
+  const e = d.excursion || {}, f2 = v => v == null ? "—" : sR(v);
+  $("#anExc").innerHTML = (T.n ? `<div class="ankv">
+      <span>Trades that reached +1R at some point</span><b>${anPct(e.reached_1r)}</b>
+      <span>Winners: best move → result</span><b>${f2(e.win_mfe)} → <span class="up">${f2(e.win_r)}</span></b>
+      <span>Share of winners' best move kept</span><b>${e.kept == null ? "—" : Math.round(e.kept * 100) + "%"}</b>
+      <span>Losers: best move before losing</span><b>${f2(e.loss_mfe)} → <span class="down">${f2(e.loss_r)}</span></b>
+      ${e.win_mae == null && e.loss_mae == null ? "" : `<span>Worst move against: winners · losers</span><b>${f2(e.win_mae == null ? null : -Math.abs(e.win_mae))} · ${f2(e.loss_mae == null ? null : -Math.abs(e.loss_mae))}</b>`}</div>`
+    : `<div class="empty">No trades in this range.</div>`);
+  const cv = d.curve || [];
+  if(cv.length > 1){
+    const W = 600, H = 170, lo = Math.min(0, ...cv.map(p => p.r)), hi = Math.max(0, ...cv.map(p => p.r)), sp = (hi - lo) || 1;
+    const y = v => H - 8 - (v - lo) / sp * (H - 16), x = i => i / (cv.length - 1) * W, last = cv[cv.length - 1].r;
+    $("#anCurve").innerHTML = `<svg class="ancurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="z" x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}"/>
+      <polyline class="l" stroke="var(--${last >= 0 ? "up" : "down"})" points="${cv.map((p, i) => x(i).toFixed(1) + "," + y(p.r).toFixed(1)).join(" ")}"/></svg>`;
+    $("#anCurveNote").textContent = `${md(cv[0].t)} → ${md(cv[cv.length - 1].t)} · ${sR(last, 1)} · high ${sR(hi, 1)}`;
+  } else { $("#anCurve").innerHTML = `<div class="empty">Not enough closed trades for a curve.</div>`; $("#anCurveNote").textContent = ""; }
+  $$("#anSetups [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
 }
 const _goAn = go;

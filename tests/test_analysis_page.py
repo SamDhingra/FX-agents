@@ -42,3 +42,20 @@ def test_endpoint(tmp_path):
     ctx = make_ctx(tmp_path)
     r = TestClient(build_app(ctx)).get("/api/analysis?days=3650").json()
     assert "scorecard" in r and "refusals" in r and "by_hour" in r
+
+
+def test_filters_and_new_sections(tmp_path):
+    j = _journal(tmp_path)
+    now = pd.Timestamp("2026-11-04 12:00", tz="America/New_York")
+    out = A.build(j.db, days=30, now=now, filters={"symbol": "US30"})
+    assert out["totals"]["n"] == 2 and {r["symbol"] for r in out["scorecard"]} == {"US30"}
+    assert set(out["options"]["symbol"]) == {"US30", "NDQ"} and out["options"]["profile"] == ["standard", "trend"]
+    assert out["by_profile"][0]["profile"] == "trend" and out["by_tf"][0]["tf"] == "30m"
+    assert [s["session"] for s in out["by_session"]] == ["New York"]
+    assert out["curve"][-1]["r"] == 0.5 and sum(d["n"] for d in out["distribution"]) == 2
+    assert out["excursion"]["reached_1r"] == 1.0
+    o2 = A.build(j.db, days=30, now=now, filters={"setup": "smc_mss", "side": "SHORT", "tf": "5m", "profile": "standard"})
+    assert o2["totals"]["n"] == 1 and o2["signals"]["seen"] == 0
+    assert A.build(j.db, days=30, now=now, filters={"bias": "ignored:counter"})["totals"]["n"] == 1
+    assert A.session_of(19) == "Asia" and A.session_of(2) == "Asia" and A.session_of(5) == "London" and A.session_of(10) == "New York"
+    assert A.profile_of("dtfx_close_fib:15m@pb-us30-15ba-trend") == "trend" and A.tf_of("c10_afternoon:5m@v2") == "5m"

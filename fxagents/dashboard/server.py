@@ -466,13 +466,16 @@ def build_app(ctx) -> FastAPI:
         return JSONResponse(biasgrid.grid(bk(request)))
 
     @app.get("/api/analysis")
-    async def api_analysis(request: Request, days: int = 30):
+    async def api_analysis(request: Request, days: int = 30, symbol: str = "", setup: str = "", side: str = "", tf: str = "",
+                           profile: str = "", session: str = "", bias: str = ""):
         """Analysis page (Nov 4 2026): setup scorecard with what happened to the signals, refusal reasons, hours,
         weekdays, exits, bias relation, givebacks — for the selected book (?book=) over the last `days`."""
         need(request)
         c = bk(request)
         out = analysis.build(c.journal.db, max(1, min(int(days), 3650)),       # same thread as every other journal read
-                             c.state.now if getattr(c.state, "now", None) is not None else None)
+                             c.state.now if getattr(c.state, "now", None) is not None else None,
+                             {"symbol": symbol, "setup": setup, "side": side, "tf": tf, "profile": profile, "session": session,
+                              "bias": bias})
         return JSONResponse(out)
 
     @app.get("/api/signals")
