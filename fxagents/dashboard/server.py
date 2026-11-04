@@ -526,17 +526,25 @@ def build_app(ctx) -> FastAPI:
     @app.post("/api/control/{action}")
     async def control(action: str, request: Request):
         need(request, always=True)
-        st = ctx.state
+        c = bk(request)                       # ?book=<mode>: pause / resume a paper book (Nov 4 2026); flatten: account only
+        st = c.state
         if action == "pause":
             st.trading_enabled, st.halt_reason = False, "paused from dashboard"
         elif action == "resume":
+            if (st.halt_reason or "").startswith("max drawdown") and st.equity > 0:
+                st.equity_peak = st.equity    # resuming after a drawdown halt accepts it: measure the next one from here
             st.trading_enabled, st.halt_reason = True, ""
         elif action == "flatten":
+            if c is not ctx:
+                raise HTTPException(400, "flatten is for the account only")
             st.trading_enabled, st.halt_reason = False, "flattened from dashboard"
             await ctx.bus.publish("flatten_all", "dashboard")
         else:
             raise HTTPException(400, "unknown action")
-        st.alert("warn", f"control: {action}")
+        st.alert("warn", f"control: {action}" + ("" if c is ctx else f" ({getattr(c, 'book_key', 'paper')})"))
+        rs = getattr(c, "runtime_store", None)
+        if rs is not None:
+            rs.save(st)                       # a paper book's halt / resume survives a restart
         return {"ok": True, "trading_enabled": st.trading_enabled}
 
     @app.post("/webhook/tradingview")

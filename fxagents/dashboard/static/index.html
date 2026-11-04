@@ -304,7 +304,7 @@ body.noscroll{overflow:hidden} body.noscroll .toasts{display:none}
 .shbar::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--book);flex:none}
 body.shadow .shbar{display:flex}
 
-body.shadow #pause, body.shadow #flatten{display:none}
+body.shadow #flatten{display:none}
 .tag.gh{background:var(--ghost-soft);border-color:transparent;color:var(--ghost)}
 .verdict{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .verdict b{font-size:20px;letter-spacing:-.2px}
@@ -2773,7 +2773,7 @@ function freshness(){
   $("#connection").textContent=fresh?"Connected · "+age+"s ago":age===null?"Connecting…":"Reconnecting · "+age+"s ago";
   $("#connectionBanner").hidden=fresh;
   $("#connectionBanner").textContent=age===null?"Waiting for the first account snapshot. Trading controls are unavailable until connected.":"Updates interrupted. Values shown are the last received snapshot; trading status may have changed. Reconnecting automatically.";
-  $("#pause").disabled=!fresh||!S||controlPending||BOOK!=="live";
+  $("#pause").disabled=!fresh||!S||controlPending;                     // paper books too (Nov 4 2026)
   $("#flatten").disabled=!fresh||!S||controlPending||BOOK!=="live";
   $("#confirmFlatten").disabled=!fresh||!S||controlPending||BOOK!=="live";
   if(!fresh){$("#status").className="chip";$("#status").textContent="Status unverified";}
@@ -2824,10 +2824,10 @@ function toast(msg){
 setInterval(()=>{ $$("[data-count]").forEach(el => el.textContent = countdown(el.dataset.count)); }, 1000);
 
 async function control(a){
-  if(!S || BOOK!=="live" || !connected || Date.now()-LAST_RECEIVED>=15000 || controlPending) return;
+  if(!S || (BOOK!=="live" && a==="flatten") || !connected || Date.now()-LAST_RECEIVED>=15000 || controlPending) return;
   controlPending=true;freshness();
   try{
-    const r = await fetch("api/control/"+a,{method:"POST",credentials:"same-origin",signal:AbortSignal.timeout(10000)});
+    const r = await fetch(q("api/control/"+a),{method:"POST",credentials:"same-origin",signal:AbortSignal.timeout(10000)});
     if(!r.ok) throw new Error(r.status===401||r.status===403?"Not authorized. Sign in with the dashboard token.":`Control failed (${r.status}).`);
     toast(a==="flatten"?"Flatten request accepted. Check positions for execution updates.":a==="pause"?"Pause request accepted.":"Resume request accepted.");
     // Do not mark any position closed until the server reports the result.
