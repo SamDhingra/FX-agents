@@ -339,9 +339,12 @@ REGIME_MODES = ("playbook_regime", "playbook_regime_nobias")       # chop/trend 
 ALLHOURS_WINDOWS = [["20:00", "23:59"], ["00:00", "15:50"]]
 
 
+ALLHOURS_MODES = ("playbook_allhours", "playbook_regime_nobias")   # Nov 4 2026: the chop + no-bias book trades all hours too
+
+
 def book_cfg(cfg: dict, mode: str) -> dict:
-    """The config a shadow book runs with: the main config, except the allhours book's entry windows."""
-    if mode != "playbook_allhours":
+    """The config a shadow book runs with: the main config, except the all-hours books' entry windows."""
+    if mode not in ALLHOURS_MODES:
         return cfg
     c = copy.deepcopy(cfg)
     c["sessions"]["entry_windows"] = [list(w) for w in ALLHOURS_WINDOWS]

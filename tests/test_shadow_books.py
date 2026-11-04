@@ -87,3 +87,5 @@ def test_chop_nobias_book(tmp_path):
     assert str(sh.journal.path).endswith("journal_playbook_regime_nobias.sqlite")
     reg, _, _ = build_shadow(main, 50_000, "playbook_regime", first=True)
     assert reg.regime_route is True and not reg.ignore_bias
+    assert sh.cfg["sessions"]["entry_windows"] == [["20:00", "23:59"], ["00:00", "15:50"]]   # all hours (Nov 4 2026)
+    assert reg.cfg["sessions"]["entry_windows"] != sh.cfg["sessions"]["entry_windows"]
