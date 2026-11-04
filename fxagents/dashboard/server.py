@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from .. import units
-from . import biasgrid, extras, ghosts, insights
+from . import analysis, biasgrid, extras, ghosts, insights
 from .ask import Asker
 from .lessons import LessonWriter
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -464,6 +464,16 @@ def build_app(ctx) -> FastAPI:
     async def api_bias_grid(request: Request):
         need(request)
         return JSONResponse(biasgrid.grid(bk(request)))
+
+    @app.get("/api/analysis")
+    async def api_analysis(request: Request, days: int = 30):
+        """Analysis page (Nov 4 2026): setup scorecard with what happened to the signals, refusal reasons, hours,
+        weekdays, exits, bias relation, givebacks — for the selected book (?book=) over the last `days`."""
+        need(request)
+        c = bk(request)
+        out = analysis.build(c.journal.db, max(1, min(int(days), 3650)),       # same thread as every other journal read
+                             c.state.now if getattr(c.state, "now", None) is not None else None)
+        return JSONResponse(out)
 
     @app.get("/api/signals")
     async def api_signals(request: Request, limit: int = 100):

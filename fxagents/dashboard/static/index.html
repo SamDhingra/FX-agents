@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="FX-Agents">
 <meta name="mobile-web-app-capable" content="yes">
 <title>FX-Agents · Trading workspace</title>
-<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';d.skin='pro';d.theme='dark';d.surface='solid';try{if(!localStorage.getItem('fx-v10')){localStorage.setItem('fx-v10','1');localStorage.setItem('fx-skin','pro');localStorage.setItem('fx-theme','dark');localStorage.setItem('fx-surface','solid')}for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off'],skin:['classic','ink','mint','carbon','pro']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
+<script>(()=>{const d=document.documentElement.dataset;d.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.surface='glass';d.accent='iris';d.motion='auto';d.skin='pro';d.theme='dark';d.surface='solid';try{if(!localStorage.getItem('fx-v10')){localStorage.setItem('fx-v10','1');localStorage.setItem('fx-skin','pro');localStorage.setItem('fx-theme','dark');localStorage.setItem('fx-surface','solid')}for(const [key,allowed] of Object.entries({theme:['light','dark'],surface:['glass','solid'],accent:['iris','ocean','amber'],motion:['auto','off'],skin:['classic','ink','mint','carbon','pro','midnight','nord','ocean','rose','dune','paper']})){const v=localStorage.getItem('fx-'+key);if(allowed.includes(v))d[key]=v}}catch(e){}})();</script>
 <style>
 :root{
   color-scheme: dark;
@@ -1318,6 +1318,85 @@ html body{font-size:13.5px}
 .bt2 .el b{font-weight:650;color:var(--text);white-space:nowrap}.bt2 .el span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 :root .v10 .hrows .market-card .bt2{justify-content:space-between}
 .bt2 .meter span{white-space:nowrap}.bt2 .pill2{padding:3px 8px;font-size:10.5px}.bt2 .meter .mdots i{width:11px}
+
+/* ══ Nov 4 2026: Analysis page ══ */
+.anrange{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.anrange .anbook{margin-left:auto;font-size:12px}
+.anbar{display:grid;grid-template-columns:minmax(90px,150px) 1fr 76px;gap:10px;align-items:center;font-size:12.5px;margin:7px 0}
+.anbar>span:first-child{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.anbar>span:last-child{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.anbar .tr{height:9px;background:var(--card-2);border-radius:5px;position:relative;overflow:hidden}
+.anbar .tr i{position:absolute;top:0;bottom:0;border-radius:5px}.anbar .tr i.a{left:0;background:var(--accent)}.anbar .tr i.p{background:var(--up)}.anbar .tr i.n{background:var(--down)}
+.anbar .tr.dv::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-2)}
+.anchip{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--card-2);border:1px solid var(--line);font-size:11px;margin:2px 4px 2px 0;color:var(--text-2);white-space:nowrap}
+.antbl td,.antbl th{padding:8px 10px;font-size:12.5px;text-align:right;white-space:nowrap}.antbl td:first-child,.antbl th:first-child{text-align:left}
+.antbl td.why{text-align:left;white-space:normal;min-width:180px}.antbl tr.neg td:first-child b{color:var(--text-2)}
+.angive{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--line)}
+.angive:last-child{border-bottom:0}.angive small{color:var(--muted)}
+.ancard{padding:11px 2px;border-bottom:1px solid var(--line);display:grid;gap:5px}.ancard:last-child{border-bottom:0}
+.ancard .ah{display:flex;align-items:baseline;gap:6px;font-size:13.5px}.ancard .ah .sp{flex:1}.ancard .am{font-size:12px}
+@media (max-width:760px){#anSetups.tbl{border:0;overflow:visible}.antbl .hm{display:none}.anbar{grid-template-columns:96px 1fr 64px}}
+
+/* ══ Nov 4 2026: touch screens up to tablet width (e.g. a foldable's inner screen in Safari) get the phone's bottom bar,
+   with the book picker in it, instead of the book button at the top ══ */
+@media (pointer:coarse) and (min-width:761px) and (max-width:1366px){
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:50%;transform:translateX(-50%);width:min(640px,calc(100vw - 40px));
+    bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;background:color-mix(in srgb,var(--card) 90%,transparent);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;padding:6px;box-shadow:0 10px 30px rgb(0 0 0 / .28)}
+  .tabbar button{border:0;background:none;display:grid;justify-items:center;gap:3px;padding:8px 0;font-size:11px;font-weight:600;color:var(--muted);border-radius:14px}
+  .tabbar button svg{width:22px;height:22px}
+  .tabbar.has-book{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .tabbar .tabbook{min-width:0}.tabbar .tabbook .bd{width:22px;height:22px;border-radius:50%;background:var(--book);box-shadow:inset 0 0 0 3px var(--card)}
+  .tabbar .tabbook span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+  .tabbar .tabbook[aria-expanded="true"]{background:var(--accent-soft);color:var(--text)}
+  .tabbar button.on{color:var(--text);background:var(--accent-soft)} .tabbar button.on svg{color:var(--accent-2)}
+  .bookbtn{display:none!important}
+  .bookpane{left:50%!important;transform:translateX(-50%);top:auto!important;bottom:calc(92px + env(safe-area-inset-bottom));width:min(460px,calc(100vw - 40px));
+    max-height:calc(100dvh - 130px - env(safe-area-inset-top))!important;border-radius:20px}
+  .sheet{bottom:calc(92px + env(safe-area-inset-bottom))!important}
+  :root .v10 main,main{padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}
+  .toasts{bottom:calc(104px + env(safe-area-inset-bottom))}
+  .askfab{bottom:calc(100px + env(safe-area-inset-bottom))!important}
+}
+
+/* ══ Nov 4 2026: more themes ══ */
+:root[data-skin="midnight"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#000000;--bg-2:#05050a;--card:#0b0b12;--card-2:#12121c;--line:#1c1c2a;--line-2:#2a2a3d;--text:#f4f4fb;--text-2:#b9b9cf;--muted:#7d7d96;
+  --accent:#a78bfa;--accent-2:#c4b5fd;--accent-soft:rgb(167 139 250 / .14);--up:#34d399;--up-text:#6ee7b7;--up-soft:rgb(52 211 153 / .13);
+  --down:#fb7185;--down-text:#fda4af;--down-soft:rgb(251 113 133 / .13);--warn:#fbbf24;--warn-soft:rgb(251 191 36 / .13);
+  --ghost:#60a5fa;--ghost-soft:rgb(96 165 250 / .13);--radius:14px;--shadow:none;--glow:0 0 0 1px rgb(167 139 250 / .35),0 0 18px rgb(167 139 250 / .25)}
+:root[data-skin="midnight"] body{background:radial-gradient(60% 45% at 85% -10%,rgb(167 139 250 / .12),transparent 70%),var(--bg);background-attachment:fixed}
+:root[data-skin="nord"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#1f232b;--bg-2:#232833;--card:#272d38;--card-2:#2e3542;--line:#363e4c;--line-2:#465062;--text:#eceff4;--text-2:#c8cfdb;--muted:#8f9aac;
+  --accent:#88c0d0;--accent-2:#a7d3df;--accent-soft:rgb(136 192 208 / .14);--up:#a3be8c;--up-text:#b9d0a5;--up-soft:rgb(163 190 140 / .14);
+  --down:#d08770;--down-text:#e0a08c;--down-soft:rgb(208 135 112 / .14);--warn:#ebcb8b;--warn-soft:rgb(235 203 139 / .14);
+  --ghost:#b48ead;--ghost-soft:rgb(180 142 173 / .14);--radius:12px;--shadow:0 6px 20px rgb(0 0 0 / .18);--glow:0 0 0 1px rgb(136 192 208 / .35)}
+:root[data-skin="ocean"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#051419;--bg-2:#071a20;--card:#0a2129;--card-2:#0e2a34;--line:#143642;--line-2:#1f4a58;--text:#e6f6f8;--text-2:#a9cdd3;--muted:#6f9aa2;
+  --accent:#2dd4bf;--accent-2:#5eead4;--accent-soft:rgb(45 212 191 / .13);--up:#4ade80;--up-text:#86efac;--up-soft:rgb(74 222 128 / .12);
+  --down:#f87171;--down-text:#fca5a5;--down-soft:rgb(248 113 113 / .12);--warn:#facc15;--warn-soft:rgb(250 204 21 / .12);
+  --ghost:#38bdf8;--ghost-soft:rgb(56 189 248 / .13);--radius:14px;--shadow:none;--glow:0 0 0 1px rgb(45 212 191 / .35),0 0 16px rgb(45 212 191 / .2)}
+:root[data-skin="ocean"] body{background:radial-gradient(70% 50% at 0% -10%,rgb(45 212 191 / .10),transparent 70%),radial-gradient(50% 40% at 100% 100%,rgb(56 189 248 / .07),transparent 70%),var(--bg);background-attachment:fixed}
+:root[data-skin="rose"][data-theme][data-accent]{color-scheme:dark;
+  --bg:#140d17;--bg-2:#181020;--card:#1f1528;--card-2:#271b33;--line:#33243f;--line-2:#463356;--text:#f8eef6;--text-2:#d2bfd0;--muted:#9a8399;
+  --accent:#f472b6;--accent-2:#f9a8d4;--accent-soft:rgb(244 114 182 / .14);--up:#4ade80;--up-text:#86efac;--up-soft:rgb(74 222 128 / .12);
+  --down:#fb7185;--down-text:#fda4af;--down-soft:rgb(251 113 133 / .13);--warn:#fcd34d;--warn-soft:rgb(252 211 77 / .13);
+  --ghost:#c084fc;--ghost-soft:rgb(192 132 252 / .13);--radius:16px;--shadow:none;--glow:0 0 0 1px rgb(244 114 182 / .35),0 0 18px rgb(244 114 182 / .22)}
+:root[data-skin="rose"] body{background:radial-gradient(60% 45% at 100% 0%,rgb(244 114 182 / .10),transparent 70%),radial-gradient(50% 40% at 0% 100%,rgb(192 132 252 / .08),transparent 70%),var(--bg);background-attachment:fixed}
+:root[data-skin="dune"][data-theme][data-accent]{color-scheme:light;
+  --bg:#f5efe6;--bg-2:#efe7db;--card:#fffcf7;--card-2:#f8f2e9;--line:#e6dccd;--line-2:#d3c5b0;--text:#2a2118;--text-2:#5c4d3d;--muted:#8a7a66;
+  --accent:#c2410c;--accent-2:#a8370a;--accent-soft:rgb(194 65 12 / .09);--up:#15803d;--up-text:#166534;--up-soft:rgb(21 128 61 / .10);
+  --down:#b91c1c;--down-text:#991b1b;--down-soft:rgb(185 28 28 / .09);--warn:#b45309;--warn-soft:rgb(180 83 9 / .10);
+  --ghost:#6d28d9;--ghost-soft:rgb(109 40 217 / .09);--radius:16px;--shadow:0 1px 2px rgb(42 33 24 / .05),0 8px 24px rgb(42 33 24 / .05);--glow:0 0 0 1px rgb(194 65 12 / .3)}
+:root[data-skin="paper"][data-theme][data-accent]{color-scheme:light;
+  --bg:#f6f6f4;--bg-2:#f0f0ed;--card:#ffffff;--card-2:#f7f7f5;--line:#e5e5e1;--line-2:#cfcfc9;--text:#141414;--text-2:#4a4a48;--muted:#7a7a76;
+  --accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:rgb(37 99 235 / .08);--up:#059669;--up-text:#047857;--up-soft:rgb(5 150 105 / .09);
+  --down:#dc2626;--down-text:#b91c1c;--down-soft:rgb(220 38 38 / .08);--warn:#d97706;--warn-soft:rgb(217 119 6 / .10);
+  --ghost:#7c3aed;--ghost-soft:rgb(124 58 237 / .08);--radius:10px;--shadow:0 1px 2px rgb(0 0 0 / .04);--glow:0 0 0 1px rgb(37 99 235 / .25)}
+.sample-midnight{background:linear-gradient(135deg,#000,#12121c)}.sample-midnight i{background:#1c1c2a!important}.sample-midnight b{background:#a78bfa!important;border-color:#c4b5fd!important}.sample-midnight em{background:linear-gradient(160deg,transparent 50%,#34d399 51%,transparent 56%),#0b0b12!important;border-color:#2a2a3d!important}
+.sample-nord{background:linear-gradient(135deg,#1f232b,#2e3542)}.sample-nord i{background:#363e4c!important}.sample-nord b{background:#88c0d0!important;border-color:#a7d3df!important}.sample-nord em{background:linear-gradient(160deg,transparent 50%,#a3be8c 51%,transparent 56%),#272d38!important;border-color:#465062!important}
+.sample-ocean{background:linear-gradient(135deg,#051419,#0e2a34)}.sample-ocean i{background:#143642!important}.sample-ocean b{background:#2dd4bf!important;border-color:#5eead4!important}.sample-ocean em{background:linear-gradient(160deg,transparent 50%,#4ade80 51%,transparent 56%),#0a2129!important;border-color:#1f4a58!important}
+.sample-rose{background:linear-gradient(135deg,#140d17,#271b33)}.sample-rose i{background:#33243f!important}.sample-rose b{background:#f472b6!important;border-color:#f9a8d4!important}.sample-rose em{background:linear-gradient(160deg,transparent 50%,#4ade80 51%,transparent 56%),#1f1528!important;border-color:#463356!important}
+.sample-dune{background:linear-gradient(135deg,#f5efe6,#fffcf7)}.sample-dune i{background:#2a2118!important}.sample-dune b{background:#c2410c!important;border-color:#a8370a!important}.sample-dune em{background:linear-gradient(160deg,transparent 50%,#15803d 51%,transparent 56%),#fffcf7!important;border-color:#d3c5b0!important}
+.sample-paper{background:linear-gradient(135deg,#f6f6f4,#ffffff)}.sample-paper i{background:#141414!important}.sample-paper b{background:#2563eb!important;border-color:#1d4ed8!important}.sample-paper em{background:linear-gradient(160deg,transparent 50%,#059669 51%,transparent 56%),#fff!important;border-color:#cfcfc9!important}
 </style>
 </head>
 <body>
@@ -1337,6 +1416,7 @@ html body{font-size:13.5px}
   <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
   <symbol id="i-bias" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/><path d="M3 21h18"/></symbol>
+  <symbol id="i-ana" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M9 20V5M14 20v-6"/><circle cx="18.5" cy="9.5" r="3"/><path d="M20.7 11.7L23 14"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></symbol>
 </svg>
@@ -1348,6 +1428,7 @@ html body{font-size:13.5px}
     <button class="nav on" data-p="home"><svg><use href="#i-home"/></svg>Overview</button>
     <button class="nav" data-p="bias"><svg><use href="#i-bias"/></svg>Market Bias</button>
     <button class="nav" data-p="calendar"><svg><use href="#i-cal"/></svg>Performance</button>
+    <button class="nav" data-p="analysis"><svg><use href="#i-ana"/></svg>Analysis</button>
     <button class="nav" data-p="trades"><svg><use href="#i-list"/></svg>Trades</button>
     <button class="nav" data-p="compare"><svg><use href="#i-cmp"/></svg>Compare</button>
     <div class="nav-label">RESEARCH</div>
@@ -1579,6 +1660,21 @@ html body{font-size:13.5px}
         <div id="tmBody"><div class="empty">Loading…</div></div></div>
     </section>
 
+    <!-- ANALYSIS (Nov 4 2026) -->
+    <section class="page" id="p-analysis">
+      <div class="filters anrange" id="anRange"><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
+      <div class="kcards" id="anK"></div>
+      <div class="grid hrows">
+        <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals</span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
+        <div class="card c6"><h3>Why signals weren't taken</h3><div id="anRef"></div></div>
+        <div class="card c6"><h3>Gave back +1R <span class="mut heading-note">reached +1R, closed at or below 0</span></h3><div id="anGive"></div></div>
+        <div class="card c6"><h3>By hour <span class="mut heading-note">entry time, New York · avg R</span></h3><div id="anHour"></div></div>
+        <div class="card c6"><h3>By weekday <span class="mut heading-note">avg R</span></h3><div id="anDow"></div></div>
+        <div class="card c6"><h3>How trades ended</h3><div class="tbl" id="anExit"></div></div>
+        <div class="card c6"><h3>Bias rule <span class="mut heading-note">with, against, or rule off</span></h3><div class="tbl" id="anBias"></div></div>
+      </div>
+    </section>
+
     <!-- NEWS -->
     <section class="page" id="p-news">
       <div class="grid">
@@ -1628,6 +1724,7 @@ html body{font-size:13.5px}
 
 <div class="sheet" id="moreSheet">
   <button data-p="bias"><svg><use href="#i-bias"/></svg>Market Bias</button>
+  <button data-p="analysis"><svg><use href="#i-ana"/></svg>Analysis</button>
   <button data-p="playbook"><svg><use href="#i-target"/></svg>Playbook</button>
   <button data-p="strategies"><svg><use href="#i-brain"/></svg>Strategies</button>
   <button data-p="backtests"><svg><use href="#i-flask"/></svg>Backtests</button>
@@ -1638,7 +1735,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-10-30.1</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -2896,7 +2993,7 @@ async function openBooks(){
     pane.querySelectorAll(".bi").forEach(x => x.onclick = () => { closeBooks(); setBook(x.dataset.b); });
   };
   draw();
-  if(!matchMedia("(max-width:760px)").matches){
+  if(!matchMedia("(max-width:760px), (pointer:coarse) and (max-width:1366px)").matches){   // bottom bar on phones and touch tablets
     const r = btn.getBoundingClientRect();
     pane.style.top = (r.bottom + 8) + "px"; pane.style.left = Math.max(10, Math.min(r.right - 380, innerWidth - 390)) + "px";
     pane.style.maxHeight = Math.max(240, innerHeight - r.bottom - 20) + "px";
@@ -5223,6 +5320,91 @@ bias = function(s){
   $$("#bias .bt2").forEach(x => { x.onclick = () => openInstrument(x.dataset.sym); x.onkeydown = ev => { if(ev.key === "Enter") openInstrument(x.dataset.sym); }; });
 };
 if(S && page === "home") bias(S);
+
+/* ══ Nov 4 2026: Analysis page — one place for what used to take a diagnostic run ══ */
+titles.analysis = "Analysis";
+pageDescriptions.analysis = "Which setups make money, why signals weren't taken, when and how trades end — for the selected book.";
+shortTitles.analysis = "Analysis";
+MORE.push("analysis");
+const AN = {days: 30, data: null};
+try{ const d = +localStorage.getItem("fx-an-days"); if([7,30,90,365].includes(d)) AN.days = d; }catch(e){}
+$$("#anRange .fchip").forEach(b => { b.classList.toggle("on", +b.dataset.d === AN.days); b.onclick = () => {
+  AN.days = +b.dataset.d; try{ localStorage.setItem("fx-an-days", AN.days); }catch(e){}
+  $$("#anRange .fchip").forEach(x => x.classList.toggle("on", x === b)); loadAnalysis(); }; });
+async function loadAnalysis(){
+  $("#anBook").textContent = (BOOK === "live" ? "Practice account" : bookName(BOOK));
+  try{ AN.data = await api(q("api/analysis?days=" + AN.days)); renderAnalysis(); }
+  catch(e){ $("#anSetups").innerHTML = `<div class="empty">Couldn't load the analysis (${esc(e.message)}).</div>`; }
+}
+const anBar = (label, w, right, kind = "a") => `<div class="anbar"><span title="${esc(label)}">${esc(label)}</span><div class="tr"><i class="${kind}" style="width:${Math.max(0, Math.min(100, w))}%"></i></div><span>${right}</span></div>`;
+const anDiv = (label, v, right, max = 1) => { const w = v == null ? 0 : Math.min(1, Math.abs(v) / max) * 50;
+  return `<div class="anbar"><span>${esc(label)}</span><div class="tr dv">${v == null ? "" : `<i class="${v >= 0 ? "p" : "n"}" style="${v >= 0 ? "left:50%" : "right:50%"};width:${w}%"></i>`}</div><span class="${cls(v)}">${right}</span></div>`; };
+const anPct = x => x == null ? "—" : Math.round(x * 100) + "%";
+const anMode = m => m === "—" ? "not recorded" : m.startsWith("ignored:") ? "rule off · would be " + m.slice(8) : m;
+function anSmall(rows, key, label){
+  if(!rows || !rows.length) return `<div class="empty">No trades in this range.</div>`;
+  return `<table class="antbl"><tr><th>${label}</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th></tr>` +
+    rows.map(r => `<tr><td>${esc(key(r))}</td><td>${r.n}</td><td>${anPct(r.win)}</td><td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td></tr>`).join("") + `</table>`;
+}
+function renderAnalysis(){
+  const d = AN.data; if(!d) return;
+  const T = d.totals || {}, st = d.streaks || {}, sg = d.signals || {};
+  const tile = (h, b, sub, c = "") => `<div class="kc"><div class="kh"><span>${h}</span></div><b class="num ${c}">${b}</b><em>${sub}</em></div>`;
+  $("#anK").innerHTML =
+      tile("Trades", T.n || 0, T.n ? `${anPct(T.win)} won · avg ${sR(T.avg)}` : `none in the last ${d.days} days`)
+    + tile("Result", sR(T.sum, 1), smoney(d.pnl), cls(T.sum))
+    + tile("Deepest dip", st.max_dd_r != null ? sR(st.max_dd_r, 1) : "—", st.longest_loss != null ? `longest losing run ${st.longest_loss} · winning ${st.longest_win}` : "", st.max_dd_r < 0 ? "down" : "")
+    + tile("Signals taken", `${sg.taken || 0} / ${sg.seen || 0}`, d.giveback_share != null ? `${anPct(d.giveback_share)} of trades gave back +1R` : "");
+  const sc = d.scorecard || [];
+  if(sc.length && matchMedia("(max-width:760px)").matches){       // phone: one card per setup instead of a wide table
+    $("#anSetups").innerHTML = sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
+      return `<div class="ancard"><div class="ah"><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span><span class="sp"></span><b class="${cls(r.sum)}">${sR(r.sum, 1)}</b></div>
+        <div class="mut am">${r.n} trades · ${anPct(r.win)} won · avg <span class="${cls(r.avg)}">${sR(r.avg)}</span>${r.givebacks ? ` · ${r.givebacks} gave back` : ""}${r.signals ? ` · signals ${r.taken}/${r.signals}` : ""}</div>
+        ${ref.length ? `<div>${ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("")}</div>` : ""}</div>`; }).join("");
+  } else
+  $("#anSetups").innerHTML = sc.length ? `<table class="antbl"><tr><th>Setup</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th><th class="hm">Gave back</th><th class="hm">Signals</th><th>Why not taken</th><th class="hm">Last trade</th></tr>` +
+    sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
+      return `<tr class="${(r.sum || 0) < 0 ? "neg" : ""}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span></td><td>${r.n}</td><td>${anPct(r.win)}</td>
+        <td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td><td class="hm">${r.givebacks || ""}</td>
+        <td class="hm">${r.signals ? `${r.taken}/${r.signals}` : "—"}</td>
+        <td class="why">${ref.length ? ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("") : `<span class="mut">—</span>`}</td>
+        <td class="hm mut">${r.last ? md(r.last) + " " + hm(r.last) : "—"}</td></tr>`; }).join("") + `</table>`
+    : `<div class="empty">No trades or signals in the last ${d.days} days for this book.</div>`;
+  const rf = d.refusals || [], tot = rf.reduce((a, r) => a + r.n, 0), mx = Math.max(1, ...rf.map(r => r.n));
+  $("#anRef").innerHTML = rf.length ? rf.map(r => anBar(r.reason, r.n / mx * 100, `${r.n} · ${Math.round(r.n / tot * 100)}%`)).join("")
+    + `<p class="mut" style="font-size:12px;margin:10px 0 0">${sg.taken || 0} of ${sg.seen || 0} signals were taken. Each setup's own reasons are listed above.</p>`
+    : `<div class="empty">Every signal in range was taken.</div>`;
+  const gb = d.givebacks || [];
+  $("#anGive").innerHTML = gb.length ? gb.map(g => `<div class="angive"><span class="mut">${md(g.opened)} ${hm(g.opened)}</span>
+      <span><b>${esc(g.side === "LONG" ? "Long" : "Short")} ${esc(iname(g.symbol))}</b> <small>${esc(g.setup)}</small></span>
+      <span class="num">peak <span class="up">${sR(g.mfe)}</span> → <span class="${cls(g.r)}">${sR(g.r)}</span></span></div>`).join("")
+    : `<div class="empty">No trade reached +1R and then lost.</div>`;
+  const hrs = d.by_hour || [], mR = Math.max(0.25, ...hrs.map(h => Math.abs(h.avg || 0)));
+  $("#anHour").innerHTML = hrs.length ? hrs.map(h => anDiv(String(h.hour).padStart(2, "0") + ":00 · " + h.n, h.avg, sR(h.avg), mR)).join("") : `<div class="empty">No trades in this range.</div>`;
+  const dw = d.by_weekday || [], mD = Math.max(0.25, ...dw.map(h => Math.abs(h.avg || 0)));
+  $("#anDow").innerHTML = dw.length ? dw.map(h => anDiv(h.day + " · " + h.n, h.avg, sR(h.avg), mD)).join("") : `<div class="empty">No trades in this range.</div>`;
+  $("#anExit").innerHTML = anSmall(d.exits, r => r.reason.replace(/_/g, " "), "Exit");
+  $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
+}
+const _goAn = go;
+go = function(p){ _goAn(p); if(p === "analysis") loadAnalysis(); };
+const _setBookAn = setBook;
+setBook = function(b){ _setBookAn(b); if(page === "analysis") loadAnalysis(); };
+setInterval(() => { if(page === "analysis" && !document.hidden) loadAnalysis(); }, 60000);
+
+/* ══ Nov 4 2026: more themes ══ */
+Object.assign(SKIN_PRESETS, {midnight:{skin:"midnight", theme:"dark", surface:"solid"}, nord:{skin:"nord", theme:"dark", surface:"solid"},
+  ocean:{skin:"ocean", theme:"dark", surface:"solid"}, rose:{skin:"rose", theme:"dark", surface:"solid"},
+  dune:{skin:"dune", theme:"light", surface:"solid"}, paper:{skin:"paper", theme:"light", surface:"solid"}});
+(() => {
+  const box = $(".theme-presets"); if(!box || box.querySelector('[data-preset="midnight"]')) return;
+  const P = [["midnight","Midnight","OLED black · violet"],["nord","Nord","Arctic slate · frost"],["ocean","Deep Ocean","Teal on deep sea"],
+             ["rose","Rosewood","Plum · rose"],["dune","Dune","Warm sand · clay"],["paper","Paper","Crisp white · blue"]];
+  box.insertAdjacentHTML("beforeend", P.map(([k, n, sub]) => `<button type="button" class="theme-preset" data-preset="${k}" aria-pressed="false"><span class="theme-sample sample-${k}" aria-hidden="true"><i></i><b></b><em></em></span><strong>${n}</strong><small>${sub}</small></button>`).join(""));
+  P.forEach(([k]) => box.querySelector(`[data-preset="${k}"]`).onclick = () => setAppearance(SKIN_PRESETS[k]));
+  syncAppearance();
+})();
+if(location.hash === "#analysis") go("analysis");
 </script>
 </body>
 </html>

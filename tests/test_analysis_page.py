@@ -1,0 +1,44 @@
+"""Analysis page data: scorecard with signal outcomes, refusal reasons, hours, exits, bias, givebacks."""
+import pandas as pd
+from fastapi.testclient import TestClient
+
+from fxagents.dashboard import analysis as A
+from fxagents.dashboard.server import build_app
+from fxagents.journal import Journal
+from tests.test_dashboard_insights import make_ctx
+
+
+def _journal(tmp_path):
+    j = Journal(str(tmp_path / "j.sqlite"))
+    rows = [("a", "US30", "sr_rejection:30m@pb-us30-d-trend", "2026-11-02T10:30:00-05:00", "2026-11-02T12:00:00-05:00", 1.5, 1.8, "target", "aligned"),
+            ("b", "US30", "sr_rejection:30m@pb-us30-d-trend", "2026-11-03T10:30:00-05:00", "2026-11-03T11:00:00-05:00", -1.0, 1.34, "stop", "ignored:counter"),
+            ("c", "NDQ", "smc_mss:5m@pb-ndq-d", "2026-11-03T14:00:00-05:00", "2026-11-03T14:30:00-05:00", -1.0, 0.2, "stop", "aligned")]
+    for i, sym, st, op, cl, r, mfe, ex, bm in rows:
+        j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,mfe_r,exit_reason,bias_mode,realized) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (i, sym, "SHORT", st, "closed", op, cl, r, mfe, ex, bm, r * 100))
+    j.db.commit()
+    for ts, why, act in (("2026-11-03T09:00", "counter to BEARISH bias", "filtered"), ("2026-11-03T15:45", "outside entry windows", "rejected"),
+                         ("2026-11-03T14:25", "index group full (one index position per direction at a time)", "rejected"),
+                         ("2026-11-02T10:30", None, "taken")):
+        j.add_signal({"ts": ts, "symbol": "US30", "strategy": "sr_rejection:30m@pb-us30-d-trend", "side": "SHORT", "entry": 1, "stop": 2,
+                      "action": act, "why": why})
+    return j
+
+
+def test_build(tmp_path):
+    j = _journal(tmp_path)
+    out = A.build(j.db, days=30, now=pd.Timestamp("2026-11-04 12:00", tz="America/New_York"))
+    assert out["totals"]["n"] == 3 and out["pnl"] == -50.0
+    sr = next(r for r in out["scorecard"] if r["setup"] == "sr_rejection" and r["symbol"] == "US30")
+    assert sr["n"] == 2 and sr["givebacks"] == 1 and sr["signals"] == 4 and sr["taken"] == 1
+    assert sr["refused"] == {"Bias rule": 1, "Outside entry window": 1, "Position limits": 1}
+    assert {r["reason"] for r in out["refusals"]} == {"Bias rule", "Outside entry window", "Position limits"}
+    assert out["givebacks"][0]["id"] == "b" and out["giveback_share"] == round(1 / 3, 3)
+    assert {b["mode"] for b in out["bias"]} == {"aligned", "ignored:counter"}
+    assert out["streaks"]["longest_loss"] == 2 and out["streaks"]["max_dd_r"] == -2.0
+
+
+def test_endpoint(tmp_path):
+    ctx = make_ctx(tmp_path)
+    r = TestClient(build_app(ctx)).get("/api/analysis?days=3650").json()
+    assert "scorecard" in r and "refusals" in r and "by_hour" in r
