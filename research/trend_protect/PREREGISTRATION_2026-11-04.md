@@ -54,3 +54,18 @@ Also shown:
 - **If `lock1` is confirmed on 2016–2020:** the trend profile gets "+0.1R stop at +1R" on the paper books first. The
   review decides on the account.
 - **If it is not confirmed:** the trend profile stays as it is.
+
+## Outcome (Nov 4, 2026): lock1 does not pass on 2021–2026; the vault is not touched; the trend profile stays
+
+3,102 trend-profile trades, engine 100%. Today they average −0.072R and win 36%. 336 of them (11%) reached +1R and closed
+at or below 0 (avg −0.93R).
+
+| rule | changed | avg R | vs today (95% range) | halves | 2× costs | trades ≥ 2R: today → rule |
+|---|---|---|---|---|---|---|
+| +0.1R at +1R (primary) | 604 | −0.082 | −0.010 (−0.031 to +0.010) | +0.006 / −0.029 | +0.002 | 315: +2.51 → +1.87 |
+| break-even at +0.5R | 1,295 | −0.077 | −0.005 (−0.034 to +0.024) | +0.017 / −0.029 | −0.008 | 315: +2.51 → +1.33 |
+| 50% at +1R, +0.1R | 1,239 | −0.078 | −0.006 (−0.029 to +0.017) | +0.008 / −0.022 | +0.003 | 315: +2.51 → +1.60 |
+
+The lock saves the givebacks, but costs the 315 trades of 2R or more about 0.64R each. The two roughly cancel, which is
+the same trade-off as research/gold_trail and the Oct 19 exit study. The trend cells average below zero under every exit
+tested here.
