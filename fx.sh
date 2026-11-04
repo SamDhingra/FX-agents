@@ -483,8 +483,9 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/choper-build.log 2>&1 || { echo "build failed — see logs/choper-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.chop_er --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
-  cellwhy)   # why a setup is / isn't in the playbook, day by day (read-only): ./fx.sh cellwhy [setup=sr_rejection] [days=14]
-             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.cell_why "${2:-sr_rejection}" --days "${3:-14}" </dev/null ;;
+  cellwhy)   # why a setup is / isn't in the playbook, day by day (read-only): ./fx.sh cellwhy [setup=sr_rejection] [days=14] [old]
+             # (a 4th word, e.g. 'old', judges with the NDQ/US30 rules in force before Nov 4 2026)
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.cell_why "${2:-sr_rejection}" --days "${3:-14}" ${4:+--old-index-rules} </dev/null ;;
   trendprotect) # protection before +2R for the playbook's trend-profile trades (registered Nov 4 2026, research/trend_protect/):
              # ./fx.sh trendprotect [seen|vault] → data/year_test/trend_protect_<period>/report.md
              need_env; mkdir -p logs; p_="${2:-seen}"

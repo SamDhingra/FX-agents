@@ -27,3 +27,11 @@ def test_reasons_and_report(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Why isn't sr_rejection trading?" in out and "## Its cells now" in out
     assert "US30" in out and ("shrunk expectancy" in out or "half of the window" in out)
+
+
+def test_old_index_rules_flag(monkeypatch, tmp_path, capsys):
+    cube = pbk.CellCube(_trades())
+    monkeypatch.setattr(pbk, "load_cube", lambda cfg: cube)
+    monkeypatch.setattr(pbk, "playbook_path", lambda cfg: tmp_path / "none.json")
+    CW.main(["sr_rejection", "--days", "2", "--old-index-rules"])
+    assert "max_cells=4" in capsys.readouterr().out

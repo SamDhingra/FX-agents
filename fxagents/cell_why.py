@@ -61,9 +61,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Why isn't a setup trading? (read-only)")
     ap.add_argument("setup", nargs="?", default="sr_rejection")
     ap.add_argument("--days", type=int, default=14)
+    ap.add_argument("--old-index-rules", action="store_true",
+                    help="judge with the NDQ/US30 rules in force before Nov 4 2026 (stricter than gold)")
     a = ap.parse_args(argv)
     cfg = load_config("config.yaml")
+    if a.old_index_rules:
+        pc = cfg.setdefault("playbook", {})
+        pc.pop("instruments", None)
+        pc.pop("index_group_max", None)
     pol = pbk.policy_from_cfg(cfg)
+    print(f"Rules: NDQ {pbk._rule(pol, 'NDQ')}; US30 {pbk._rule(pol, 'US30')}\n" if "NDQ" in pol.instruments else "")
     print(f"# Why isn't {a.setup} trading?\n")
     p = pbk.playbook_path(cfg)
     if p.exists():
