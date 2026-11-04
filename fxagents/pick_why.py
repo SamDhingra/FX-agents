@@ -49,7 +49,7 @@ def hour_rows(inputs: dict, outputs: dict, cfg) -> tuple[list[dict], float]:
     return sorted(rows, key=lambda r: -r["combined"]), float(t)
 
 
-def main(argv=None):
+def _main(argv=None):
     ap = argparse.ArgumentParser(description="Why doesn't the hourly pick choose a strategy? (read-only)")
     ap.add_argument("name", nargs="?", default="sr_rejection")
     ap.add_argument("--days", type=int, default=7)
@@ -115,6 +115,26 @@ def main(argv=None):
     print("\n## Its last trades on the account\n")
     for t in trades:
         print(f"- {str(t['opened'])[:16]} {t['symbol']} {t['strategy']} {t['r_multiple']}")
+
+
+
+def main(argv=None):
+    """Prints the report, or with --publish writes it to data/year_test/pick_why_<name>/report.md (for ./fx.sh publish)."""
+    import contextlib
+    import io
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--publish" not in argv:
+        return _main(argv)
+    argv.remove("--publish")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _main(argv)
+    name = next((x for x in argv if not x.startswith("-") and not x.isdigit()), "sr_rejection")
+    out = Path(f"data/year_test/pick_why_{name}")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.md").write_text(buf.getvalue())
+    print(f"wrote {out / 'report.md'} ({len(buf.getvalue().splitlines())} lines)")
 
 
 if __name__ == "__main__":

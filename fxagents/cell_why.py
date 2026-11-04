@@ -57,7 +57,7 @@ def table(cfg, setup: str, b: int, cube, pol) -> pd.DataFrame:
     return mine
 
 
-def main(argv=None):
+def _main(argv=None):
     ap = argparse.ArgumentParser(description="Why isn't a setup trading? (read-only)")
     ap.add_argument("setup", nargs="?", default="sr_rejection")
     ap.add_argument("--days", type=int, default=14)
@@ -127,6 +127,26 @@ def main(argv=None):
         for ts, sym, side, act, why in rows:
             print(f"- {str(ts)[:16]} {sym} {side} → {act}: {(why or '')[:160]}")
         print()
+
+
+
+def main(argv=None):
+    """Prints the report, or with --publish writes it to data/year_test/cell_why_<name>/report.md (for ./fx.sh publish)."""
+    import contextlib
+    import io
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--publish" not in argv:
+        return _main(argv)
+    argv.remove("--publish")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _main(argv)
+    name = next((x for x in argv if not x.startswith("-") and not x.isdigit()), "sr_rejection")
+    out = Path(f"data/year_test/cell_why_{name}")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.md").write_text(buf.getvalue())
+    print(f"wrote {out / 'report.md'} ({len(buf.getvalue().splitlines())} lines)")
 
 
 if __name__ == "__main__":
