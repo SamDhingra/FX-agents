@@ -328,9 +328,11 @@ class ShadowFeedAgent(Agent):
         await self.sh.bus.publish("clock", now)
 
 
-MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "playbook_allhours", "playbook_nobias",
+MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "playbook_allhours", "playbook_nobias", "playbook_regime_nobias",
          "h1_vol_trend", "ema21_rsi55", "gold_breakout", "daily_rsi2_adx2", "c10_afternoon")
-PLAYBOOK_MODES = ("playbook", "playbook_regime", "playbook_allhours", "playbook_nobias")
+PLAYBOOK_MODES = ("playbook", "playbook_regime", "playbook_allhours", "playbook_nobias", "playbook_regime_nobias")
+NOBIAS_MODES = ("playbook_nobias", "playbook_regime_nobias")       # the hard bias rule switched off (paper)
+REGIME_MODES = ("playbook_regime", "playbook_regime_nobias")       # chop/trend routing (regime.py)
 # playbook_allhours (Oct 29 2026, Sam): the same cells with no gaps between sessions — entries 20:00 → 15:50 NY
 # (the 15:50 flatten and the "no entries in the last 20 minutes before it" rule still apply, so the last entry is
 # 15:29; the 17:00–20:00 daily break stays closed). News blackouts unchanged. Paper only.
@@ -394,7 +396,7 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     mode = mode or (shadow_modes(cfg) or ["setup_first"])[0]
     journal = Journal(shadow_db_for(cfg, mode, first))
     sctx = Ctx(book_cfg(cfg, mode), bus, st, main.store, broker, journal, main.jev, main.book, main.news)
-    sctx.ignore_bias = mode == "playbook_nobias"     # Oct 29 2026: the playbook with the hard bias rule switched off (paper)
+    sctx.ignore_bias = mode in NOBIAS_MODES     # Oct 29 2026 (+ Nov 4: chop routing without the bias rule): paper only
     if mode == "h1_vol_trend":
         from .h1_trend_trader import H1VolTrendTrader
         trader = H1VolTrendTrader(sctx)
@@ -413,7 +415,7 @@ def build_shadow(main: Ctx, equity: float, mode: str | None = None, first: bool 
     elif mode in PLAYBOOK_MODES:
         from .playbook_trader import PlaybookHolder, PlaybookTrader
         sctx.playbook = getattr(main, "playbook", None) or PlaybookHolder()
-        sctx.regime_route = mode == "playbook_regime"     # same cells, plus the chop/trend routing (regime.py)
+        sctx.regime_route = mode in REGIME_MODES     # same cells, plus the chop/trend routing (regime.py)
         trader = PlaybookTrader(sctx)
     else:
         trader = SetupFirstTrader(sctx) if mode == "setup_first" else TraderAgent(sctx)

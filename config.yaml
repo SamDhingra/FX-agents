@@ -305,7 +305,7 @@ shadow:
                                 # frozen (agents/c10_trader.py); passed 2021–Sep 2026 NDQ, vault +0.082R not significant
     symbols: [NDQ]
     risk_pct: 0.001             # 0.10% of the book's equity at the 1.25-ATR stop
-  modes: [playbook, playbook_regime, playbook_allhours, playbook_nobias, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py); playbook_allhours = the playbook with entries 20:00 → 15:50 NY, no session gaps; playbook_nobias = the playbook with the bias rule off (both Oct 29 2026, paper) (overrides `mode`); several run side by side, each with its own journal.
+  modes: [playbook, playbook_regime, playbook_allhours, playbook_nobias, playbook_regime_nobias, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books; playbook_regime = the playbook + chop/trend routing (fxagents/regime.py); playbook_allhours = the playbook with entries 20:00 → 15:50 NY, no session gaps; playbook_nobias = the playbook with the bias rule off (both Oct 29 2026, paper); playbook_regime_nobias = chop/trend routing AND bias rule off (Nov 4 2026, paper) (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
@@ -326,9 +326,14 @@ playbook:
   pinned: []                    # cells always traded, whatever the weekly selection picks (still capped per instrument), e.g.
     # - {setup: london_breakout, sym: XAUUSD, tf: 5min, params: {min_body_atr: 0.5}, n: 46, win_rate: 0.50, exp_r: -0.13}
     # (London breakout was pinned on 64 days of data, then unpinned: over a year on gold 5m it lost −0.13R/trade.)
-  # instruments:                       # per-instrument overrides, e.g.
-  #   XAUUSD: {max_positions: 2, max_cells: 10, min_p: 0.45}
-  #   NDQ:    {min_p: 0.60, k_p: 40, min_n: 30}
+  # Nov 4 2026 (Sam): NDQ and US30 no longer get stricter selection than gold — same expectancy floor (0.02R), same
+  # shrinkage (k_p 20) and minimum trades (25), up to 10 cells and 2 positions each, and the one-index-position-per-
+  # direction cap lifted to 2. (Before: 'selective', min_e 0.03, k_p 40, min_n 30, 4 cells, 1 position, 1 index per
+  # direction.) Paper playbook books only; takes effect at the next selection (./fx.sh research --select).
+  index_group_max: 2
+  instruments:
+    NDQ:  {min_e: 0.02, max_cells: 10, max_positions: 2, k_p: null, min_n: null}
+    US30: {min_e: 0.02, max_cells: 10, max_positions: 2, k_p: null, min_n: null}
 
 # ── 90-day setup map: every setup backtested by symbol × hour × weekday (heatmap + setup-first prior) ──
 setup_map:

@@ -67,3 +67,23 @@ def test_allhours_and_nobias_books():
     assert TraderAgent.bias_precheck(me, sig) is None
     me.ctx.ignore_bias = False
     assert asyncio.run(RiskAgent.bias_gate(me, sig, {"quality": 0.5}, t0)).get("reject")
+
+
+def test_chop_nobias_book(tmp_path):
+    """playbook_regime_nobias (Nov 4 2026): the chop/trend routing AND the bias rule off, own journal."""
+    from types import SimpleNamespace
+
+    from fxagents.agents.playbook_trader import PlaybookTrader
+    from fxagents.agents.setup_first import build_shadow
+    from fxagents.state import LiveState
+
+    cfg = _cfg(modes=["playbook_regime", "playbook_regime_nobias"])
+    cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    from fxagents.bus import Bus
+    main = SimpleNamespace(cfg=cfg, state=LiveState(), store=None, jev=None, book=None, news=None, playbook=None, bus=Bus())
+    sh, agents, _ = build_shadow(main, 50_000, "playbook_regime_nobias", first=False)
+    assert sh.ignore_bias is True and sh.regime_route is True
+    assert any(isinstance(a, PlaybookTrader) for a in agents)
+    assert str(sh.journal.path).endswith("journal_playbook_regime_nobias.sqlite")
+    reg, _, _ = build_shadow(main, 50_000, "playbook_regime", first=True)
+    assert reg.regime_route is True and not reg.ignore_bias
