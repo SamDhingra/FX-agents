@@ -1,0 +1,310 @@
+# Why doesn't the hourly pick choose sr_rejection?
+
+## The account's strategy book
+
+- sr_rejection:5m@v1: **live** (updated 2026-11-04T11:40) — recovered
+- sr_rejection:15m@v1: **shadow** (updated 2026-11-04T11:40) — demoted: -0.27R over 16 real trades
+
+## Hour by hour, last 7 days (282 hourly ratings; picked = best per timeframe, score ≥ 0.55, trade_ok ≥ 0.4)
+
+- 2026-10-28T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.453 (Jev 0.37, stats 0.49, hour exp -0.068, n 31, exp -0.068) → trade_ok 0.13 < 0.4 (whole instrument sat out)
+- 2026-10-28T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.765 (Jev 0.75, stats 0.78, hour exp 0.234, n 23, exp 0.216) → trade_ok 0.15 < 0.4 (whole instrument sat out)
+- 2026-10-28T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.359 (Jev 0.27, stats 0.45, hour exp -0.086, n 35, exp -0.086) → trade_ok 0.14 < 0.4 (whole instrument sat out)
+- 2026-10-28T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.582 (Jev 0.55, stats 0.60, hour exp 0.076, n 31, exp -0.068) → trade_ok 0.10 < 0.4 (whole instrument sat out)
+- 2026-10-28T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.734 (Jev 0.69, stats 0.77, hour exp 0.216, n 23, exp 0.216) → trade_ok 0.12 < 0.4 (whole instrument sat out)
+- 2026-10-28T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.357 (Jev 0.27, stats 0.45, hour exp -0.086, n 35, exp -0.086) → trade_ok 0.11 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:33 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.515 (Jev 0.50, stats 0.52, hour exp 0.074, n 33, exp -0.049) → trade_ok 0.11 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:33 NDQ h14 [jev] sr_rejection:5m@v1 score 0.611 (Jev 0.55, stats 0.63, hour exp 0.115, n 24, exp 0.149) → trade_ok 0.11 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:33 US30 h14 [jev] sr_rejection:5m@v1 score 0.276 (Jev 0.25, stats 0.30, hour exp -0.186, n 34, exp -0.186) → trade_ok 0.11 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.293 (Jev 0.20, stats 0.38, hour exp -0.075, n 33, exp -0.075) → trade_ok 0.12 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.617 (Jev 0.66, stats 0.59, hour exp 0.184, n 24, exp 0.119) → trade_ok 0.13 < 0.4 (whole instrument sat out)
+- 2026-10-28T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.232 (Jev 0.17, stats 0.27, hour exp -0.257, n 35, exp -0.182) → trade_ok 0.12 < 0.4 (whole instrument sat out)
+- 2026-10-28T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.477 (Jev 0.43, stats 0.51, hour exp -0.0, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.511
+- 2026-10-28T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.802 (Jev 0.72, stats 0.87, hour exp 0.709, n 24, exp 0.416) → PICKED
+- 2026-10-28T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.327 (Jev 0.31, stats 0.34, hour exp -0.309, n 37, exp -0.349) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-28T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.282 (Jev 0.20, stats 0.35, hour exp -0.22, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.485
+- 2026-10-28T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.649 (Jev 0.59, stats 0.67, hour exp 0.304, n 24, exp 0.416) → PICKED
+- 2026-10-28T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.358 (Jev 0.36, stats 0.36, hour exp -0.278, n 37, exp -0.349) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-28T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.359 (Jev 0.27, stats 0.44, hour exp -0.089, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.511
+- 2026-10-28T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.727 (Jev 0.71, stats 0.74, hour exp 0.423, n 24, exp 0.416) → PICKED
+- 2026-10-28T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.299 (Jev 0.23, stats 0.36, hour exp -0.398, n 38, exp -0.3) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.497
+- 2026-10-28T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.261 (Jev 0.20, stats 0.31, hour exp -0.282, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.491
+- 2026-10-28T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.701 (Jev 0.58, stats 0.74, hour exp 0.416, n 24, exp 0.416) → PICKED
+- 2026-10-28T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.339 (Jev 0.26, stats 0.41, hour exp -0.357, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.497
+- 2026-10-29T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.311 (Jev 0.24, stats 0.37, hour exp -0.192, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.500
+- 2026-10-29T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.731 (Jev 0.75, stats 0.71, hour exp 0.359, n 24, exp 0.416) → PICKED
+- 2026-10-29T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.448 (Jev 0.36, stats 0.50, hour exp -0.244, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.497
+- 2026-10-29T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.488 (Jev 0.47, stats 0.50, hour exp -0.013, n 31, exp -0.074) → best on 5m but 0.488 < 0.55
+- 2026-10-29T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.693 (Jev 0.66, stats 0.72, hour exp 0.375, n 24, exp 0.416) → PICKED
+- 2026-10-29T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.246 (Jev 0.20, stats 0.27, hour exp -0.569, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-29T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.456 (Jev 0.44, stats 0.47, hour exp -0.057, n 31, exp -0.074) → best on 5m but 0.456 < 0.55
+- 2026-10-29T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.749 (Jev 0.73, stats 0.76, hour exp 0.458, n 24, exp 0.416) → PICKED
+- 2026-10-29T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.450 (Jev 0.36, stats 0.50, hour exp -0.243, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-29T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.568 (Jev 0.58, stats 0.56, hour exp 0.072, n 31, exp -0.074) → trade_ok 0.12 < 0.4 (whole instrument sat out)
+- 2026-10-29T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.621 (Jev 0.54, stats 0.65, hour exp 0.28, n 26, exp 0.36) → trade_ok 0.13 < 0.4 (whole instrument sat out)
+- 2026-10-29T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.314 (Jev 0.22, stats 0.37, hour exp -0.409, n 38, exp -0.288) → trade_ok 0.14 < 0.4 (whole instrument sat out)
+- 2026-10-29T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.519 (Jev 0.51, stats 0.52, hour exp 0.02, n 31, exp -0.074) → trade_ok 0.16 < 0.4 (whole instrument sat out)
+- 2026-10-29T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.729 (Jev 0.73, stats 0.72, hour exp 0.389, n 26, exp 0.36) → trade_ok 0.17 < 0.4 (whole instrument sat out)
+- 2026-10-29T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.588 (Jev 0.51, stats 0.60, hour exp -0.105, n 38, exp -0.288) → trade_ok 0.16 < 0.4 (whole instrument sat out)
+- 2026-10-29T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.414 (Jev 0.35, stats 0.45, hour exp -0.074, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.503
+- 2026-10-29T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.715 (Jev 0.71, stats 0.72, hour exp 0.38, n 26, exp 0.36) → PICKED
+- 2026-10-29T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.341 (Jev 0.24, stats 0.42, hour exp -0.347, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.490
+- 2026-10-29T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.393 (Jev 0.31, stats 0.45, hour exp -0.074, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.671
+- 2026-10-29T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.646 (Jev 0.50, stats 0.71, hour exp 0.36, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.728
+- 2026-10-29T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.546 (Jev 0.41, stats 0.59, hour exp -0.112, n 38, exp -0.288) → best on 5m but 0.546 < 0.55
+- 2026-10-29T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.409 (Jev 0.34, stats 0.45, hour exp -0.074, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.795
+- 2026-10-29T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.695 (Jev 0.68, stats 0.71, hour exp 0.367, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.715
+- 2026-10-29T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.352 (Jev 0.27, stats 0.42, hour exp -0.352, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-29T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.483 (Jev 0.45, stats 0.51, hour exp -0.003, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.756
+- 2026-10-29T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.626 (Jev 0.48, stats 0.63, hour exp 0.253, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.764
+- 2026-10-29T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.503 (Jev 0.47, stats 0.51, hour exp -0.226, n 38, exp -0.288) → best on 5m but 0.503 < 0.55
+- 2026-10-29T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.380 (Jev 0.29, stats 0.45, hour exp -0.074, n 31, exp -0.074) → trade_ok 0.36 < 0.4 (whole instrument sat out)
+- 2026-10-29T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.706 (Jev 0.67, stats 0.73, hour exp 0.407, n 26, exp 0.36) → PICKED
+- 2026-10-29T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.399 (Jev 0.29, stats 0.48, hour exp -0.264, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.512
+- 2026-10-29T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.382 (Jev 0.33, stats 0.41, hour exp -0.0, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.801
+- 2026-10-29T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.787 (Jev 0.71, stats 0.86, hour exp 0.661, n 26, exp 0.36) → PICKED
+- 2026-10-29T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.577 (Jev 0.53, stats 0.59, hour exp -0.122, n 38, exp -0.288) → PICKED
+- 2026-10-29T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.216 (Jev 0.12, stats 0.26, hour exp -0.22, n 31, exp -0.074) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.799
+- 2026-10-29T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.596 (Jev 0.48, stats 0.63, hour exp 0.252, n 26, exp 0.36) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.721
+- 2026-10-29T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.493 (Jev 0.43, stats 0.51, hour exp -0.226, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.494
+- 2026-10-29T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.387 (Jev 0.27, stats 0.51, hour exp -0.051, n 32, exp -0.027) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.808
+- 2026-10-29T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.692 (Jev 0.66, stats 0.71, hour exp 0.371, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.728
+- 2026-10-29T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.310 (Jev 0.22, stats 0.39, hour exp -0.389, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-10-29T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.190 (Jev 0.09, stats 0.26, hour exp -0.271, n 33, exp -0.06) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.799
+- 2026-10-29T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.631 (Jev 0.56, stats 0.65, hour exp 0.36, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.703
+- 2026-10-29T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.336 (Jev 0.25, stats 0.41, hour exp -0.357, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.494
+- 2026-10-30T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.211 (Jev 0.14, stats 0.25, hour exp -0.206, n 34, exp -0.091) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.820
+- 2026-10-30T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.665 (Jev 0.71, stats 0.62, hour exp 0.317, n 26, exp 0.36) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.774
+- 2026-10-30T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.505 (Jev 0.32, stats 0.63, hour exp -0.244, n 38, exp -0.288) → trade_ok 0.34 < 0.4 (whole instrument sat out)
+- 2026-10-30T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.408 (Jev 0.39, stats 0.42, hour exp -0.025, n 34, exp -0.091) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.739
+- 2026-10-30T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.693 (Jev 0.69, stats 0.69, hour exp 0.314, n 27, exp 0.345) → PICKED
+- 2026-10-30T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.360 (Jev 0.16, stats 0.47, hour exp -0.569, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.501
+- 2026-10-30T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.399 (Jev 0.35, stats 0.43, hour exp -0.059, n 35, exp -0.077) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.721
+- 2026-10-30T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.794 (Jev 0.82, stats 0.77, hour exp 0.337, n 27, exp 0.381) → PICKED
+- 2026-10-30T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.531 (Jev 0.27, stats 0.80, hour exp -0.243, n 38, exp -0.288) → best on 5m but 0.531 < 0.55
+- 2026-10-30T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.605 (Jev 0.60, stats 0.61, hour exp 0.092, n 35, exp -0.047) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.769
+- 2026-10-30T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.717 (Jev 0.67, stats 0.75, hour exp 0.299, n 27, exp 0.384) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.724
+- 2026-10-30T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.485 (Jev 0.20, stats 0.71, hour exp -0.409, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.503
+- 2026-10-30T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.475 (Jev 0.46, stats 0.48, hour exp 0.016, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.758
+- 2026-10-30T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.800 (Jev 0.79, stats 0.81, hour exp 0.407, n 27, exp 0.384) → PICKED
+- 2026-10-30T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.751 (Jev 0.47, stats 0.86, hour exp -0.105, n 38, exp -0.288) → PICKED
+- 2026-10-30T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.321 (Jev 0.22, stats 0.41, hour exp -0.079, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.581
+- 2026-10-30T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.805 (Jev 0.81, stats 0.80, hour exp 0.4, n 27, exp 0.384) → PICKED
+- 2026-10-30T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.243 (Jev 0.17, stats 0.29, hour exp -0.347, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.497
+- 2026-10-30T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.317 (Jev 0.22, stats 0.41, hour exp -0.079, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.724
+- 2026-10-30T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.753 (Jev 0.70, stats 0.80, hour exp 0.384, n 27, exp 0.384) → PICKED
+- 2026-10-30T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.396 (Jev 0.31, stats 0.45, hour exp -0.112, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-10-30T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.320 (Jev 0.23, stats 0.41, hour exp -0.079, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.808
+- 2026-10-30T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.784 (Jev 0.77, stats 0.80, hour exp 0.389, n 27, exp 0.384) → PICKED
+- 2026-10-30T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.252 (Jev 0.21, stats 0.29, hour exp -0.352, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-10-30T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.444 (Jev 0.39, stats 0.47, hour exp -0.007, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.747
+- 2026-10-30T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.702 (Jev 0.56, stats 0.74, hour exp 0.275, n 27, exp 0.384) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.790
+- 2026-10-30T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.342 (Jev 0.30, stats 0.37, hour exp -0.226, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-10-30T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.315 (Jev 0.22, stats 0.41, hour exp -0.079, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.720
+- 2026-10-30T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.781 (Jev 0.74, stats 0.82, hour exp 0.429, n 27, exp 0.384) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.790
+- 2026-10-30T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.300 (Jev 0.25, stats 0.34, hour exp -0.264, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.522
+- 2026-10-30T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.511 (Jev 0.43, stats 0.54, hour exp 0.096, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.722
+- 2026-10-30T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.919 (Jev 0.85, stats 0.96, hour exp 0.681, n 27, exp 0.384) → PICKED
+- 2026-10-30T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.447 (Jev 0.46, stats 0.45, hour exp -0.122, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.481
+- 2026-10-30T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.214 (Jev 0.11, stats 0.28, hour exp -0.282, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.715
+- 2026-10-30T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.802 (Jev 0.57, stats 0.87, hour exp 0.274, n 27, exp 0.384) → PICKED
+- 2026-10-30T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.356 (Jev 0.33, stats 0.37, hour exp -0.226, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.480
+- 2026-10-30T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.307 (Jev 0.21, stats 0.40, hour exp -0.093, n 36, exp -0.079) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.644
+- 2026-10-30T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.868 (Jev 0.82, stats 0.91, hour exp 0.393, n 27, exp 0.384) → PICKED
+- 2026-10-30T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.229 (Jev 0.18, stats 0.26, hour exp -0.389, n 38, exp -0.288) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.484
+- 2026-10-30T22:42 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.297 (Jev 0.22, stats 0.38, hour exp -0.063, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.633
+- 2026-10-30T22:42 NDQ h22 [jev] sr_rejection:5m@v1 score 0.634 (Jev 0.68, stats 0.59, hour exp 0.099, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.783
+- 2026-10-30T22:42 US30 h22 [jev] sr_rejection:5m@v1 score 0.316 (Jev 0.25, stats 0.38, hour exp -0.208, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.486
+- 2026-10-30T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.174 (Jev 0.10, stats 0.22, hour exp -0.31, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.634
+- 2026-10-30T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.596 (Jev 0.64, stats 0.57, hour exp 0.065, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.782
+- 2026-10-30T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.277 (Jev 0.20, stats 0.34, hour exp -0.265, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.483
+- 2026-10-31T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.255 (Jev 0.20, stats 0.31, hour exp -0.167, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.554
+- 2026-10-31T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.674 (Jev 0.74, stats 0.59, hour exp 0.095, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.804
+- 2026-10-31T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.352 (Jev 0.28, stats 0.42, hour exp -0.152, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.491
+- 2026-10-31T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.479 (Jev 0.53, stats 0.44, hour exp 0.029, n 34, exp -0.042) → best on 5m but 0.479 < 0.55
+- 2026-10-31T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.654 (Jev 0.72, stats 0.58, hour exp 0.074, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.770
+- 2026-10-31T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.181 (Jev 0.13, stats 0.21, hour exp -0.493, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-10-31T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.430 (Jev 0.44, stats 0.42, hour exp -0.003, n 34, exp -0.042) → best on 5m but 0.430 < 0.55
+- 2026-10-31T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.485 (Jev 0.40, stats 0.53, hour exp 0.012, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.688
+- 2026-10-31T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.335 (Jev 0.26, stats 0.42, hour exp -0.157, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.494
+- 2026-10-31T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.443 (Jev 0.45, stats 0.44, hour exp 0.02, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.612
+- 2026-10-31T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.537 (Jev 0.49, stats 0.55, hour exp 0.044, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.782
+- 2026-10-31T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.266 (Jev 0.19, stats 0.31, hour exp -0.309, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.486
+- 2026-10-31T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.399 (Jev 0.38, stats 0.41, hour exp -0.017, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.566
+- 2026-10-31T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.541 (Jev 0.52, stats 0.56, hour exp 0.049, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.786
+- 2026-10-31T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.509 (Jev 0.48, stats 0.53, hour exp -0.013, n 39, exp -0.173) → best on 5m but 0.509 < 0.55
+- 2026-10-31T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.364 (Jev 0.41, stats 0.34, hour exp 0.026, n 34, exp -0.042) → best on 5m but 0.364 < 0.55
+- 2026-10-31T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.516 (Jev 0.44, stats 0.56, hour exp 0.048, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.819
+- 2026-10-31T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.292 (Jev 0.21, stats 0.36, hour exp -0.241, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.484
+- 2026-10-31T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.277 (Jev 0.23, stats 0.32, hour exp -0.042, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.463
+- 2026-10-31T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.587 (Jev 0.62, stats 0.57, hour exp 0.065, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.781
+- 2026-10-31T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.639 (Jev 0.54, stats 0.66, hour exp 0.172, n 39, exp -0.173) → PICKED
+- 2026-10-31T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.308 (Jev 0.24, stats 0.38, hour exp -0.042, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.663
+- 2026-10-31T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.638 (Jev 0.69, stats 0.59, hour exp 0.095, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.782
+- 2026-10-31T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.295 (Jev 0.22, stats 0.36, hour exp -0.246, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-10-31T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.455 (Jev 0.49, stats 0.42, hour exp 0.022, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.568
+- 2026-10-31T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.455 (Jev 0.34, stats 0.51, hour exp -0.019, n 23, exp 0.065) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.798
+- 2026-10-31T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.415 (Jev 0.35, stats 0.45, hour exp -0.12, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.490
+- 2026-10-31T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.220 (Jev 0.23, stats 0.21, hour exp -0.042, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.482
+- 2026-10-31T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.645 (Jev 0.68, stats 0.62, hour exp 0.134, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.781
+- 2026-10-31T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.347 (Jev 0.28, stats 0.41, hour exp -0.166, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.517
+- 2026-10-31T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.360 (Jev 0.47, stats 0.31, hour exp 0.128, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.699
+- 2026-10-31T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.678 (Jev 0.71, stats 0.65, hour exp 0.175, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.783
+- 2026-10-31T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.512 (Jev 0.52, stats 0.51, hour exp -0.035, n 39, exp -0.173) → best on 5m but 0.512 < 0.55
+- 2026-10-31T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.179 (Jev 0.18, stats 0.17, hour exp -0.123, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.696
+- 2026-10-31T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.448 (Jev 0.33, stats 0.51, hour exp -0.02, n 23, exp 0.065) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.782
+- 2026-10-31T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.414 (Jev 0.36, stats 0.44, hour exp -0.126, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.484
+- 2026-10-31T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.334 (Jev 0.23, stats 0.45, hour exp -0.063, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.700
+- 2026-10-31T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.640 (Jev 0.69, stats 0.59, hour exp 0.099, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.785
+- 2026-10-31T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.311 (Jev 0.24, stats 0.38, hour exp -0.208, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.486
+- 2026-10-31T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.220 (Jev 0.11, stats 0.28, hour exp -0.31, n 34, exp -0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.696
+- 2026-10-31T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.596 (Jev 0.64, stats 0.57, hour exp 0.065, n 23, exp 0.065) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.847
+- 2026-10-31T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.276 (Jev 0.19, stats 0.34, hour exp -0.265, n 39, exp -0.173) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.483
+- 2026-11-02T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.098 (Jev 0.07, stats 0.13, hour exp -0.287, n 26, exp -0.214) → trade_ok 0.39 < 0.4 (whole instrument sat out)
+- 2026-11-02T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.604 (Jev 0.67, stats 0.56, hour exp 0.181, n 21, exp 0.045) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.681
+- 2026-11-02T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.324 (Jev 0.27, stats 0.36, hour exp -0.235, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.490
+- 2026-11-02T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.249 (Jev 0.29, stats 0.22, hour exp -0.064, n 26, exp -0.214) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.682
+- 2026-11-02T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.423 (Jev 0.48, stats 0.38, hour exp 0.013, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.626
+- 2026-11-02T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.173 (Jev 0.10, stats 0.22, hour exp -0.467, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.484
+- 2026-11-02T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.316 (Jev 0.23, stats 0.42, hour exp -0.161, n 27, exp -0.157) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.556
+- 2026-11-02T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.276 (Jev 0.21, stats 0.34, hour exp -0.05, n 22, exp -0.007) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.541
+- 2026-11-02T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.344 (Jev 0.28, stats 0.39, hour exp -0.194, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.494
+- 2026-11-02T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.414 (Jev 0.28, stats 0.52, hour exp -0.095, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.770
+- 2026-11-02T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.459 (Jev 0.54, stats 0.41, hour exp 0.062, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.763
+- 2026-11-02T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.225 (Jev 0.18, stats 0.25, hour exp -0.411, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.494
+- 2026-11-02T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.338 (Jev 0.20, stats 0.45, hour exp -0.188, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.720
+- 2026-11-02T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.287 (Jev 0.23, stats 0.34, hour exp -0.046, n 22, exp -0.007) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.811
+- 2026-11-02T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.288 (Jev 0.25, stats 0.32, hour exp -0.294, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.499
+- 2026-11-02T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.499 (Jev 0.36, stats 0.56, hour exp -0.047, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.631
+- 2026-11-02T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.312 (Jev 0.25, stats 0.36, hour exp -0.01, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.836
+- 2026-11-02T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.242 (Jev 0.18, stats 0.29, hour exp -0.35, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-11-02T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.415 (Jev 0.30, stats 0.50, hour exp -0.122, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.717
+- 2026-11-02T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.263 (Jev 0.20, stats 0.31, hour exp -0.086, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.751
+- 2026-11-02T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.398 (Jev 0.32, stats 0.45, hour exp -0.115, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.492
+- 2026-11-02T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.440 (Jev 0.34, stats 0.50, hour exp -0.122, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.765
+- 2026-11-02T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.320 (Jev 0.26, stats 0.36, hour exp -0.007, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.663
+- 2026-11-02T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.241 (Jev 0.18, stats 0.29, hour exp -0.355, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-11-02T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.457 (Jev 0.35, stats 0.52, hour exp -0.094, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.744
+- 2026-11-02T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.223 (Jev 0.14, stats 0.27, hour exp -0.158, n 22, exp -0.007) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.687
+- 2026-11-02T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.352 (Jev 0.33, stats 0.37, hour exp -0.229, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.496
+- 2026-11-02T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.427 (Jev 0.32, stats 0.50, hour exp -0.122, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.717
+- 2026-11-02T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.307 (Jev 0.23, stats 0.36, hour exp -0.007, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.659
+- 2026-11-02T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.349 (Jev 0.29, stats 0.39, hour exp -0.199, n 23, exp -0.291) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.638
+- 2026-11-02T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.589 (Jev 0.51, stats 0.63, hour exp 0.059, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.728
+- 2026-11-02T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.525 (Jev 0.59, stats 0.50, hour exp 0.182, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.663
+- 2026-11-02T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.571 (Jev 0.49, stats 0.61, hour exp -0.056, n 24, exp -0.259) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.602
+- 2026-11-02T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.304 (Jev 0.15, stats 0.40, hour exp -0.262, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.724
+- 2026-11-02T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.252 (Jev 0.18, stats 0.30, hour exp -0.097, n 22, exp -0.007) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.665
+- 2026-11-02T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.330 (Jev 0.24, stats 0.41, hour exp -0.32, n 24, exp -0.259) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.610
+- 2026-11-02T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.270 (Jev 0.18, stats 0.34, hour exp -0.211, n 26, exp -0.193) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.728
+- 2026-11-02T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.461 (Jev 0.50, stats 0.44, hour exp 0.066, n 17, exp 0.029) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.658
+- 2026-11-02T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.466 (Jev 0.28, stats 0.62, hour exp -0.146, n 25, exp -0.05) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.604
+- 2026-11-02T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.357 (Jev 0.24, stats 0.48, hour exp -0.15, n 28, exp -0.122) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.723
+- 2026-11-02T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.428 (Jev 0.48, stats 0.39, hour exp 0.032, n 22, exp -0.007) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.660
+- 2026-11-02T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.312 (Jev 0.21, stats 0.40, hour exp -0.38, n 25, exp -0.22) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.603
+- 2026-11-02T22:11 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.396 (Jev 0.27, stats 0.52, hour exp -0.085, n 28, exp -0.068) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.724
+- 2026-11-02T22:11 NDQ h22 [jev] sr_rejection:5m@v1 score 0.552 (Jev 0.58, stats 0.54, hour exp 0.133, n 20, exp 0.102) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.661
+- 2026-11-02T22:11 US30 h22 [jev] sr_rejection:5m@v1 score 0.370 (Jev 0.22, stats 0.50, hour exp -0.328, n 26, exp -0.151) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.605
+- 2026-11-02T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.297 (Jev 0.16, stats 0.37, hour exp -0.277, n 28, exp -0.068) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.721
+- 2026-11-02T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.515 (Jev 0.51, stats 0.52, hour exp 0.102, n 20, exp 0.102) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.664
+- 2026-11-02T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.444 (Jev 0.27, stats 0.60, hour exp -0.185, n 26, exp -0.151) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.609
+- 2026-11-03T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.507 (Jev 0.31, stats 0.62, hour exp -0.094, n 28, exp -0.005) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.729
+- 2026-11-03T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.587 (Jev 0.66, stats 0.54, hour exp 0.137, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.658
+- 2026-11-03T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.660 (Jev 0.49, stats 0.72, hour exp -0.091, n 26, exp -0.134) → PICKED
+- 2026-11-03T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.746 (Jev 0.66, stats 0.80, hour exp 0.21, n 28, exp -0.005) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.763
+- 2026-11-03T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.561 (Jev 0.64, stats 0.51, hour exp 0.101, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.680
+- 2026-11-03T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.395 (Jev 0.20, stats 0.54, hour exp -0.341, n 26, exp -0.134) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.593
+- 2026-11-03T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.480 (Jev 0.34, stats 0.56, hour exp -0.038, n 29, exp -0.045) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.507
+- 2026-11-03T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.407 (Jev 0.32, stats 0.46, hour exp 0.039, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.611
+- 2026-11-03T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.648 (Jev 0.45, stats 0.74, hour exp -0.049, n 26, exp -0.134) → PICKED
+- 2026-11-03T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.475 (Jev 0.34, stats 0.57, hour exp -0.037, n 29, exp -0.045) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.772
+- 2026-11-03T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.590 (Jev 0.66, stats 0.55, hour exp 0.15, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.686
+- 2026-11-03T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.429 (Jev 0.22, stats 0.59, hour exp -0.277, n 26, exp -0.134) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.587
+- 2026-11-03T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.374 (Jev 0.22, stats 0.50, hour exp -0.126, n 29, exp -0.045) → trade_ok 0.22 < 0.4 (whole instrument sat out)
+- 2026-11-03T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.534 (Jev 0.55, stats 0.53, hour exp 0.128, n 20, exp 0.096) → trade_ok 0.25 < 0.4 (whole instrument sat out)
+- 2026-11-03T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.491 (Jev 0.27, stats 0.67, hour exp -0.16, n 26, exp -0.134) → trade_ok 0.25 < 0.4 (whole instrument sat out)
+- 2026-11-03T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.548 (Jev 0.47, stats 0.61, hour exp 0.024, n 29, exp -0.045) → trade_ok 0.18 < 0.4 (whole instrument sat out)
+- 2026-11-03T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.502 (Jev 0.59, stats 0.46, hour exp 0.126, n 20, exp 0.096) → trade_ok 0.20 < 0.4 (whole instrument sat out)
+- 2026-11-03T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.465 (Jev 0.23, stats 0.64, hour exp -0.205, n 26, exp -0.134) → trade_ok 0.17 < 0.4 (whole instrument sat out)
+- 2026-11-03T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.420 (Jev 0.33, stats 0.47, hour exp -0.08, n 30, exp -0.08) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.715
+- 2026-11-03T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.403 (Jev 0.31, stats 0.45, hour exp 0.009, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.728
+- 2026-11-03T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.702 (Jev 0.56, stats 0.77, hour exp 0.055, n 27, exp -0.107) → PICKED
+- 2026-11-03T12:57 XAUUSD h13 [jev] sr_rejection:5m@v1 score 0.537 (Jev 0.45, stats 0.58, hour exp -0.047, n 31, exp -0.047) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.758
+- 2026-11-03T12:57 NDQ h13 [jev] sr_rejection:5m@v1 score 0.517 (Jev 0.52, stats 0.51, hour exp 0.096, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.731
+- 2026-11-03T12:57 US30 h13 [jev] sr_rejection:5m@v1 score 0.448 (Jev 0.25, stats 0.61, hour exp -0.189, n 27, exp -0.111) → rank 2 of 3 on 5m: stoic_sbs:5m@v1 scored 0.628
+- 2026-11-03T13:57 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.531 (Jev 0.41, stats 0.59, hour exp -0.029, n 31, exp -0.047) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.739
+- 2026-11-03T13:57 NDQ h14 [jev] sr_rejection:5m@v1 score 0.331 (Jev 0.24, stats 0.39, hour exp -0.07, n 20, exp 0.096) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.745
+- 2026-11-03T13:57 US30 h14 [jev] sr_rejection:5m@v1 score 0.631 (Jev 0.49, stats 0.69, hour exp -0.063, n 27, exp -0.111) → PICKED
+- 2026-11-03T14:16 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.462 (Jev 0.32, stats 0.55, hour exp -0.092, n 30, exp -0.12) → trade_ok 0.38 < 0.4 (whole instrument sat out)
+- 2026-11-03T14:16 NDQ h14 [jev] sr_rejection:5m@v1 score 0.579 (Jev 0.39, stats 0.65, hour exp 0.026, n 17, exp 0.207) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.809
+- 2026-11-03T14:16 US30 h14 [jev] sr_rejection:5m@v1 score 0.663 (Jev 0.55, stats 0.74, hour exp 0.02, n 17, exp -0.021) → PICKED
+- 2026-11-03T14:54 XAUUSD h14 [jev] sr_rejection:5m@v1 score 0.356 (Jev 0.30, stats 0.39, hour exp -0.226, n 28, exp -0.276) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.566
+- 2026-11-03T14:54 NDQ h14 [jev] sr_rejection:5m@v1 score 0.484 (Jev 0.40, stats 0.53, hour exp 0.009, n 17, exp 0.042) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.822
+- 2026-11-03T14:54 US30 h14 [jev] sr_rejection:5m@v1 score 0.753 (Jev 0.68, stats 0.81, hour exp 0.089, n 16, exp 0.053) → PICKED
+- 2026-11-03T14:57 XAUUSD h15 [jev] sr_rejection:5m@v1 score 0.320 (Jev 0.27, stats 0.36, hour exp -0.276, n 28, exp -0.276) → trade_ok 0.39 < 0.4 (whole instrument sat out)
+- 2026-11-03T14:57 NDQ h15 [jev] sr_rejection:5m@v1 score 0.694 (Jev 0.68, stats 0.71, hour exp 0.12, n 17, exp 0.12) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.831
+- 2026-11-03T14:57 US30 h15 [jev] sr_rejection:5m@v1 score 0.774 (Jev 0.71, stats 0.84, hour exp 0.143, n 16, exp 0.053) → PICKED
+- 2026-11-03T19:57 XAUUSD h20 [jev] sr_rejection:5m@v1 score 0.448 (Jev 0.40, stats 0.47, hour exp -0.009, n 28, exp -0.202) → best on 5m but 0.448 < 0.55
+- 2026-11-03T19:57 NDQ h20 [jev] sr_rejection:5m@v1 score 0.818 (Jev 0.78, stats 0.86, hour exp 0.502, n 17, exp 0.264) → PICKED
+- 2026-11-03T19:57 US30 h20 [jev] sr_rejection:5m@v1 score 0.791 (Jev 0.70, stats 0.87, hour exp 0.29, n 18, exp 0.033) → PICKED
+- 2026-11-03T20:57 XAUUSD h21 [jev] sr_rejection:5m@v1 score 0.124 (Jev 0.04, stats 0.22, hour exp -0.386, n 28, exp -0.202) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.398
+- 2026-11-03T20:57 NDQ h21 [jev] sr_rejection:5m@v1 score 0.604 (Jev 0.41, stats 0.65, hour exp 0.09, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.813
+- 2026-11-03T20:57 US30 h21 [jev] sr_rejection:5m@v1 score 0.713 (Jev 0.63, stats 0.76, hour exp 0.033, n 18, exp 0.033) → PICKED
+- 2026-11-03T21:57 XAUUSD h22 [jev] sr_rejection:5m@v1 score 0.380 (Jev 0.32, stats 0.42, hour exp -0.074, n 28, exp -0.202) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.400
+- 2026-11-03T21:57 NDQ h22 [jev] sr_rejection:5m@v1 score 0.758 (Jev 0.75, stats 0.77, hour exp 0.283, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.817
+- 2026-11-03T21:57 US30 h22 [jev] sr_rejection:5m@v1 score 0.695 (Jev 0.47, stats 0.83, hour exp 0.018, n 19, exp 0.215) → PICKED
+- 2026-11-03T22:57 XAUUSD h23 [jev] sr_rejection:5m@v1 score 0.131 (Jev 0.04, stats 0.22, hour exp -0.385, n 28, exp -0.202) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.388
+- 2026-11-03T22:57 NDQ h23 [jev] sr_rejection:5m@v1 score 0.737 (Jev 0.72, stats 0.76, hour exp 0.264, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.845
+- 2026-11-03T22:57 US30 h23 [jev] sr_rejection:5m@v1 score 0.826 (Jev 0.76, stats 0.90, hour exp 0.227, n 19, exp 0.213) → PICKED
+- 2026-11-04T01:57 XAUUSD h2 [jev] sr_rejection:5m@v1 score 0.166 (Jev 0.07, stats 0.24, hour exp -0.298, n 30, exp -0.225) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.393
+- 2026-11-04T01:57 NDQ h2 [jev] sr_rejection:5m@v1 score 0.759 (Jev 0.76, stats 0.76, hour exp 0.271, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.868
+- 2026-11-04T01:57 US30 h2 [jev] sr_rejection:5m@v1 score 0.812 (Jev 0.72, stats 0.90, hour exp 0.213, n 19, exp 0.213) → PICKED
+- 2026-11-04T02:57 XAUUSD h3 [jev] sr_rejection:5m@v1 score 0.370 (Jev 0.31, stats 0.41, hour exp -0.042, n 30, exp -0.225) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.588
+- 2026-11-04T02:57 NDQ h3 [jev] sr_rejection:5m@v1 score 0.747 (Jev 0.75, stats 0.75, hour exp 0.245, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.844
+- 2026-11-04T02:57 US30 h3 [jev] sr_rejection:5m@v1 score 0.711 (Jev 0.46, stats 0.83, hour exp 0.01, n 19, exp 0.213) → PICKED
+- 2026-11-04T03:57 XAUUSD h4 [jev] sr_rejection:5m@v1 score 0.236 (Jev 0.19, stats 0.28, hour exp -0.244, n 30, exp -0.225) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.279
+- 2026-11-04T03:57 NDQ h4 [jev] sr_rejection:5m@v1 score 0.682 (Jev 0.53, stats 0.71, hour exp 0.183, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.825
+- 2026-11-04T03:57 US30 h4 [jev] sr_rejection:5m@v1 score 0.802 (Jev 0.74, stats 0.87, hour exp 0.21, n 20, exp 0.147) → PICKED
+- 2026-11-04T07:57 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.185 (Jev 0.10, stats 0.24, hour exp -0.315, n 30, exp -0.225) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.532
+- 2026-11-04T07:57 NDQ h8 [jev] sr_rejection:5m@v1 score 0.739 (Jev 0.72, stats 0.76, hour exp 0.264, n 17, exp 0.264) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.833
+- 2026-11-04T07:57 US30 h8 [jev] sr_rejection:5m@v1 score 0.699 (Jev 0.48, stats 0.80, hour exp 0.045, n 20, exp 0.147) → PICKED
+- 2026-11-04T08:35 XAUUSD h8 [jev] sr_rejection:5m@v1 score 0.391 (Jev 0.29, stats 0.47, hour exp -0.04, n 24, exp 0.026) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.660
+- 2026-11-04T08:35 NDQ h8 [jev] sr_rejection:5m@v1 score 0.771 (Jev 0.72, stats 0.82, hour exp 0.367, n 16, exp 0.367) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.848
+- 2026-11-04T08:35 US30 h8 [jev] sr_rejection:5m@v1 score 0.810 (Jev 0.50, stats 0.84, hour exp 0.12, n 17, exp 0.229) → PICKED
+- 2026-11-04T08:57 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.465 (Jev 0.38, stats 0.51, hour exp 0.01, n 24, exp 0.026) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.620
+- 2026-11-04T08:57 NDQ h9 [jev] sr_rejection:5m@v1 score 0.779 (Jev 0.74, stats 0.83, hour exp 0.378, n 16, exp 0.367) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.853
+- 2026-11-04T08:57 US30 h9 [jev] sr_rejection:5m@v1 score 0.801 (Jev 0.72, stats 0.88, hour exp 0.229, n 17, exp 0.229) → PICKED
+- 2026-11-04T09:54 XAUUSD h9 [jev] sr_rejection:5m@v1 score 0.319 (Jev 0.22, stats 0.43, hour exp -0.098, n 26, exp -0.1) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.695
+- 2026-11-04T09:54 NDQ h9 [jev] sr_rejection:5m@v1 score 0.640 (Jev 0.49, stats 0.69, hour exp 0.167, n 17, exp 0.237) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.794
+- 2026-11-04T09:54 US30 h9 [jev] sr_rejection:5m@v1 score 0.794 (Jev 0.73, stats 0.86, hour exp 0.177, n 18, exp 0.177) → PICKED
+- 2026-11-04T09:57 XAUUSD h10 [jev] sr_rejection:5m@v1 score 0.432 (Jev 0.34, stats 0.48, hour exp -0.02, n 26, exp -0.1) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.604
+- 2026-11-04T09:57 NDQ h10 [jev] sr_rejection:5m@v1 score 0.733 (Jev 0.72, stats 0.74, hour exp 0.256, n 17, exp 0.237) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.758
+- 2026-11-04T09:57 US30 h10 [jev] sr_rejection:5m@v1 score 0.783 (Jev 0.52, stats 0.83, hour exp 0.082, n 18, exp 0.177) → PICKED
+- 2026-11-04T10:57 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.275 (Jev 0.18, stats 0.35, hour exp -0.1, n 26, exp -0.1) → rank 3 of 3 on 5m: ict_ote:5m@v1 scored 0.681
+- 2026-11-04T10:57 NDQ h11 [jev] sr_rejection:5m@v1 score 0.702 (Jev 0.66, stats 0.73, hour exp 0.237, n 17, exp 0.237) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.753
+- 2026-11-04T10:57 US30 h11 [jev] sr_rejection:5m@v1 score 0.785 (Jev 0.70, stats 0.86, hour exp 0.177, n 18, exp 0.177) → PICKED
+- 2026-11-04T11:36 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.421 (Jev 0.31, stats 0.48, hour exp 0.078, n 23, exp 0.078) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.494
+- 2026-11-04T11:36 NDQ h11 [jev] sr_rejection:5m@v1 score 0.789 (Jev 0.67, stats 0.88, hour exp 0.277, n 14, exp 0.277) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.815
+- 2026-11-04T11:36 US30 h11 [jev] sr_rejection:5m@v1 score 0.797 (Jev 0.71, stats 0.88, hour exp 0.229, n 17, exp 0.229) → PICKED
+- 2026-11-04T11:40 XAUUSD h11 [jev] sr_rejection:5m@v1 score 0.451 (Jev 0.33, stats 0.50, hour exp 0.115, n 25, exp 0.115) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.492
+- 2026-11-04T11:40 NDQ h11 [jev] sr_rejection:5m@v1 score 0.794 (Jev 0.67, stats 0.89, hour exp 0.307, n 13, exp 0.307) → rank 2 of 3 on 5m: ict_ote:5m@v1 scored 0.807
+- 2026-11-04T11:40 US30 h11 [jev] sr_rejection:5m@v1 score 0.785 (Jev 0.70, stats 0.86, hour exp 0.177, n 18, exp 0.177) → PICKED
+
+## Summary
+
+- rated 282 times, picked 45
+- 187× rank 2 of 3 on 5m
+- 45× PICKED
+- 11× best on 5m
+- 10× rank 3 of 3 on 5m
+- 4× trade_ok 0.12 < 0.4
+- 4× trade_ok 0.11 < 0.4
+- picked instead: ict_ote:5m@v1 (142), stoic_sbs:5m@v1 (55)
+
+## Its last trades on the account
+
+- 2026-10-29T04:40 NDQ sr_rejection:5m@v1 0.551
+- 2026-10-28T10:35 NDQ sr_rejection:5m@v1 0.55
+- 2026-10-26T10:00 NDQ sr_rejection:15m@v1 -1.0
+- 2026-10-26T09:05 NDQ sr_rejection:5m@v1 0.557
+- 2026-10-26T03:45 NDQ sr_rejection:5m@v1 1.047
