@@ -329,9 +329,10 @@ class ShadowFeedAgent(Agent):
 
 
 MODES = ("hourly_pick", "setup_first", "playbook", "playbook_regime", "playbook_allhours", "playbook_nobias", "playbook_regime_nobias",
-         "h1_vol_trend", "ema21_rsi55", "gold_breakout", "daily_rsi2_adx2", "c10_afternoon")
-PLAYBOOK_MODES = ("playbook", "playbook_regime", "playbook_allhours", "playbook_nobias", "playbook_regime_nobias")
-NOBIAS_MODES = ("playbook_nobias", "playbook_regime_nobias")       # the hard bias rule switched off (paper)
+         "playbook_nobias_allhours", "h1_vol_trend", "ema21_rsi55", "gold_breakout", "daily_rsi2_adx2", "c10_afternoon")
+PLAYBOOK_MODES = ("playbook", "playbook_regime", "playbook_allhours", "playbook_nobias", "playbook_regime_nobias",
+                  "playbook_nobias_allhours")
+NOBIAS_MODES = ("playbook_nobias", "playbook_regime_nobias", "playbook_nobias_allhours")   # the hard bias rule switched off (paper)
 REGIME_MODES = ("playbook_regime", "playbook_regime_nobias")       # chop/trend routing (regime.py)
 # playbook_allhours (Oct 29 2026, Sam): the same cells with no gaps between sessions — entries 20:00 → 15:50 NY
 # (the 15:50 flatten and the "no entries in the last 20 minutes before it" rule still apply, so the last entry is
@@ -339,7 +340,8 @@ REGIME_MODES = ("playbook_regime", "playbook_regime_nobias")       # chop/trend 
 ALLHOURS_WINDOWS = [["20:00", "23:59"], ["00:00", "15:50"]]
 
 
-ALLHOURS_MODES = ("playbook_allhours", "playbook_regime_nobias")   # Nov 4 2026: the chop + no-bias book trades all hours too
+# Nov 5 2026: the chop + no-bias book lost its chop filter and became playbook_nobias_allhours (no bias rule, all hours)
+ALLHOURS_MODES = ("playbook_allhours", "playbook_regime_nobias", "playbook_nobias_allhours")
 
 
 def book_cfg(cfg: dict, mode: str) -> dict:

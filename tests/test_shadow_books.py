@@ -89,3 +89,21 @@ def test_chop_nobias_book(tmp_path):
     assert reg.regime_route is True and not reg.ignore_bias
     assert sh.cfg["sessions"]["entry_windows"] == [["20:00", "23:59"], ["00:00", "15:50"]]   # all hours (Nov 4 2026)
     assert reg.cfg["sessions"]["entry_windows"] != sh.cfg["sessions"]["entry_windows"]
+
+
+def test_nobias_allhours_book(tmp_path):
+    """Nov 5 2026: chop filter removed — playbook_nobias_allhours = bias rule off + entries 20:00 → 15:50, no routing."""
+    from types import SimpleNamespace
+
+    from fxagents.agents.setup_first import build_shadow
+    from fxagents.bus import Bus
+    from fxagents.state import LiveState
+
+    cfg = _cfg(modes=["playbook", "playbook_nobias_allhours"])
+    cfg["storage"]["db_path"] = str(tmp_path / "journal.sqlite")
+    cfg["shadow"]["db_paths"] = {"playbook_nobias_allhours": str(tmp_path / "journal_playbook_regime_nobias.sqlite")}
+    main = SimpleNamespace(cfg=cfg, state=LiveState(), store=None, jev=None, book=None, news=None, playbook=None, bus=Bus())
+    sh, _, _ = build_shadow(main, 50_000, "playbook_nobias_allhours", first=False)
+    assert sh.ignore_bias is True and not getattr(sh, "regime_route", False)
+    assert sh.cfg["sessions"]["entry_windows"] == [["20:00", "23:59"], ["00:00", "15:50"]]
+    assert str(sh.journal.path).endswith("journal_playbook_regime_nobias.sqlite")       # keeps the renamed book's record

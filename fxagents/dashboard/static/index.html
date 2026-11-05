@@ -2334,7 +2334,7 @@ function renderAgents(s){
 
 /* ── compare (live vs shadow) ── */
 const MODE_NAMES = {hourly_pick:"hourly pick", setup_first:"setup-first", playbook:"playbook",
-  playbook_regime:"playbook + chop filter", playbook_allhours:"playbook, all hours", playbook_nobias:"playbook, no bias rule", playbook_regime_nobias:"playbook + chop filter, no bias, all hours", h1_vol_trend:"gold H1 trend", ema21_rsi55:"EMA21 + RSI 55", gold_breakout:"gold breakout"};
+  playbook_regime:"playbook + chop filter", playbook_allhours:"playbook, all hours", playbook_nobias:"playbook, no bias rule", playbook_regime_nobias:"playbook + chop filter, no bias, all hours", playbook_nobias_allhours:"Playbook + no bias, all hours", h1_vol_trend:"gold H1 trend", ema21_rsi55:"EMA21 + RSI 55", gold_breakout:"gold breakout"};
 const modeName = m => MODE_NAMES[m] || String(m || "").replace(/_/g, " ");
 const ModeName = m => { const x = modeName(m); return x.charAt(0).toUpperCase() + x.slice(1); };
 let cmpRange = "week", CMP = null, cmpVs = null;
@@ -2980,10 +2980,10 @@ function connect(){
 }
 let BOOKS = [];
 // every book keeps one colour wherever it appears (switcher, account card edge, paper-book note)
-const BOOK_COLORS = {live:"#5b96ff", playbook:"#a593f5", playbook_regime:"#e48cc4", playbook_allhours:"#6fb8f0", playbook_nobias:"#f08a7a", playbook_regime_nobias:"#d6a35c", h1_vol_trend:"#45c2c6",
+const BOOK_COLORS = {live:"#5b96ff", playbook:"#a593f5", playbook_regime:"#e48cc4", playbook_allhours:"#6fb8f0", playbook_nobias:"#f08a7a", playbook_regime_nobias:"#d6a35c", playbook_nobias_allhours:"#d6a35c", h1_vol_trend:"#45c2c6",
   ema21_rsi55:"#e9a15b", gold_breakout:"#f0c94a", setup_first:"#8fc46b", hourly_pick:"#d7c45a"};
 const BOOK_SPARE = ["#8fc46b", "#d7c45a", "#6fb8f0", "#f08a7a"];
-const BOOK_ABOUT = {live:"practice account · real orders", playbook:"weekly picked cells", playbook_regime:"playbook, chop/trend filter", playbook_allhours:"playbook, entries 20:00 → 15:50", playbook_nobias:"playbook, bias rule off", playbook_regime_nobias:"chop filter, bias rule off, entries 20:00 → 15:50",
+const BOOK_ABOUT = {live:"practice account · real orders", playbook:"weekly picked cells", playbook_regime:"playbook, chop/trend filter", playbook_allhours:"playbook, entries 20:00 → 15:50", playbook_nobias:"playbook, bias rule off", playbook_regime_nobias:"chop filter, bias rule off, entries 20:00 → 15:50", playbook_nobias_allhours:"bias rule off, entries 20:00 → 15:50",
   h1_vol_trend:"gold, hourly trend", ema21_rsi55:"gold, 15m trend", gold_breakout:"gold, overnight-range breakout", setup_first:"best setup first", hourly_pick:"hourly strategy pick"};
 const bookColor = b => b === "live" ? getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() : BOOK_COLORS[b] || BOOK_SPARE[Math.abs([...String(b)].reduce((a,c)=>a+c.charCodeAt(0),0)) % BOOK_SPARE.length];
 const bookLabel = b => b === "live" ? ({sim:"Simulation",paper:"Practice",live:"Live account"}[S?.mode]||"Account") : (BOOKS.length > 1 ? ModeName(b) : "Shadow");
@@ -2996,7 +2996,7 @@ function paintBook(){
   const tb = $("#tabBookName"); if(tb) tb.textContent = BOOK === "live" ? (BOOKS.length ? "Live" : "Book") : shortBook(BOOK);
 }
 /* a short label for the bottom-bar book tab (≈ 8 characters) */
-const SHORT_BOOK = {playbook:"Playbook", playbook_regime:"Chop", playbook_allhours:"All hrs", playbook_nobias:"No bias", playbook_regime_nobias:"Chop·no bias",
+const SHORT_BOOK = {playbook:"Playbook", playbook_regime:"Chop", playbook_allhours:"All hrs", playbook_nobias:"No bias", playbook_regime_nobias:"Chop·no bias", playbook_nobias_allhours:"No bias·all hrs",
   h1_vol_trend:"Gold H1", ema21_rsi55:"EMA21", gold_breakout:"Gold BO", daily_rsi2_adx2:"RSI2", c10_afternoon:"C10", setup_first:"Setup 1st"};
 const shortBook = b => SHORT_BOOK[b] || modeName(b).slice(0, 9);
 function bookButtons(books){

@@ -305,9 +305,10 @@ shadow:
                                 # frozen (agents/c10_trader.py); passed 2021–Sep 2026 NDQ, vault +0.082R not significant
     symbols: [NDQ]
     risk_pct: 0.001             # 0.10% of the book's equity at the 1.25-ATR stop
-  modes: [playbook, playbook_allhours, playbook_nobias, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books (Nov 5 2026: the chop-filter books playbook_regime and playbook_regime_nobias were removed — the routing never beat no filter in testing, and research/entry_edge showed the playbook's entries are worse than random timing, so there is no edge for a filter to protect; their journals stay on disk); playbook_allhours = the playbook with entries 20:00 → 15:50 NY, no session gaps; playbook_nobias = the playbook with the bias rule off (both Oct 29 2026, paper) (overrides `mode`); several run side by side, each with its own journal.
+  modes: [playbook, playbook_allhours, playbook_nobias, playbook_nobias_allhours, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books (Nov 5 2026: the chop filter is gone — the 'Playbook + chop filter' book (playbook_regime) was removed, and the chop + no-bias + all-hours book lost its chop filter and is now playbook_nobias_allhours = bias rule off, entries 20:00 → 15:50, continuing that book's journal (see shadow.db_paths)); playbook_allhours = the playbook with entries 20:00 → 15:50 NY, no session gaps; playbook_nobias = the playbook with the bias rule off (both Oct 29 2026, paper) (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite
+  db_paths: {playbook_nobias_allhours: data/journal_playbook_regime_nobias.sqlite}   # Nov 5 2026: renamed book keeps its record
   notify_trades: false          # phone alerts for shadow entries/exits (the daily summary always has a shadow line)
   spread:                       # full spread in price points (virtual fills pay half on entry and exit)
     XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
