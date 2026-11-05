@@ -60,3 +60,31 @@ This test answers that question directly.
   - decide between retiring it and rebuilding the setups.
 
 Nothing in trading changes from this test by itself.
+
+## Outcome (Nov 5, 2026): the entries do NOT beat random timing; they are worse than it
+
+The test covered 16,456 playbook trades, with the engine reproducing 100%.
+
+| comparison | real | control | real − control (95% range) | halves | 2× costs |
+|---|---|---|---|---|---|
+| random timing, same day / side / stop / exit (primary) | −0.090 | −0.044 | **−0.045 (−0.065 to −0.026)** | −0.044 / −0.047 | −0.041 |
+| opposite side, same moment | −0.090 | −0.070 | −0.019 (−0.063 to +0.023) | −0.031 / −0.006 | −0.016 |
+
+**Timing.** Entering at a random candle of the same day, in the same direction with the same stop and exit, would have
+lost 0.045R per trade less than the setups' own entry moments. The result holds in both halves and at 2× costs. The
+setups' timing costs money.
+
+**Direction.** The opposite side is not significantly better, so this is a timing problem rather than a direction one.
+The random same-direction baseline itself is −0.044R, about the cost of trading. The direction the setups pick has no
+edge beyond cost either.
+
+**By group:**
+- every instrument is worse than random: NDQ −0.025, gold −0.031, US30 −0.112;
+- 3m and 5m are the worst timeframes (−0.066, −0.047);
+- the standard exit is the worst profile (−0.062);
+- per setup, only ict_turtle_soup (+0.076) and macd_cross (+0.042, and +0.052R absolute) beat random. Both are
+  information only and are not promoted from these years;
+- dtfx_close_fib, smc_bos_retest and ict_amd are the worst at about −0.10.
+
+**Decision, as registered:** filters and exits cannot make the playbook pay. The vault is not used. The Nov 5 review
+decides between retiring the playbook and rebuilding its setups.
