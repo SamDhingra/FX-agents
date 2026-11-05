@@ -37,7 +37,9 @@ c10_account:                    # C10 afternoon continuation on the live account
 
 shadow:
   enabled: true
-  modes: [playbook_regime]      # paper book shown next to the live account (C10 trades on the account itself)
+  modes: [playbook]             # paper book shown next to the live account (C10 trades on the account itself);
+                                # Nov 5 2026: was playbook_regime — the chop filter was removed (never helped in testing)
+  db_paths: {playbook: data/journal_playbook.sqlite}   # its own journal, so it doesn't continue the chop book's record
   notify_trades: false
 
 learner:
