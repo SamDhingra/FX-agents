@@ -59,3 +59,22 @@ def test_filters_and_new_sections(tmp_path):
     assert A.build(j.db, days=30, now=now, filters={"bias": "ignored:counter"})["totals"]["n"] == 1
     assert A.session_of(19) == "Asia" and A.session_of(2) == "Asia" and A.session_of(5) == "London" and A.session_of(10) == "New York"
     assert A.profile_of("dtfx_close_fib:15m@pb-us30-15ba-trend") == "trend" and A.tf_of("c10_afternoon:5m@v2") == "5m"
+
+
+def test_pips(tmp_path):
+    from fxagents import units
+    from fxagents.config import load_config
+    cfg = load_config("config.yaml")
+    j = Journal(str(tmp_path / "p.sqlite"))
+    rows = [("w1", 300.0, 1.5), ("w2", 200.0, 1.0), ("l1", -100.0, -1.0), ("l2", -100.0, -1.0), ("l3", -100.0, -1.0)]
+    for i, (tid, pnl, r) in enumerate(rows):
+        j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,realized,qty_initial,qty_gross) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (tid, "US30", "LONG", "sr_rejection:30m@pb-us30-d", "closed",
+                                                       f"2026-11-0{i + 1}T10:00:00-05:00", f"2026-11-0{i + 1}T11:00:00-05:00", r, pnl, 2.0, 2.0))
+    j.db.commit()
+    out = A.build(j.db, days=30, now=pd.Timestamp("2026-11-06 12:00", tz="America/New_York"), cfg=cfg)
+    per = 1 / (float(cfg["instruments"]["US30"]["multiplier"]) * units.pip_size(cfg, "US30") * 2.0)   # pips per $1
+    T = out["totals"]
+    assert T["pips"] == round(200 * per, 1) and T["win_pips"] == round(250 * per, 1) and T["loss_pips"] == round(-100 * per, 1)
+    assert T["payoff"] == 2.5 and T["win"] == 0.4
+    assert out["big_payoff"][0]["setup"] == "sr_rejection" and out["pips_by_symbol"]["US30"] == T["pips"]

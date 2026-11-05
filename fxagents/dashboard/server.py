@@ -475,7 +475,7 @@ def build_app(ctx) -> FastAPI:
         out = analysis.build(c.journal.db, max(1, min(int(days), 3650)),       # same thread as every other journal read
                              c.state.now if getattr(c.state, "now", None) is not None else None,
                              {"symbol": symbol, "setup": setup, "side": side, "tf": tf, "profile": profile, "session": session,
-                              "bias": bias})
+                              "bias": bias}, c.cfg)
         return JSONResponse(out)
 
     @app.get("/api/signals")

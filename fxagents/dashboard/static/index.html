@@ -1320,6 +1320,9 @@ html body{font-size:13.5px}
 .bt2 .meter span{white-space:nowrap}.bt2 .pill2{padding:3px 8px;font-size:10.5px}.bt2 .meter .mdots i{width:11px}
 
 /* ══ Nov 4 2026: Analysis page ══ */
+.ansort{display:inline-flex;gap:4px;flex-wrap:wrap}.ansort button{border:1px solid var(--line);background:none;color:var(--text-2);border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:600}
+.ansort button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--text)}
+.antag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--up-soft);color:var(--up-text);vertical-align:1px}
 .anfilt{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:0 0 12px}
 .anfilt label{display:grid;gap:3px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .anfilt select{min-height:34px;padding:5px 28px 5px 10px;border-radius:9px;border:1px solid var(--line-2);background:var(--card);color:var(--text);font:inherit;font-size:13px;text-transform:none;letter-spacing:0;max-width:220px}
@@ -1684,9 +1687,11 @@ html body{font-size:13.5px}
       <div class="filters anrange" id="anRange"><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
       <div class="anfilt" id="anFilt"></div>
       <div class="kcards" id="anK"></div>
+      <div class="kcards" id="anP"></div>
       <div class="grid hrows">
         <div class="card c12"><h3>Running total <span class="mut heading-note">cumulative R by close time</span><span class="sp"></span><span class="mut heading-note" id="anCurveNote"></span></h3><div id="anCurve"></div></div>
-        <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals · tap a row to filter</span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
+        <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals · tap a row to filter</span><span class="sp"></span><span class="ansort" id="anSort"><button data-s="sum">Total R</button><button data-s="pips">Net pips</button><button data-s="win">Win rate</button><button data-s="payoff">Payoff</button></span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
+        <div class="card c12"><h3>Low win rate, positive pips <span class="mut heading-note">setups winning under 45% that still net pips — their winners carry the losers</span></h3><div class="tbl" id="anBig"></div></div>
         <div class="card c6"><h3>Why signals weren't taken</h3><div id="anRef"></div></div>
         <div class="card c6"><h3>Gave back +1R <span class="mut heading-note">reached +1R, closed at or below 0</span></h3><div id="anGive"></div></div>
         <div class="card c6"><h3>By instrument</h3><div class="tbl" id="anSym"></div></div>
@@ -1764,7 +1769,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-04.3</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-05.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -5397,10 +5402,13 @@ const anDiv = (label, v, right, max = 1) => { const w = v == null ? 0 : Math.min
   return `<div class="anbar"><span>${esc(label)}</span><div class="tr dv">${v == null ? "" : `<i class="${v >= 0 ? "p" : "n"}" style="${v >= 0 ? "left:50%" : "right:50%"};width:${w}%"></i>`}</div><span class="${cls(v)}">${right}</span></div>`; };
 const anPct = x => x == null ? "—" : Math.round(x * 100) + "%";
 const anMode = m => m === "—" ? "not recorded" : m.startsWith("ignored:") ? "rule off · would be " + m.slice(8) : m;
-function anSmall(rows, key, label){
+const pp = x => x == null ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + fmt(Math.abs(x), Math.abs(x) >= 100 ? 0 : 1);
+const AN_SORT = {key: "sum"};
+try{ const k = localStorage.getItem("fx-an-sort"); if(["sum","pips","win","payoff"].includes(k)) AN_SORT.key = k; }catch(e){}
+function anSmall(rows, key, label, pips = AN.onePip){
   if(!rows || !rows.length) return `<div class="empty">No trades in this range.</div>`;
-  return `<table class="antbl"><tr><th>${label}</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th></tr>` +
-    rows.map(r => `<tr><td>${esc(key(r))}</td><td>${r.n}</td><td>${anPct(r.win)}</td><td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td></tr>`).join("") + `</table>`;
+  return `<table class="antbl"><tr><th>${label}</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th>${pips ? `<th>Net pips</th><th class="hm">Avg win / loss</th>` : ""}</tr>` +
+    rows.map(r => `<tr><td>${esc(key(r))}</td><td>${r.n}</td><td>${anPct(r.win)}</td><td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td>${pips ? `<td class="${cls(r.pips)}"><b>${pp(r.pips)}</b></td><td class="hm"><span class="up">${pp(r.win_pips)}</span> / <span class="down">${pp(r.loss_pips)}</span></td>` : ""}</tr>`).join("") + `</table>`;
 }
 function renderAnalysis(){
   const d = AN.data; if(!d) return;
@@ -5411,21 +5419,40 @@ function renderAnalysis(){
     + tile("Result", sR(T.sum, 1), smoney(d.pnl), cls(T.sum))
     + tile("Deepest dip", st.max_dd_r != null ? sR(st.max_dd_r, 1) : "—", st.longest_loss != null ? `longest losing run ${st.longest_loss} · winning ${st.longest_win}` : "", st.max_dd_r < 0 ? "down" : "")
     + tile("Signals taken", `${sg.taken || 0} / ${sg.seen || 0}`, d.giveback_share != null ? `${anPct(d.giveback_share)} of trades gave back +1R` : "");
-  const sc = d.scorecard || [];
+  const pbs = Object.entries(d.pips_by_symbol || {}).filter(([, v]) => v != null);
+  AN.onePip = pbs.length === 1;                                   // pips only add up within one instrument
+  const be = T.payoff ? 1 / (1 + T.payoff) : null;
+  $("#anP").innerHTML = !pbs.length ? "" :
+      tile("Net pips", AN.onePip ? pp(T.pips) : pbs.length + " instruments", AN.onePip ? `avg ${pp(T.avg_pips)} per trade` : pbs.map(([k, v]) => `${iname(k)} ${pp(v)}`).join(" · "), AN.onePip ? cls(T.pips) : "")
+    + tile("Avg winner", AN.onePip ? pp(T.win_pips) + " pips" : "—", AN.onePip ? "average pips on winning trades" : "filter one instrument to compare pips", "up")
+    + tile("Avg loser", AN.onePip ? pp(T.loss_pips) + " pips" : "—", AN.onePip ? "average pips on losing trades" : "pips differ in size per instrument", "down")
+    + tile("Payoff", T.payoff != null ? fmt(T.payoff, 2) + "×" : "—", be != null ? `break-even win rate ${anPct(be)} · actual ${anPct(T.win)}` : "", T.payoff != null && be != null ? (T.win > be ? "up" : "down") : "");
+  const sk = AN_SORT.key, sc = [...(d.scorecard || [])].sort((a, b) => (b[sk] ?? -1e9) - (a[sk] ?? -1e9));
+  $$("#anSort button").forEach(b => { b.classList.toggle("on", b.dataset.s === sk); b.onclick = () => { AN_SORT.key = b.dataset.s; try{ localStorage.setItem("fx-an-sort", AN_SORT.key); }catch(e){} renderAnalysis(); }; });
+  const big = r => r.n >= 5 && (r.win || 0) < 0.45 && (r.pips || 0) > 0;
   if(sc.length && matchMedia("(max-width:760px)").matches){       // phone: one card per setup instead of a wide table
     $("#anSetups").innerHTML = sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
-      return `<div class="ancard" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><div class="ah"><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span><span class="sp"></span><b class="${cls(r.sum)}">${sR(r.sum, 1)}</b></div>
-        <div class="mut am">${r.n} trades · ${anPct(r.win)} won · avg <span class="${cls(r.avg)}">${sR(r.avg)}</span>${r.givebacks ? ` · ${r.givebacks} gave back` : ""}${r.signals ? ` · signals ${r.taken}/${r.signals}` : ""}</div>
+      return `<div class="ancard" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><div class="ah"><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span>${big(r) ? `<span class="antag">BIG WINNERS</span>` : ""}<span class="sp"></span><b class="${cls(r.sum)}">${sR(r.sum, 1)}</b></div>
+        <div class="mut am">${r.n} trades · ${anPct(r.win)} won · avg <span class="${cls(r.avg)}">${sR(r.avg)}</span> · <b class="${cls(r.pips)}">${pp(r.pips)} pips</b> (win <span class="up">${pp(r.win_pips)}</span> / loss <span class="down">${pp(r.loss_pips)}</span>)${r.givebacks ? ` · ${r.givebacks} gave back` : ""}${r.signals ? ` · signals ${r.taken}/${r.signals}` : ""}</div>
         ${ref.length ? `<div>${ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("")}</div>` : ""}</div>`; }).join("");
   } else
-  $("#anSetups").innerHTML = sc.length ? `<table class="antbl"><tr><th>Setup</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th><th class="hm">Gave back</th><th class="hm">Signals</th><th>Why not taken</th><th class="hm">Last trade</th></tr>` +
+  $("#anSetups").innerHTML = sc.length ? `<table class="antbl"><tr><th>Setup</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th><th>Net pips</th><th class="hm">Avg win / loss pips</th><th class="hm">Payoff</th><th class="hm">Gave back</th><th class="hm">Signals</th><th>Why not taken</th><th class="hm">Last trade</th></tr>` +
     sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
-      return `<tr class="anpick ${(r.sum || 0) < 0 ? "neg" : ""}" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span></td><td>${r.n}</td><td>${anPct(r.win)}</td>
-        <td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td><td class="hm">${r.givebacks || ""}</td>
+      return `<tr class="anpick ${(r.sum || 0) < 0 ? "neg" : ""}" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span>${big(r) ? `<span class="antag">BIG WINNERS</span>` : ""}</td><td>${r.n}</td><td>${anPct(r.win)}</td>
+        <td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td><td class="${cls(r.pips)}"><b>${pp(r.pips)}</b></td>
+        <td class="hm"><span class="up">${pp(r.win_pips)}</span> / <span class="down">${pp(r.loss_pips)}</span></td><td class="hm">${r.payoff != null ? fmt(r.payoff, 2) + "×" : "—"}</td><td class="hm">${r.givebacks || ""}</td>
         <td class="hm">${r.signals ? `${r.taken}/${r.signals}` : "—"}</td>
         <td class="why">${ref.length ? ref.map(([k, v]) => `<span class="anchip">${esc(k)} ${v}</span>`).join("") : `<span class="mut">—</span>`}</td>
         <td class="hm mut">${r.last ? md(r.last) + " " + hm(r.last) : "—"}</td></tr>`; }).join("") + `</table>`
     : `<div class="empty">No trades or signals in the last ${d.days} days for this book.</div>`;
+  const bp = d.big_payoff || [];
+  $("#anBig").innerHTML = bp.length ? `<table class="antbl"><tr><th>Setup</th><th>Trades</th><th>Win</th><th>Net pips</th><th>Avg winner</th><th>Avg loser</th><th>Payoff</th><th class="hm">Break-even win rate</th><th>Total R</th></tr>` +
+    bp.map(r => `<tr class="anpick" data-setup="${esc(r.setup)}" data-sym="${esc(r.symbol)}"><td><b>${esc(r.setup)}</b> <span class="mut">${esc(iname(r.symbol))}</span></td><td>${r.n}</td><td>${anPct(r.win)}</td>
+      <td class="up"><b>${pp(r.pips)}</b></td><td class="up">${pp(r.win_pips)}</td><td class="down">${pp(r.loss_pips)}</td><td>${r.payoff != null ? fmt(r.payoff, 2) + "×" : "—"}</td>
+      <td class="hm">${r.payoff ? anPct(1 / (1 + r.payoff)) : "—"}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td></tr>`).join("") + `</table>
+      <p class="mut" style="font-size:12px;margin:10px 0 0">Pips can be positive while R is negative: R weighs each trade by its risk, pips by its distance. A wide-stop winner earns many pips but the same 1R.</p>`
+    : `<div class="empty">No setup with a win rate under 45% nets positive pips in this range (at least 5 trades).</div>`;
+  $$("#anBig [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   const rf = d.refusals || [], tot = rf.reduce((a, r) => a + r.n, 0), mx = Math.max(1, ...rf.map(r => r.n));
   $("#anRef").innerHTML = rf.length ? rf.map(r => anBar(r.reason, r.n / mx * 100, `${r.n} · ${Math.round(r.n / tot * 100)}%`)).join("")
     + `<p class="mut" style="font-size:12px;margin:10px 0 0">${sg.taken || 0} of ${sg.seen || 0} signals were taken. Each setup's own reasons are listed above.</p>`
@@ -5433,14 +5460,14 @@ function renderAnalysis(){
   const gb = d.givebacks || [];
   $("#anGive").innerHTML = gb.length ? gb.map(g => `<div class="angive"><span class="mut">${md(g.opened)} ${hm(g.opened)}</span>
       <span><b>${esc(g.side === "LONG" ? "Long" : "Short")} ${esc(iname(g.symbol))}</b> <small>${esc(g.setup)}</small></span>
-      <span class="num">peak <span class="up">${sR(g.mfe)}</span> → <span class="${cls(g.r)}">${sR(g.r)}</span></span></div>`).join("")
+      <span class="num">peak <span class="up">${sR(g.mfe)}</span> → <span class="${cls(g.r)}">${sR(g.r)}</span>${g.pips != null ? ` <small>(${pp(g.pips)} pips)</small>` : ""}</span></div>`).join("")
     : `<div class="empty">No trade reached +1R and then lost.</div>`;
   const hrs = d.by_hour || [], mR = Math.max(0.25, ...hrs.map(h => Math.abs(h.avg || 0)));
   $("#anHour").innerHTML = hrs.length ? hrs.map(h => anDiv(String(h.hour).padStart(2, "0") + ":00 · " + h.n, h.avg, sR(h.avg), mR)).join("") : `<div class="empty">No trades in this range.</div>`;
   const dw = d.by_weekday || [], mD = Math.max(0.25, ...dw.map(h => Math.abs(h.avg || 0)));
   $("#anDow").innerHTML = dw.length ? dw.map(h => anDiv(h.day + " · " + h.n, h.avg, sR(h.avg), mD)).join("") : `<div class="empty">No trades in this range.</div>`;
   $("#anExit").innerHTML = anSmall(d.exits, r => r.reason.replace(/_/g, " "), "Exit");
-  $("#anSym").innerHTML = anSmall(d.by_symbol, r => iname(r.symbol), "Instrument");
+  $("#anSym").innerHTML = anSmall(d.by_symbol, r => iname(r.symbol), "Instrument", true);
   $("#anSide").innerHTML = anSmall(d.by_side, r => r.side === "LONG" ? "Long" : r.side === "SHORT" ? "Short" : r.side, "Direction");
   $("#anSess").innerHTML = anSmall(d.by_session, r => r.session, "Session");
   $("#anHold").innerHTML = anSmall(d.by_hold, r => r.hold, "Held");

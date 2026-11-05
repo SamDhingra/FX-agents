@@ -72,16 +72,32 @@ def _ny(s: pd.Series) -> pd.Series:
     return t.dt.tz_convert(NY)
 
 
-def _stats(r: pd.Series) -> dict:
-    r = r.dropna()
-    n = len(r)
+def _stats(g) -> dict:
+    """R and pip statistics of a group of trades (a frame with r_multiple and pips, or a bare R series)."""
+    if isinstance(g, pd.Series):
+        g = pd.DataFrame({"r_multiple": g})
+    g = g[g["r_multiple"].notna()]
+    n = len(g)
     if not n:
-        return {"n": 0, "win": None, "avg": None, "sum": 0.0}
-    return {"n": int(n), "win": round(float((r > 0).mean()), 3), "avg": round(float(r.mean()), 3), "sum": round(float(r.sum()), 2)}
+        return {"n": 0, "win": None, "avg": None, "sum": 0.0, "pips": None, "win_pips": None, "loss_pips": None,
+                "avg_pips": None, "payoff": None}
+    r = g["r_multiple"]
+    out = {"n": int(n), "win": round(float((r > 0).mean()), 3), "avg": round(float(r.mean()), 3), "sum": round(float(r.sum()), 2)}
+    p = g["pips"].dropna() if "pips" in g else pd.Series(dtype=float)
+    if len(p):
+        w, lo = p[p > 0], p[p <= 0]
+        wp = float(w.mean()) if len(w) else None
+        lp = float(lo.mean()) if len(lo) else None
+        out.update(pips=round(float(p.sum()), 1), avg_pips=round(float(p.mean()), 1), win_pips=round(wp, 1) if wp is not None else None,
+                   loss_pips=round(lp, 1) if lp is not None else None,
+                   payoff=round(wp / abs(lp), 2) if wp is not None and lp not in (None, 0) else None)
+    else:
+        out.update(pips=None, avg_pips=None, win_pips=None, loss_pips=None, payoff=None)
+    return out
 
 
 def _group(t: pd.DataFrame, key, label: str, order=None) -> list[dict]:
-    rows = [{label: (k if not isinstance(k, (np.integer,)) else int(k)), **_stats(g["r_multiple"])} for k, g in t.groupby(key)]
+    rows = [{label: (k if not isinstance(k, (np.integer,)) else int(k)), **_stats(g)} for k, g in t.groupby(key)]
     if order:
         rows.sort(key=lambda r: order.index(r[label]) if r[label] in order else 99)
     return rows
@@ -96,16 +112,31 @@ def _tag(t: pd.DataFrame, ts_col: str, strat_col: str) -> pd.DataFrame:
     return t
 
 
-def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | None = None) -> dict:
+def add_pips(t: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
+    """Pips per trade, as the Trades page shows them (units.trade): net P&L ÷ ($ per pip × all units traded), so partial
+    exits and adds are included. Gold 1 pip = $0.10, indices 1 pip = 1 point, forex 0.0001 (per-instrument pip_size)."""
+    if cfg is None or not len(t):
+        t["pips"] = np.nan
+        return t
+    from .. import units
+    pip = t["symbol"].map(lambda s: units.pip_size(cfg, s))
+    mult = t["symbol"].map(lambda s: float((cfg["instruments"].get(s) or {}).get("multiplier", 1)))
+    qg = t["qty_gross"].fillna(t["qty_initial"]).astype(float)
+    t["pips"] = np.where((qg > 0) & t["realized"].notna(), t["realized"].astype(float) / (mult * pip * qg.where(qg > 0, np.nan)), np.nan)
+    return t
+
+
+def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | None = None, cfg: dict | None = None) -> dict:
     now = now if now is not None else pd.Timestamp.now(tz=NY)
     since = now - pd.Timedelta(days=days)
     f = {k: v for k, v in (filters or {}).items() if k in FILTERS and v not in (None, "", "all")}
     t = pd.read_sql_query("SELECT id, symbol, side, strategy, opened, closed, r_multiple, mfe_r, mae_r, exit_reason, bias_mode, "
-                          "realized FROM trades WHERE status='closed' AND r_multiple IS NOT NULL", db)
+                          "realized, qty_initial, qty_gross FROM trades WHERE status='closed' AND r_multiple IS NOT NULL", db)
     t["opened_ny"] = _ny(t["opened"])
     t["closed_ny"] = _ny(t["closed"])
     t = _tag(t[t["opened_ny"] >= since].copy(), "opened_ny", "strategy")
     t["bias"] = t["bias_mode"].fillna("—").astype(str)
+    t = add_pips(t, cfg)
     sig = pd.read_sql_query("SELECT ts, symbol, strategy, side, action, why FROM signals", db)
     sig["ts_ny"] = _ny(sig["ts"])
     sig = _tag(sig[sig["ts_ny"] >= since].copy(), "ts_ny", "strategy")
@@ -120,7 +151,7 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
         if k in sig.columns:                      # signals have no bias mode: that filter applies to trades only
             sig = sig[sig[k].astype(str) == str(v)]
 
-    out: dict = {"days": days, "since": since.isoformat(), "filters": f, "options": opts, "totals": _stats(t["r_multiple"]),
+    out: dict = {"days": days, "since": since.isoformat(), "filters": f, "options": opts, "totals": _stats(t),
                  "pnl": round(float(t["realized"].fillna(0).sum()), 2)}
     # 1. scorecard: setup × instrument (with what happened to its signals)
     rows = []
@@ -128,7 +159,7 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     keys = set(map(tuple, t[["setup", "symbol"]].drop_duplicates().to_numpy())) | set(fun.index.tolist())
     for setup, sym in sorted(keys):
         g = t[(t.setup == setup) & (t.symbol == sym)]
-        st = _stats(g["r_multiple"])
+        st = _stats(g)
         give = int(((g["mfe_r"] >= 1) & (g["r_multiple"] <= 0)).sum())
         fr = fun.loc[(setup, sym)].to_dict() if (setup, sym) in fun.index else {}
         refused = {k: int(v) for k, v in sorted(fr.items(), key=lambda kv: -kv[1]) if k != "Taken" and v}
@@ -142,9 +173,9 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     out["refusals"] = [{"reason": k, "n": int(v)} for k, v in sig[sig.reason != "Taken"]["reason"].value_counts().items()]
     out["signals"] = {"seen": int(len(sig)), "taken": int((sig.reason == "Taken").sum())}
     # 3. when: hour, weekday, session (New York entry time)
-    out["by_hour"] = [{"hour": int(h), **_stats(g["r_multiple"])} for h, g in t.groupby(t["opened_ny"].dt.hour)]
+    out["by_hour"] = [{"hour": int(h), **_stats(g)} for h, g in t.groupby(t["opened_ny"].dt.hour)]
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    out["by_weekday"] = [{"day": names[int(d)], **_stats(g["r_multiple"])} for d, g in t.groupby(t["opened_ny"].dt.dayofweek)]
+    out["by_weekday"] = [{"day": names[int(d)], **_stats(g)} for d, g in t.groupby(t["opened_ny"].dt.dayofweek)]
     out["by_session"] = _group(t, "session", "session", [s[0] for s in SESSIONS])
     # 4. what: instrument, direction, timeframe, exit profile
     out["by_symbol"] = sorted(_group(t, "symbol", "symbol"), key=lambda r: -r["sum"])
@@ -152,13 +183,14 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     out["by_tf"] = sorted(_group(t, "tf", "tf"), key=lambda r: pd.Timedelta(r["tf"]) if r["tf"] != "—" else pd.Timedelta(0))
     out["by_profile"] = _group(t, "profile", "profile", ["standard", "scalp", "trend"])
     # 5. exits and bias relation
-    out["exits"] = sorted([{"reason": str(k or "?"), **_stats(g["r_multiple"])} for k, g in t.groupby(t["exit_reason"].fillna("?"))],
+    out["exits"] = sorted([{"reason": str(k or "?"), **_stats(g)} for k, g in t.groupby(t["exit_reason"].fillna("?"))],
                           key=lambda r: -r["n"])
-    out["bias"] = sorted([{"mode": k, **_stats(g["r_multiple"])} for k, g in t.groupby("bias")], key=lambda r: -r["n"])
+    out["bias"] = sorted([{"mode": k, **_stats(g)} for k, g in t.groupby("bias")], key=lambda r: -r["n"])
     # 6. trades that reached +1R and still closed at or below zero
     gb = t[(t["mfe_r"] >= 1) & (t["r_multiple"] <= 0)].sort_values("opened_ny", ascending=False)
     out["givebacks"] = [{"id": r.id, "opened": r.opened_ny.isoformat(), "symbol": r.symbol, "side": r.side, "setup": r.setup,
-                         "mfe": round(float(r.mfe_r), 2), "r": round(float(r.r_multiple), 2), "exit": r.exit_reason}
+                         "mfe": round(float(r.mfe_r), 2), "r": round(float(r.r_multiple), 2), "exit": r.exit_reason,
+                         "pips": round(float(r.pips), 1) if pd.notna(r.pips) else None}
                         for r in gb.head(25).itertuples()]
     out["giveback_share"] = round(float(len(gb) / len(t)), 3) if len(t) else None
     # 7. the R curve, streaks and drawdown (closed order)
@@ -192,5 +224,9 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     # 9. holding time
     mins = (t["closed_ny"] - t["opened_ny"]).dt.total_seconds() / 60
     hb = pd.cut(mins, [0, 15, 60, 240, np.inf], labels=["< 15 min", "15–60 min", "1–4 h", "> 4 h"], right=False)
-    out["by_hold"] = [{"hold": str(k), **_stats(g["r_multiple"])} for k, g in t.groupby(hb, observed=True)]
+    out["by_hold"] = [{"hold": str(k), **_stats(g)} for k, g in t.groupby(hb, observed=True)]
+    # 10. low win rate, positive pips: setups whose winners are big enough to carry many small losses
+    out["big_payoff"] = sorted([r for r in rows if r["n"] >= 5 and (r["win"] or 0) < 0.45 and (r.get("pips") or 0) > 0],
+                               key=lambda r: -(r.get("pips") or 0))
+    out["pips_by_symbol"] = {sym: _stats(g)["pips"] for sym, g in t.groupby("symbol")}
     return out
