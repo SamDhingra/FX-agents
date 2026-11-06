@@ -1,0 +1,15 @@
+{
+ "trades": 503,
+ "pooled": 413,
+ "books": [
+  "c10_afternoon",
+  "ema21_rsi55",
+  "gold_breakout",
+  "h1_vol_trend",
+  "playbook",
+  "playbook_allhours",
+  "playbook_nobias",
+  "playbook_nobias_allhours",
+  "practice"
+ ]
+}
