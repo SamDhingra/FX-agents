@@ -493,6 +493,22 @@ PY
              # ./fx.sh pickwhy [name=sr_rejection] [days=7]
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.pick_why "${2:-sr_rejection}" --days "${3:-7}" --publish </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  atlas)     # trade atlas (Nov 6 2026): strategy × instrument × timeframe × hour × bias (aligned / neutral / counter), R and pips
+             #   ./fx.sh atlas              forward report from every book's journal (+ the history report from finished jobs)
+             #   ./fx.sh atlas run [1]      the 2021 → Sep 2026 history grid first (bias rule off, all hours; hours to run;
+             #                              resumable — run it again after a stop and finished jobs are kept), then both reports
+             # → data/year_test/atlas_forward/report.md, data/year_test/atlas_history/{report.md,cells.csv}
+             need_env; mkdir -p logs
+             if [[ "${2:-}" == "run" ]]; then
+               for s_ in dev_m1 holdout_m1; do [[ -d "data/export/$s_" || -d data/history_x/seen_2021_2026 ]] || { echo "no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done
+               BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/atlas-build.log 2>&1 || { echo "build failed — see logs/atlas-build.log"; exit 1; }
+               $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.trade_atlas run --workers "${3:-1}" </dev/null || exit $?
+             fi
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.trade_atlas forward </dev/null || exit $?
+             if [[ -d data/year_test/atlas_trades && "${2:-}" != "run" ]]; then
+               $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.trade_atlas history </dev/null || exit $?
+             fi
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   cellwhy)   # why a setup is / isn't in the playbook, day by day (read-only): ./fx.sh cellwhy [setup=sr_rejection] [days=14] [old]
              # (a 4th word, e.g. 'old', judges with the NDQ/US30 rules in force before Nov 4 2026)
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.cell_why "${2:-sr_rejection}" --days "${3:-14}" ${4:+--old-index-rules} --publish </dev/null || exit $?

@@ -396,6 +396,11 @@ def run_job(args) -> list[dict]:
     entry_ok = window_mask(close_ts, s_cfg["entry_windows"]) & ~late
     news = np.array([news_block(t) for t in close_ts], bool)
     min_align = float(cfg["bias"]["min_align"])
+    rc = cfg.get("research") or {}
+    # trade atlas (Nov 6 2026): keep neutral / counter-bias signals too (the bias score is still recorded on every
+    # trade), and run only the listed exit profiles. Both off by default, so every earlier test is unchanged.
+    ignore_bias = bool(rc.get("ignore_bias_rule"))
+    only_profiles = set(rc.get("profiles_only") or [])
     spread = float(((cfg.get("shadow") or {}).get("spread") or {}).get(sym, DEFAULT_SPREAD.get(sym, 0.0)))
     hs = spread / 2
     if "spread" in m1.columns:                      # a bid/ask export: the real spread of every minute (playbook test)
@@ -420,6 +425,8 @@ def run_job(args) -> list[dict]:
     ic = {**cfg["instruments"].get(sym, {}), **((load_specs_cached(cfg) or {}).get(sym, {}))}
     equity = float((cfg.get("playbook") or {}).get("equity_usd", 70000))
     profiles = mgmt_profiles(cfg, tf)
+    if only_profiles:
+        profiles = {k: v for k, v in profiles.items() if k.split("|")[0] in only_profiles}
     AN = analyst_arrays(m1, close1) if any(m.an_flip or m.an_break for m in profiles.values()) else None
     rows = []
     for cname in classes:
@@ -443,7 +450,7 @@ def run_job(args) -> list[dict]:
                 if i >= len(C_tf) - 1 or not entry_ok[i] or news[i]:
                     continue
                 sc = bias[i]
-                if not np.isfinite(sc) or s.side * sc < min_align:
+                if (not np.isfinite(sc) or s.side * sc < min_align) and not ignore_bias:
                     continue                                     # hard bias rule (neutral / counter skipped)
                 j0 = int(j_of[i])
                 if j0 < 0 or m1.index[j0] < df.index[i] or abs(C1[j0] - C_tf[i]) > 1e-9 * max(1.0, abs(C_tf[i])):
@@ -483,7 +490,7 @@ def run_job(args) -> list[dict]:
                                  "r": res["r"], "w": w, "rw": res["r"] * w * res["R"] / dist,
                                  "cost_r": spread * (1 + m.add_frac * res["adds"]) / res["R"],
                                  "exit": res["exit_reason"], "bars": int((res["j_exit"] - j0)), "adds": res["adds"],
-                                 "mfe": res["mfe"], "busy_self": busy})
+                                 "mfe": res["mfe"], "busy_self": busy, "R_px": res["R"]})
     log.info("%s %s: %d trades (%.0fs)", sym, tf, len(rows), time.time() - t0)
     return rows
 
