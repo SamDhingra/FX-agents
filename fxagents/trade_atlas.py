@@ -402,8 +402,20 @@ def books(cfg) -> list[tuple[str, str]]:
     return out
 
 
+def journal_cfg(cfg) -> dict:
+    """The contract sizes the journals were written with. Reports run in sim mode, where config keeps the IBKR futures
+    multipliers (gold 10, NDQ 2, US30 0.5); the books trade OANDA units (multiplier 1), so pips need the OANDA spec."""
+    from .config import apply_broker
+    c = copy.deepcopy(cfg)
+    if c.get("broker", "ibkr") == "oanda" and not c.get("_broker_applied"):
+        c["mode"] = "paper"
+        apply_broker(c)
+    return c
+
+
 def load_forward(cfg, book_list=None) -> pd.DataFrame:
     from .dashboard.analysis import add_pips, setup_of, tf_of
+    cfg = journal_cfg(cfg)
     parts = []
     for name, db in (book_list or books(cfg)):
         if not Path(db).exists():

@@ -94,5 +94,8 @@ def test_forward_report_pools_signals_once(cfg, tmp_path):  # noqa: F811
     rep = (tmp_path / "f/report.md").read_text()
     assert "counter" in rep and "n/a" in rep and "Playbook, no bias rule" in rep
     t = A.load_forward(cfg, [("practice", str(tmp_path / "p.sqlite"))])
-    mult = float(cfg["instruments"]["XAUUSD"].get("multiplier", 1))          # as the dashboard: $ ÷ ($ per pip × units)
-    assert t.loc[t.id == "a1", "pips"].iloc[0] == pytest.approx(100.0 / (mult * 0.1 * 10.0))
+    # $100 over 10 OANDA units (oz) of gold = 100 pips — the OANDA contract size, not the sim config's IBKR one (10)
+    assert cfg["mode"] == "sim" and cfg["broker"] == "oanda" and cfg["instruments"]["XAUUSD"]["multiplier"] == 10
+    assert t.loc[t.id == "a1", "pips"].iloc[0] == pytest.approx(100.0)
+    b_ = A.load_forward(cfg, [("s", str(tmp_path / "s.sqlite"))])
+    assert b_.loc[b_.id == "b1", "pips"].iloc[0] == pytest.approx(-50.0)        # NDQ: $50 over 1 unit = 50 points
