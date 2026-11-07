@@ -78,3 +78,73 @@ def test_pips(tmp_path):
     assert T["pips"] == round(200 * per, 1) and T["win_pips"] == round(250 * per, 1) and T["loss_pips"] == round(-100 * per, 1)
     assert T["payoff"] == 2.5 and T["win"] == 0.4
     assert out["big_payoff"][0]["setup"] == "sr_rejection" and out["pips_by_symbol"]["US30"] == T["pips"]
+
+
+# ── Nov 7 2026: Astra's review of the Analysis page ──────────────────────────
+def _mini(tmp_path, rows):
+    j = Journal(str(tmp_path / "m.sqlite"))
+    for i, (sym, r, mfe) in enumerate(rows):
+        j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple,mfe_r,exit_reason,bias_mode,realized) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (f"t{i}", sym, "LONG", "smc_mss:5m@x", "closed",
+                     f"2026-11-0{i + 2}T10:00:00-05:00", f"2026-11-0{i + 2}T11:00:00-05:00", r, mfe, "stop", "aligned", r * 100))
+    j.db.commit()
+    return j
+
+
+NOW = pd.Timestamp("2026-11-07 12:00", tz="America/New_York")
+
+
+def test_payoff_in_r_across_instruments(tmp_path):
+    # Astra's example: +1R, +1R gold and −1R NDQ → 1× in R whatever the pip sizes
+    out = A.build(_mini(tmp_path, [("XAUUSD", 1.0, 1.0), ("XAUUSD", 1.0, 1.0), ("NDQ", -1.0, 0.2)]).db, 30, NOW)
+    assert out["totals"]["payoff_r"] == 1.0 and out["totals"]["win_nz"] == round(2 / 3, 3)
+
+
+def test_zero_r_trades_are_neither_side(tmp_path):
+    out = A.build(_mini(tmp_path, [("NDQ", 2.0, 2.0), ("NDQ", 0.0, 0.5), ("NDQ", -1.0, 0.1)]).db, 30, NOW)["totals"]
+    assert out["payoff_r"] == 2.0 and out["win_nz"] == 0.5 and out["flat_n"] == 1
+
+
+def test_capture_uses_matched_records(tmp_path):
+    # Astra's example: two +1R winners, one peak +2R recorded, one peak missing → 50%, coverage 1 of 2
+    e = A.build(_mini(tmp_path, [("NDQ", 1.0, 2.0), ("NDQ", 1.0, None)]).db, 30, NOW)["excursion"]
+    assert e["kept"] == 0.5 and e["kept_cov"] == [1, 2] and e["mfe_cov"] == [1, 2] and e["reached_1r"] == 1.0
+
+
+def test_giveback_shares_have_their_denominators(tmp_path):
+    out = A.build(_mini(tmp_path, [("NDQ", -1.0, 1.2), ("NDQ", 1.5, 1.6), ("NDQ", -1.0, 0.3), ("NDQ", -1.0, None)]).db, 30, NOW)
+    assert out["giveback_share"] == round(1 / 3, 3)                       # of trades with a recorded peak
+    assert out["excursion"]["gave_back_of_reached"] == 0.5 and out["excursion"]["reached_n"] == 2
+
+
+def test_curve_starts_at_zero_and_keeps_the_true_high(tmp_path):
+    j = Journal(str(tmp_path / "c.sqlite"))
+    r = [1.0] * 400 + [-1.0] * 400 + [5.0] + [-1.0] * 300            # the +5 spike sits inside a thinned bucket
+    for i, x in enumerate(r):
+        ts = (pd.Timestamp("2026-11-01 00:00", tz="America/New_York") + pd.Timedelta(minutes=5 * i)).isoformat()
+        j.db.execute("INSERT INTO trades(id,symbol,side,strategy,status,opened,closed,r_multiple) VALUES(?,?,?,?,?,?,?,?)",
+                     (f"c{i}", "NDQ", "LONG", "smc_mss:5m@x", "closed", ts, ts, x))
+    j.db.commit()
+    out = A.build(j.db, 30, NOW)
+    cs, cv = out["curve_stats"], out["curve"]
+    assert cv[0]["r"] == 0 and cv[0]["i"] == 0 and cs["n"] == len(r) and cs["high"] == 400.0 and cs["last"] == sum(r)
+    assert max(p["r"] for p in cv) == cs["high"] and min(p["r"] for p in cv) == cs["low"]
+    assert any(p["r"] == 5.0 for p in cv)                              # the spike's peak survives thinning
+    assert len(cv) <= 1201 and [p["i"] for p in cv] == sorted(p["i"] for p in cv)
+
+
+def test_signal_scope_reports_unapplied_filters(tmp_path):
+    j = _journal(tmp_path)
+    out = A.build(j.db, 30, pd.Timestamp("2026-11-04 12:00", tz="America/New_York"), filters={"bias": "aligned"})
+    assert out["signal_scope"]["unapplied"] == ["bias"] and out["signals"]["seen"] == 4 and out["totals"]["n"] == 2
+    assert A.build(j.db, 30, NOW, filters={"symbol": "US30"})["signal_scope"]["unapplied"] == []
+
+
+def test_one_trade_endpoint(tmp_path):
+    ctx = make_ctx(tmp_path)
+    c = TestClient(build_app(ctx))
+    rows = c.get("/api/trades").json()
+    assert rows
+    one = c.get(f"/api/trades/{rows[0]['id']}").json()
+    assert one["id"] == rows[0]["id"] and isinstance(one["events"], list) and "pips" in one
+    assert c.get("/api/trades/nope").status_code == 404

@@ -80,9 +80,15 @@ def _stats(g) -> dict:
     n = len(g)
     if not n:
         return {"n": 0, "win": None, "avg": None, "sum": 0.0, "pips": None, "win_pips": None, "loss_pips": None,
-                "avg_pips": None, "payoff": None}
+                "avg_pips": None, "payoff": None, "payoff_r": None, "win_nz": None, "flat_n": 0}
     r = g["r_multiple"]
     out = {"n": int(n), "win": round(float((r > 0).mean()), 3), "avg": round(float(r.mean()), 3), "sum": round(float(r.sum()), 2)}
+    # payoff in R (Nov 7 2026, Astra review): average winning R ÷ |average losing R|. Exactly-0R trades are neither, so
+    # the break-even win rate 1/(1+payoff) is compared with wins ÷ (wins + losses), the same cohort.
+    rw, rl = r[r > 0], r[r < 0]
+    out["payoff_r"] = round(float(rw.mean() / abs(rl.mean())), 2) if len(rw) and len(rl) else None
+    out["win_nz"] = round(float(len(rw) / (len(rw) + len(rl))), 3) if len(rw) + len(rl) else None
+    out["flat_n"] = int((r == 0).sum())
     p = g["pips"].dropna() if "pips" in g else pd.Series(dtype=float)
     if len(p):
         w, lo = p[p > 0], p[p <= 0]
@@ -151,7 +157,10 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
         if k in sig.columns:                      # signals have no bias mode: that filter applies to trades only
             sig = sig[sig[k].astype(str) == str(v)]
 
+    # filters that could not apply to signals (signals carry no bias mode): the page says so beside the signal counts
+    sig_unscoped = [k for k in f if k not in sig.columns]
     out: dict = {"days": days, "since": since.isoformat(), "filters": f, "options": opts, "totals": _stats(t),
+                 "signal_scope": {"unapplied": sig_unscoped}, "date_basis": "entered",
                  "pnl": round(float(t["realized"].fillna(0).sum()), 2)}
     # 1. scorecard: setup × instrument (with what happened to its signals)
     rows = []
@@ -192,7 +201,8 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
                          "mfe": round(float(r.mfe_r), 2), "r": round(float(r.r_multiple), 2), "exit": r.exit_reason,
                          "pips": round(float(r.pips), 1) if pd.notna(r.pips) else None}
                         for r in gb.head(25).itertuples()]
-    out["giveback_share"] = round(float(len(gb) / len(t)), 3) if len(t) else None
+    nm = int(t["mfe_r"].notna().sum())
+    out["giveback_share"] = round(float(len(gb) / nm), 3) if nm else None    # of trades with a recorded best move
     # 7. the R curve, streaks and drawdown (closed order)
     tc = t.sort_values("closed_ny")
     c = tc["r_multiple"].to_numpy(float)
@@ -204,12 +214,19 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
             cur = (cur + 1 if cur >= 0 else 1) if x > 0 else (cur - 1 if cur <= 0 else -1)
             best, worst = max(best, cur), min(worst, cur)
         out["streaks"] = {"max_dd_r": round(float((cum - peak).min()), 2), "longest_win": best, "longest_loss": -worst, "current": int(cur)}
-        step = max(1, len(c) // 300)
-        out["curve"] = [{"t": tc["closed_ny"].iloc[i].isoformat(), "r": round(float(cum[i]), 2)} for i in range(0, len(c), step)]
-        if (len(c) - 1) % step:
-            out["curve"].append({"t": tc["closed_ny"].iloc[-1].isoformat(), "r": round(float(cum[-1]), 2)})
+        # trade sequence (evenly spaced by trade, not by time), starting at 0. Thinned to ≤ 300 points, but every
+        # thinned bucket keeps its own high and low, and the extremes come from the full series (Astra review).
+        step = max(1, -(-len(c) // 300))
+        pts = [{"t": tc["closed_ny"].iloc[0].isoformat(), "r": 0.0, "i": 0}]
+        for a0 in range(0, len(c), step):
+            seg = range(a0, min(a0 + step, len(c)))
+            keep = sorted({seg[0], seg[-1], max(seg, key=lambda i: cum[i]), min(seg, key=lambda i: cum[i])})
+            pts += [{"t": tc["closed_ny"].iloc[i].isoformat(), "r": round(float(cum[i]), 2), "i": i + 1} for i in keep]
+        out["curve"] = pts
+        out["curve_stats"] = {"n": int(len(c)), "high": round(float(max(0.0, cum.max())), 2),
+                              "low": round(float(min(0.0, cum.min())), 2), "last": round(float(cum[-1]), 2)}
     else:
-        out["streaks"], out["curve"] = None, []
+        out["streaks"], out["curve"], out["curve_stats"] = None, [], None
     # 8. distribution of results, and how much of the best move was kept
     edges = [-np.inf, -1.0, -0.5, -0.0001, 0.5, 1.0, 2.0, np.inf]
     labels = ["≤ −1R", "−1 to −0.5R", "−0.5 to 0", "0 to +0.5R", "+0.5 to +1R", "+1 to +2R", "> +2R"]
@@ -217,10 +234,18 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     out["distribution"] = [{"bucket": k, "n": int(v)} for k, v in hist.items()]
     w, lo = t[t.r_multiple > 0], t[t.r_multiple <= 0]
     mf = lambda x: round(float(x.mean()), 2) if len(x) and x.notna().any() else None  # noqa: E731
-    out["excursion"] = {"win_mfe": mf(w["mfe_r"]), "win_r": mf(w["r_multiple"]), "loss_mfe": mf(lo["mfe_r"]), "loss_r": mf(lo["r_multiple"]),
+    # same cohort on both sides (Astra review): winners whose best move was recorded and positive
+    we = w[w["mfe_r"].notna() & (w["mfe_r"] > 0)]
+    tm = t[t["mfe_r"].notna()]                                   # trades with a recorded best move
+    reached = tm[tm["mfe_r"] >= 1]
+    out["excursion"] = {"win_mfe": mf(we["mfe_r"]), "win_r": mf(we["r_multiple"]), "loss_mfe": mf(lo["mfe_r"]), "loss_r": mf(lo["r_multiple"]),
                         "loss_mae": mf(lo["mae_r"]), "win_mae": mf(w["mae_r"]),
-                        "kept": round(float(w["r_multiple"].sum() / w["mfe_r"].clip(lower=0.01).sum()), 2) if len(w) and w["mfe_r"].notna().any() else None,
-                        "reached_1r": round(float((t["mfe_r"] >= 1).mean()), 3) if len(t) else None}
+                        "kept": round(float(we["r_multiple"].sum() / we["mfe_r"].sum()), 2) if len(we) else None,
+                        "kept_cov": [int(len(we)), int(len(w))],
+                        "reached_1r": round(float(len(reached) / len(tm)), 3) if len(tm) else None,
+                        "mfe_cov": [int(len(tm)), int(len(t))],
+                        "gave_back_of_reached": round(float((reached["r_multiple"] <= 0).mean()), 3) if len(reached) else None,
+                        "reached_n": int(len(reached))}
     # 9. holding time
     mins = (t["closed_ny"] - t["opened_ny"]).dt.total_seconds() / 60
     hb = pd.cut(mins, [0, 15, 60, 240, np.inf], labels=["< 15 min", "15–60 min", "1–4 h", "> 4 h"], right=False)

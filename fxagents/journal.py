@@ -135,6 +135,10 @@ class Journal:
         args = (status, limit) if status else (limit,)
         return [dict(r) for r in self.db.execute(q, args)]
 
+    def trade_by_id(self, trade_id: str) -> dict | None:
+        r = self.db.execute("SELECT * FROM trades WHERE id=?", (trade_id,)).fetchone()
+        return dict(r) if r else None
+
     def live_stats(self, symbol: str | None = None, strategy: str | None = None, since: str | None = None) -> dict:
         q = "SELECT r_multiple, hour FROM trades WHERE status='closed' AND r_multiple IS NOT NULL"
         args: list = []

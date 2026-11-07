@@ -298,6 +298,18 @@ def build_app(ctx) -> FastAPI:
             units.trade(bk(request).cfg, r)
         return rows
 
+    @app.get("/api/trades/{trade_id}")
+    async def api_trade(trade_id: str, request: Request):
+        """One trade, shaped like /api/trades rows, for opening it from the Analysis page (Nov 7 2026)."""
+        need(request)
+        r = bk(request).journal.trade_by_id(trade_id)
+        if r is None:
+            raise HTTPException(404, "no such trade")
+        r["events"] = json.loads(r["events"] or "[]")
+        r["draw"] = json.loads(r["draw"]) if r.get("draw") else None
+        units.trade(bk(request).cfg, r)
+        return r
+
     @app.get("/api/now")
     async def api_now(request: Request):
         need(request)

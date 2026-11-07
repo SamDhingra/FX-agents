@@ -1344,6 +1344,10 @@ html body{font-size:13.5px}
 .antbl td.why{text-align:left;white-space:normal;min-width:180px}.antbl tr.neg td:first-child b{color:var(--text-2)}
 .angive{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--line)}
 .angive:last-child{border-bottom:0}.angive small{color:var(--muted)}
+.angive[data-tid]{cursor:pointer;min-height:44px;align-items:center;border-radius:8px}.angive[data-tid]:hover,.angive[data-tid]:focus-visible{background:var(--hover,rgba(127,127,127,.08));outline:none}
+.anstale{margin:8px 0;padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12.5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.anstale.err{border-color:var(--down);color:var(--down)}.anstale .btn{min-height:32px}
+#anSort button:disabled{opacity:.4;cursor:not-allowed}
 .ancard{padding:11px 2px;border-bottom:1px solid var(--line);display:grid;gap:5px}.ancard:last-child{border-bottom:0}
 .ancard .ah{display:flex;align-items:baseline;gap:6px;font-size:13.5px}.ancard .ah .sp{flex:1}.ancard .am{font-size:12px}
 @media (max-width:760px){#anSetups.tbl{border:0;overflow:visible}.antbl .hm{display:none}.anbar{grid-template-columns:96px 1fr 64px}}
@@ -1686,10 +1690,11 @@ html body{font-size:13.5px}
     <section class="page" id="p-analysis">
       <div class="filters anrange" id="anRange"><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
       <div class="anfilt" id="anFilt"></div>
+      <div id="anStale"></div>
       <div class="kcards" id="anK"></div>
       <div class="kcards" id="anP"></div>
       <div class="grid hrows">
-        <div class="card c12"><h3>Running total <span class="mut heading-note">cumulative R by close time</span><span class="sp"></span><span class="mut heading-note" id="anCurveNote"></span></h3><div id="anCurve"></div></div>
+        <div class="card c12"><h3>Running total <span class="mut heading-note">cumulative R, one step per trade in close order (trade sequence, not a time axis)</span><span class="sp"></span><span class="mut heading-note" id="anCurveNote"></span></h3><div id="anCurve"></div></div>
         <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals · tap a row to filter</span><span class="sp"></span><span class="ansort" id="anSort"><button data-s="sum">Total R</button><button data-s="pips">Net pips</button><button data-s="win">Win rate</button><button data-s="payoff">Payoff</button></span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
         <div class="card c12"><h3>Low win rate, positive pips <span class="mut heading-note">setups winning under 45% that still net pips — their winners carry the losers</span></h3><div class="tbl" id="anBig"></div></div>
         <div class="card c6"><h3>Why signals weren't taken</h3><div id="anRef"></div></div>
@@ -1701,7 +1706,7 @@ html body{font-size:13.5px}
         <div class="card c6"><h3>By hour <span class="mut heading-note">entry time, New York · avg R</span></h3><div id="anHour"></div></div>
         <div class="card c6"><h3>By weekday <span class="mut heading-note">avg R</span></h3><div id="anDow"></div></div>
         <div class="card c6"><h3>Result distribution <span class="mut heading-note">trades per result band</span></h3><div id="anDist"></div></div>
-        <div class="card c6"><h3>How much of the move was kept <span class="mut heading-note">best price reached vs result</span></h3><div id="anExc"></div></div>
+        <div class="card c6"><h3>How much of the move was kept <span class="mut heading-note">best price reached vs result · trades with a recorded best move</span></h3><div id="anExc"></div></div>
         <div class="card c6"><h3>Timeframe</h3><div class="tbl" id="anTf"></div></div>
         <div class="card c6"><h3>Exit profile <span class="mut heading-note">standard · scalp · trend (first target 2R)</span></h3><div class="tbl" id="anProf"></div></div>
         <div class="card c6"><h3>How trades ended</h3><div class="tbl" id="anExit"></div></div>
@@ -1769,7 +1774,7 @@ html body{font-size:13.5px}
   <button id="moreInstall"><svg><use href="#i-home"/></svg>Add to Home Screen</button>
   <button id="moreAppearance"><svg><use href="#i-sun"/></svg>Appearance</button>
   <a href="logout"><svg><use href="#i-left"/></svg>Log out</a>
-  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-05.1</small>
+  <small class="mut" id="uiBuild" style="padding:6px 12px;font-size:11px">UI build 2026-11-07.1</small>
 </div>
 <div class="bookpane" id="bookPane" role="listbox" aria-label="Books"></div>
 <div class="scrim" id="scrim"></div>
@@ -5384,18 +5389,36 @@ function anFilters(opts){
   const n = Object.keys(AN.f).length;
   const phone = matchMedia("(max-width:760px)").matches;
   $("#anFilt").classList.toggle("folded", phone && !AN.open);
-  $("#anFilt").innerHTML = (phone ? `<button class="btn anftog" id="anTog" type="button">${AN.open ? "Hide filters" : "Filters"}${n ? ` · ${n} on` : ""}</button>` : "") + AN_FIELDS.map(([k, name]) => { const list = [...new Set([...(opts[k] || []), ...(AN.f[k] ? [AN.f[k]] : [])])];
+  $("#anFilt").innerHTML = (phone ? `<button class="btn anftog" id="anTog" type="button">${AN.open ? "Hide filters" : "Filters"}${n ? ": " + esc(Object.entries(AN.f).map(([k, v]) => lab(k, v)).join(" · ")) : ""}</button>` : "") + AN_FIELDS.map(([k, name]) => { const list = [...new Set([...(opts[k] || []), ...(AN.f[k] ? [AN.f[k]] : [])])];
       return `<label>${name}<select data-k="${k}" class="${AN.f[k] ? "set" : ""}"><option value="">All</option>${list.map(v => `<option value="${esc(v)}" ${AN.f[k] === v ? "selected" : ""}>${esc(lab(k, v))}</option>`).join("")}</select></label>`; }).join("")
     + (n ? `<button class="btn" id="anClear" type="button">Clear ${n} filter${n > 1 ? "s" : ""}</button>` : "");
   $$("#anFilt select").forEach(x => x.onchange = () => anSetFilter({[x.dataset.k]: x.value}));
   if($("#anTog")) $("#anTog").onclick = () => { AN.open = !AN.open; anFilters(opts); };
   if(n) $("#anClear").onclick = () => { AN.f = {}; anSetFilter({}); };
 }
+/* Nov 7 2026 (Astra review): only the newest request may render, and the scope label, numbers and snapshot time are
+   committed together. While loading or after a failure, the figures on screen are marked as the previous snapshot. */
+AN.seq = 0;
+const anBookName = b => b === "live" ? "Practice account" : bookName(b);
+const anRangeTxt = d => d >= 365 ? "last year" : `last ${d} days`;
 async function loadAnalysis(){
-  $("#anBook").textContent = (BOOK === "live" ? "Practice account" : bookName(BOOK));
-  const qs = Object.entries(AN.f).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join("");
-  try{ AN.data = await api(q("api/analysis?days=" + AN.days + qs)); anFilters(AN.data.options || {}); renderAnalysis(); }
-  catch(e){ $("#anSetups").innerHTML = `<div class="empty">Couldn't load the analysis (${esc(e.message)}).</div>`; }
+  const id = ++AN.seq, want = {book: BOOK, days: AN.days, f: {...AN.f}};
+  const qs = Object.entries(want.f).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join("");
+  if(AN.shown) $("#anStale").innerHTML = `<div class="anstale mut">Loading ${esc(anBookName(want.book))} · ${anRangeTxt(want.days)}… the figures below are still ${esc(anBookName(AN.shown.book))} as of ${hm(AN.shown.at)}.</div>`;
+  try{
+    const data = await api(q("api/analysis?days=" + want.days + qs));
+    if(id !== AN.seq) return;                                       // a newer request was started: drop this one
+    AN.data = data; AN.shown = {...want, at: new Date().toISOString()};
+    $("#anBook").textContent = `${anBookName(want.book)} · trades entered in the ${anRangeTxt(want.days)} · as of ${hm(AN.shown.at)}`;
+    $("#anStale").innerHTML = "";
+    anFilters(data.options || {}); renderAnalysis();
+  }catch(e){
+    if(id !== AN.seq) return;
+    $("#anStale").innerHTML = `<div class="anstale err">Couldn't load ${esc(anBookName(want.book))} (${esc(e.message)}).`
+      + (AN.shown ? ` The figures below are ${esc(anBookName(AN.shown.book))} as of ${hm(AN.shown.at)}.` : " Nothing is shown yet.")
+      + ` <button class="btn" id="anRetry" type="button">Retry</button></div>`;
+    $("#anRetry").onclick = loadAnalysis;
+  }
 }
 const anBar = (label, w, right, kind = "a") => `<div class="anbar"><span title="${esc(label)}">${esc(label)}</span><div class="tr"><i class="${kind}" style="width:${Math.max(0, Math.min(100, w))}%"></i></div><span>${right}</span></div>`;
 const anDiv = (label, v, right, max = 1) => { const w = v == null ? 0 : Math.min(1, Math.abs(v) / max) * 50;
@@ -5410,6 +5433,10 @@ function anSmall(rows, key, label, pips = AN.onePip){
   return `<table class="antbl"><tr><th>${label}</th><th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th>${pips ? `<th>Net pips</th><th class="hm">Avg win / loss</th>` : ""}</tr>` +
     rows.map(r => `<tr><td>${esc(key(r))}</td><td>${r.n}</td><td>${anPct(r.win)}</td><td class="${cls(r.avg)}">${sR(r.avg)}</td><td class="${cls(r.sum)}"><b>${sR(r.sum, 1)}</b></td>${pips ? `<td class="${cls(r.pips)}"><b>${pp(r.pips)}</b></td><td class="hm"><span class="up">${pp(r.win_pips)}</span> / <span class="down">${pp(r.loss_pips)}</span></td>` : ""}</tr>`).join("") + `</table>`;
 }
+function anSigScope(d){
+  const un = ((d.signal_scope || {}).unapplied || []).map(k => (AN_FIELDS.find(f => f[0] === k) || [k, k])[1].toLowerCase());
+  return un.length ? `signals: all ${un.join(", ")} states (not recorded on signals)` : "";
+}
 function renderAnalysis(){
   const d = AN.data; if(!d) return;
   const T = d.totals || {}, st = d.streaks || {}, sg = d.signals || {};
@@ -5418,17 +5445,20 @@ function renderAnalysis(){
       tile("Trades", T.n || 0, T.n ? `${anPct(T.win)} won · avg ${sR(T.avg)}` : `none in the last ${d.days} days`)
     + tile("Result", sR(T.sum, 1), smoney(d.pnl), cls(T.sum))
     + tile("Deepest dip", st.max_dd_r != null ? sR(st.max_dd_r, 1) : "—", st.longest_loss != null ? `longest losing run ${st.longest_loss} · winning ${st.longest_win}` : "", st.max_dd_r < 0 ? "down" : "")
-    + tile("Signals taken", `${sg.taken || 0} / ${sg.seen || 0}`, d.giveback_share != null ? `${anPct(d.giveback_share)} of trades gave back +1R` : "");
+    + tile("Signals taken", `${sg.taken || 0} / ${sg.seen || 0}`, anSigScope(d) || (d.giveback_share != null ? `gave back +1R: ${anPct(d.giveback_share)} of ${((d.excursion || {}).mfe_cov || [])[0]}` : ""));
   const pbs = Object.entries(d.pips_by_symbol || {}).filter(([, v]) => v != null);
-  AN.onePip = pbs.length === 1;                                   // pips only add up within one instrument
-  const be = T.payoff ? 1 / (1 + T.payoff) : null;
+  AN.onePip = pbs.length === 1 && (d.by_symbol || []).length === 1;   // pips only add up within one instrument
+  // payoff and break-even in R, on the same trades as the win rate (wins ÷ wins + losses); pip payoff only as a note,
+  // and only when one instrument is selected (Nov 7 2026, Astra review)
+  const pay = T.payoff_r, be = pay ? 1 / (1 + pay) : null;
   $("#anP").innerHTML = !pbs.length ? "" :
-      tile("Net pips", AN.onePip ? pp(T.pips) : pbs.length + " instruments", AN.onePip ? `avg ${pp(T.avg_pips)} per trade` : pbs.map(([k, v]) => `${iname(k)} ${pp(v)}`).join(" · "), AN.onePip ? cls(T.pips) : "")
+      tile("Net pips", AN.onePip ? pp(T.pips) : pbs.length + " instrument" + (pbs.length > 1 ? "s" : ""), AN.onePip ? `avg ${pp(T.avg_pips)} per trade` : pbs.map(([k, v]) => `${iname(k)} ${pp(v)}`).join(" · "), AN.onePip ? cls(T.pips) : "")
     + tile("Avg winner", AN.onePip ? pp(T.win_pips) + " pips" : "—", AN.onePip ? "average pips on winning trades" : "filter one instrument to compare pips", "up")
     + tile("Avg loser", AN.onePip ? pp(T.loss_pips) + " pips" : "—", AN.onePip ? "average pips on losing trades" : "pips differ in size per instrument", "down")
-    + tile("Payoff", T.payoff != null ? fmt(T.payoff, 2) + "×" : "—", be != null ? `break-even win rate ${anPct(be)} · actual ${anPct(T.win)}` : "", T.payoff != null && be != null ? (T.win > be ? "up" : "down") : "");
-  const sk = AN_SORT.key, sc = [...(d.scorecard || [])].sort((a, b) => (b[sk] ?? -1e9) - (a[sk] ?? -1e9));
-  $$("#anSort button").forEach(b => { b.classList.toggle("on", b.dataset.s === sk); b.onclick = () => { AN_SORT.key = b.dataset.s; try{ localStorage.setItem("fx-an-sort", AN_SORT.key); }catch(e){} renderAnalysis(); }; });
+    + tile("Payoff (R)", pay != null ? fmt(pay, 2) + "×" : "—", be != null ? `break-even win rate ${anPct(be)} · actual ${anPct(T.win_nz)}${T.flat_n ? ` (${T.flat_n} at 0R not counted)` : ""}${AN.onePip && T.payoff != null ? ` · in pips ${fmt(T.payoff, 2)}×` : ""}` : "needs both winners and losers", pay != null && be != null ? (T.win_nz > be ? "up" : "down") : "");
+  const sk = AN_SORT.key === "pips" && !AN.onePip ? "sum" : AN_SORT.key, sc = [...(d.scorecard || [])].sort((a, b) => (b[sk] ?? -1e9) - (a[sk] ?? -1e9));
+  $$("#anSort button").forEach(b => { b.classList.toggle("on", b.dataset.s === sk);
+    if(b.dataset.s === "pips"){ b.disabled = !AN.onePip; b.title = AN.onePip ? "" : "Filter one instrument to sort by pips (pip sizes differ)"; } b.onclick = () => { AN_SORT.key = b.dataset.s; try{ localStorage.setItem("fx-an-sort", AN_SORT.key); }catch(e){} renderAnalysis(); }; });
   const big = r => r.n >= 5 && (r.win || 0) < 0.45 && (r.pips || 0) > 0;
   if(sc.length && matchMedia("(max-width:760px)").matches){       // phone: one card per setup instead of a wide table
     $("#anSetups").innerHTML = sc.map(r => { const ref = Object.entries(r.refused || {}).slice(0, 3);
@@ -5454,14 +5484,21 @@ function renderAnalysis(){
     : `<div class="empty">No setup with a win rate under 45% nets positive pips in this range (at least 5 trades).</div>`;
   $$("#anBig [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   const rf = d.refusals || [], tot = rf.reduce((a, r) => a + r.n, 0), mx = Math.max(1, ...rf.map(r => r.n));
-  $("#anRef").innerHTML = rf.length ? rf.map(r => anBar(r.reason, r.n / mx * 100, `${r.n} · ${Math.round(r.n / tot * 100)}%`)).join("")
-    + `<p class="mut" style="font-size:12px;margin:10px 0 0">${sg.taken || 0} of ${sg.seen || 0} signals were taken. Each setup's own reasons are listed above.</p>`
-    : `<div class="empty">Every signal in range was taken.</div>`;
+  const scope = anSigScope(d);
+  $("#anRef").innerHTML = (!sg.seen ? `<div class="empty">No signals recorded in this selection.</div>`
+    : rf.length ? rf.map(r => anBar(r.reason, r.n / mx * 100, `${r.n} · ${Math.round(r.n / tot * 100)}% of refused`)).join("")
+      + `<p class="mut" style="font-size:12px;margin:10px 0 0">${sg.taken || 0} of ${sg.seen || 0} signals were taken; ${tot} refused (${Math.round(tot / sg.seen * 100)}% of all signals). Each setup's own reasons are listed above.</p>`
+    : `<div class="empty">All ${sg.seen} signals in this selection were taken.</div>`)
+    + (scope ? `<p class="mut" style="font-size:12px;margin:8px 0 0">Scope: ${esc(scope)}; the trades above use every filter.</p>` : "");
   const gb = d.givebacks || [];
-  $("#anGive").innerHTML = gb.length ? gb.map(g => `<div class="angive"><span class="mut">${md(g.opened)} ${hm(g.opened)}</span>
+  $("#anGive").innerHTML = gb.length ? gb.map(g => `<div class="angive" role="button" tabindex="0" data-tid="${esc(g.id)}" title="Open this trade"><span class="mut">${md(g.opened)} ${hm(g.opened)}</span>
       <span><b>${esc(g.side === "LONG" ? "Long" : "Short")} ${esc(iname(g.symbol))}</b> <small>${esc(g.setup)}</small></span>
       <span class="num">peak <span class="up">${sR(g.mfe)}</span> → <span class="${cls(g.r)}">${sR(g.r)}</span>${g.pips != null ? ` <small>(${pp(g.pips)} pips)</small>` : ""}</span></div>`).join("")
     : `<div class="empty">No trade reached +1R and then lost.</div>`;
+  $$("#anGive [data-tid]").forEach(el => { const open = async () => {
+      try{ openTrade(await api(q("api/trades/" + encodeURIComponent(el.dataset.tid)))); }
+      catch(e){ toast("Couldn't open that trade: " + e.message); } };
+    el.onclick = open; el.onkeydown = ev => { if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); open(); } }; });
   const hrs = d.by_hour || [], mR = Math.max(0.25, ...hrs.map(h => Math.abs(h.avg || 0)));
   $("#anHour").innerHTML = hrs.length ? hrs.map(h => anDiv(String(h.hour).padStart(2, "0") + ":00 · " + h.n, h.avg, sR(h.avg), mR)).join("") : `<div class="empty">No trades in this range.</div>`;
   const dw = d.by_weekday || [], mD = Math.max(0.25, ...dw.map(h => Math.abs(h.avg || 0)));
@@ -5477,23 +5514,27 @@ function renderAnalysis(){
   $("#anDist").innerHTML = dn ? ds.map((x, i) => anBar(x.bucket, x.n / dmx * 100, `${x.n} · ${Math.round(x.n / dn * 100)}%`, i < 3 ? "n" : "p")).join("") : `<div class="empty">No trades in this range.</div>`;
   const e = d.excursion || {}, f2 = v => v == null ? "—" : sR(v);
   $("#anExc").innerHTML = (T.n ? `<div class="ankv">
-      <span>Trades that reached +1R at some point</span><b>${anPct(e.reached_1r)}</b>
+      <span>Trades that reached +1R at some point</span><b>${anPct(e.reached_1r)} <small class="mut">of ${(e.mfe_cov || [])[0]} with a recorded peak${(e.mfe_cov || [])[0] < (e.mfe_cov || [])[1] ? ` (${(e.mfe_cov || [])[1] - (e.mfe_cov || [])[0]} missing)` : ""}</small></b>
+      <span>…of those, closed at or below 0</span><b>${anPct(e.gave_back_of_reached)} <small class="mut">${e.reached_n || 0} trade${e.reached_n === 1 ? "" : "s"}</small></b>
       <span>Winners: best move → result</span><b>${f2(e.win_mfe)} → <span class="up">${f2(e.win_r)}</span></b>
-      <span>Share of winners' best move kept</span><b>${e.kept == null ? "—" : Math.round(e.kept * 100) + "%"}</b>
+      <span>Share of winners' best move kept</span><b>${e.kept == null ? "—" : Math.round(e.kept * 100) + "%"} <small class="mut">peak recorded for ${(e.kept_cov || [])[0]} of ${(e.kept_cov || [])[1]} winners</small></b>
       <span>Losers: best move before losing</span><b>${f2(e.loss_mfe)} → <span class="down">${f2(e.loss_r)}</span></b>
       ${e.win_mae == null && e.loss_mae == null ? "" : `<span>Worst move against: winners · losers</span><b>${f2(e.win_mae == null ? null : -Math.abs(e.win_mae))} · ${f2(e.loss_mae == null ? null : -Math.abs(e.loss_mae))}</b>`}</div>`
     : `<div class="empty">No trades in this range.</div>`);
   const cv = d.curve || [];
   if(cv.length > 1){
-    const W = 600, H = 170, lo = Math.min(0, ...cv.map(p => p.r)), hi = Math.max(0, ...cv.map(p => p.r)), sp = (hi - lo) || 1;
-    const y = v => H - 8 - (v - lo) / sp * (H - 16), x = i => i / (cv.length - 1) * W, last = cv[cv.length - 1].r;
+    const cs = d.curve_stats || {}, N = Math.max(1, cs.n || cv.length - 1);
+    const W = 600, H = 170, lo = cs.low ?? Math.min(0, ...cv.map(p => p.r)), hi = cs.high ?? Math.max(0, ...cv.map(p => p.r)), sp = (hi - lo) || 1;
+    const y = v => H - 8 - (v - lo) / sp * (H - 16), last = cs.last ?? cv[cv.length - 1].r;
+    const x = (i, p) => (p.i ?? i) / (p.i != null ? N : cv.length - 1) * W;
     $("#anCurve").innerHTML = `<svg class="ancurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="z" x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}"/>
-      <polyline class="l" stroke="var(--${last >= 0 ? "up" : "down"})" points="${cv.map((p, i) => x(i).toFixed(1) + "," + y(p.r).toFixed(1)).join(" ")}"/></svg>`;
-    $("#anCurveNote").textContent = `${md(cv[0].t)} → ${md(cv[cv.length - 1].t)} · ${sR(last, 1)} · high ${sR(hi, 1)}`;
+      <polyline class="l" stroke="var(--${last >= 0 ? "up" : "down"})" points="${cv.map((p, i) => x(i, p).toFixed(1) + "," + y(p.r).toFixed(1)).join(" ")}"/></svg>`;
+    $("#anCurveNote").textContent = `${N} trades · ${md(cv[0].t)} → ${md(cv[cv.length - 1].t)} · now ${sR(last, 1)} · high ${sR(hi, 1)} · low ${sR(lo, 1)}`;
   } else { $("#anCurve").innerHTML = `<div class="empty">Not enough closed trades for a curve.</div>`; $("#anCurveNote").textContent = ""; }
   $$("#anSetups [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
 }
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-07.1");
 const _goAn = go;
 go = function(p){ _goAn(p); if(p === "analysis") loadAnalysis(); };
 const _setBookAn = setBook;
