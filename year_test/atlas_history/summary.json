@@ -1,0 +1,24 @@
+{
+ "trades": 1068614,
+ "jobs": [
+  "trades_NDQ_15m.csv.gz",
+  "trades_NDQ_1h.csv.gz",
+  "trades_NDQ_30m.csv.gz",
+  "trades_NDQ_3m.csv.gz",
+  "trades_NDQ_5m.csv.gz",
+  "trades_US30_15m.csv.gz",
+  "trades_US30_1h.csv.gz",
+  "trades_US30_30m.csv.gz",
+  "trades_US30_3m.csv.gz",
+  "trades_US30_5m.csv.gz",
+  "trades_XAUUSD_15m.csv.gz",
+  "trades_XAUUSD_1h.csv.gz",
+  "trades_XAUUSD_30m.csv.gz",
+  "trades_XAUUSD_3m.csv.gz",
+  "trades_XAUUSD_5m.csv.gz"
+ ],
+ "slices": 5172,
+ "eligible": 4688,
+ "stand_out": 17,
+ "clearly_bad": 2252
+}
