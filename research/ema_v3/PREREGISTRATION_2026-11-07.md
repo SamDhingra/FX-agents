@@ -90,3 +90,29 @@ Instruments are XAUUSD, NDQ and US30, each judged separately. There are no other
 - `ref` without the stop, which reproduces the earlier v2 "day" long numbers as a code check;
 - the exit-reason mix and the stop-hit share;
 - trades per day.
+
+## Outcome (Nov 7, 2026): nothing passed dev; per this registration EMA21 research stops (no holdout, no vault)
+
+| instrument | config | trades | avg R | 95% range | vs random timing (95% range) | daily vs ref |
+|---|---|---|---|---|---|---|
+| XAUUSD | ref | 371 | +0.095 | −0.158 to +0.384 | +0.128 (−0.139 to +0.418) | — |
+| XAUUSD | A_norsi | 1,908 | −0.064 | −0.142 to +0.021 | +0.060 (−0.024 to +0.152) | −0.303 |
+| XAUUSD | B_h1 | 256 | +0.235 | −0.091 to +0.610 | +0.261 (−0.086 to +0.656) | +0.048 |
+| NDQ | ref | 434 | +0.117 | −0.200 to +0.479 | −0.140 (−0.479 to +0.237) | — |
+| NDQ | A_norsi | 1,860 | +0.021 | −0.098 to +0.154 | **−0.294 (−0.421 to −0.158)** | −0.022 |
+| NDQ | B_h1 | 305 | +0.114 | −0.260 to +0.550 | −0.148 (−0.528 to +0.296) | −0.031 |
+| US30 | ref | 492 | +0.257 | −0.094 to +0.680 | +0.089 (−0.294 to +0.533) | — |
+| US30 | A_norsi | 2,036 | −0.041 | −0.159 to +0.094 | **−0.162 (−0.285 to −0.022)** | −0.402 |
+| US30 | B_h1 | 301 | +0.518 | −0.001 to +1.119 | +0.343 (−0.200 to +0.972) | +0.057 |
+
+- **Code check passed.** `ref` without the stop reproduces the earlier results exactly (371 / +0.079, 434 / +0.108,
+  492 / +0.286). The live 3 × ATR stop changes little (3–10% of trades hit it).
+- **Removing RSI (A) is clearly worse.** It gives 4–5× more trades, every average is at or below zero, and on NDQ and
+  US30 it does worse than random entries at the same hours, with the whole range below zero.
+- **Random long entries at the same hours earn +0.12 to +0.32R on the indices.** The rule's index profits are mostly
+  the long drift of 2024–2026, not entry timing. NDQ `ref` is −0.14R behind random.
+- **The 1h filter (B) is the near miss.** On US30 it gives +0.518R, but the range is −0.001 to +1.119 and it does not
+  beat random timing (−0.200 to +0.972). It fails on the screen data, which had already been seen, so it is not sent to
+  the holdout and not re-tested in another form.
+- The `ema21_rsi55` paper book continues as a record only. Its journal R is in stop units (3 ATR): divide this report's
+  R by 3 to compare.
