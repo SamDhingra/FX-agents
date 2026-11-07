@@ -519,6 +519,15 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/trendprotect-build.log 2>&1 || { echo "build failed — see logs/trendprotect-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.trend_protect --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  emav3)     # EMA21 round 3 (registered Nov 7 2026, research/ema_v3/): cross without RSI, and 1h-aligned, with the live
+             # 3×ATR stop and a random-timing control. ./fx.sh emav3 [dev|holdout|vault] → data/year_test/ema_v3_<stage>/report.md
+             # holdout runs only what passed dev; vault only one nominee that passed holdout.
+             need_env; mkdir -p logs; st_="${2:-dev}"
+             case "$st_" in dev) ex_=dev_m1;; holdout) ex_=holdout_m1;; vault) ex_=old_m1;; *) echo "stage: dev | holdout | vault"; exit 1;; esac
+             [[ -d "data/export/$ex_" ]] || { echo "no data/export/$ex_ — run ./fx.sh export first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/emav3-build.log 2>&1 || { echo "build failed — see logs/emav3-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.ema_v3 "$st_" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   goldadd05) # gold breakout add-on-resume armed at +0.5R (registered Nov 3 2026, research/gold_add05/): judged ONCE on
              # 2016–2020. ./fx.sh goldadd05 → data/year_test/gold_add05_vault/report.md
              need_env; mkdir -p logs
