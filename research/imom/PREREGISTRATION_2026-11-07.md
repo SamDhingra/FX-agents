@@ -70,3 +70,19 @@ What we have already seen in this family, on NDQ only:
 - only days with |r| above its running median (earlier days only);
 - results by year, long vs short days, and always-long itself;
 - gold, with the COMEX close: signal = previous 13:30 → today 13:00, trade 13:00 → 13:30 NY.
+
+## Outcome (Nov 7, 2026): US30 fails seen; closing-flow momentum on index CFDs is closed (the vault is not opened)
+
+| instrument | trades | right | avg bps | 95% range | vs always long | random sign p |
+|---|---|---|---|---|---|---|
+| US30 (decides) | 1,375 | 47% | −1.05 | −2.13 to +0.08 | +0.18 (−1.51 to +1.82) | 0.785 |
+| NDQ (supporting) | 1,375 | 49% | −0.33 | −1.86 to +1.22 | +0.11 | 0.454 |
+| gold, 13:00 → 13:30 (information) | 1,455 | 43% | −1.75 | −2.46 to −0.95 | +0.28 | 0.575 |
+
+- **The direction is not predicted at all on US30.** The signal picked the right direction on 47% of days, and 78% of
+  random-sign versions did at least as well.
+- **NDQ worked early and then reversed.** It was positive in 2021–2022 (+0.9 and +4.4 bps), then negative in 2024–2025
+  (−2.4 and −4.7). This fits Zhang & Hua's finding that the effect has weakened on QQQ in recent years.
+- **The 15:00 → 15:30 signal (information)** was the best variant: US30 +0.39 bps, p = 0.06, positive in the first half
+  only. It is not a pass, and it is not re-tested in another form.
+- **Being long the last half-hour** lost 0.4–1.2 bps per day after the spread.
