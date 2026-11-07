@@ -519,6 +519,15 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/trendprotect-build.log 2>&1 || { echo "build failed — see logs/trendprotect-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.trend_protect --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  imom)      # intraday momentum into the close (registered Nov 7 2026, research/imom/): 15:30 → 16:00 NY in the direction of
+             # the previous 16:00 → 15:30 move. ./fx.sh imom [seen|vault] → data/year_test/imom_<stage>/report.md
+             # seen = 2021 → Sep 2026 (US30 decides); vault = 2016–2020, only if US30 passed seen.
+             need_env; mkdir -p logs; st_="${2:-seen}"
+             case "$st_" in seen) sets_="holdout_m1 dev_m1";; vault) sets_="old_m1_idx";; *) echo "stage: seen | vault"; exit 1;; esac
+             for s_ in $sets_; do [[ -d "data/export/$s_" ]] || { echo "no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/imom-build.log 2>&1 || { echo "build failed — see logs/imom-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.imom "$st_" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   emav3)     # EMA21 round 3 (registered Nov 7 2026, research/ema_v3/): cross without RSI, and 1h-aligned, with the live
              # 3×ATR stop and a random-timing control. ./fx.sh emav3 [dev|holdout|vault] → data/year_test/ema_v3_<stage>/report.md
              # holdout runs only what passed dev; vault only one nominee that passed holdout.
