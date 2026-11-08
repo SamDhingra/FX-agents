@@ -519,6 +519,19 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/trendprotect-build.log 2>&1 || { echo "build failed — see logs/trendprotect-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.trend_protect --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dowdata)   # Dow 30 member minute bars from Alpaca (free account; ALPACA_KEY_ID / ALPACA_SECRET_KEY in .env), for the US30
+             # one-stock reversal test. Resumable: run it again after a stop. → data/dow_m1/ (not published)
+             need_env; mkdir -p logs
+             grep -q '^ALPACA_KEY_ID=.' .env && grep -q '^ALPACA_SECRET_KEY=.' .env || { echo "add ALPACA_KEY_ID= and ALPACA_SECRET_KEY= to .env (free Alpaca account → API keys)"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dowdata-build.log 2>&1 || { echo "build failed — see logs/dowdata-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.dow_data fetch "${@:2}" </dev/null ;;
+  dowrev)    # US30 one-stock reversal (registered Nov 7 2026, research/dow_reversal/): ./fx.sh dowrev [seen|vault]
+             # → data/year_test/dow_reversal_<stage>/report.md. Needs ./fx.sh dowdata first. vault only after a seen pass.
+             need_env; mkdir -p logs; st_="${2:-seen}"
+             [[ -d data/dow_m1 ]] || { echo "no data/dow_m1 — run ./fx.sh dowdata first"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dowrev-build.log 2>&1 || { echo "build failed — see logs/dowrev-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.dow_reversal "$st_" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   imom)      # intraday momentum into the close (registered Nov 7 2026, research/imom/): 15:30 → 16:00 NY in the direction of
              # the previous 16:00 → 15:30 move. ./fx.sh imom [seen|vault] → data/year_test/imom_<stage>/report.md
              # seen = 2021 → Sep 2026 (US30 decides); vault = 2016–2020, only if US30 passed seen.
