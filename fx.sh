@@ -544,6 +544,19 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/floorexit-build.log 2>&1 || { echo "build failed — see logs/floorexit-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.floor_exit "$st_" --workers "${3:-2}" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  jevreplay) # can Jev read the next hour from anonymised candles? (registered Nov 9 2026, research/jev_replay/)
+             # ./fx.sh jevreplay [dry|run] [concurrency]  → data/year_test/jev_replay/report.md
+             # dry = count decisions + cost estimate, no Jev call. run = runs in the background (≈15k calls, ≈$0.30),
+             # resumable: answers are cached, so running it again only asks what is missing. Follow: tail -f logs/jevreplay.log
+             need_env; mkdir -p logs; md_="${2:-run}"; cc_="${3:-4}"
+             [[ -d data/export/dev_m1 ]] || { echo "no data/export/dev_m1 — run ./fx.sh export first"; exit 1; }
+             grep -q '^TYPESAFE_API_KEY=.\+' .env || { echo "TYPESAFE_API_KEY is empty in .env"; exit 1; }
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/jevreplay-build.log 2>&1 || { echo "build failed — see logs/jevreplay-build.log"; exit 1; }
+             if [[ "$md_" == dry ]]; then
+               $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.jev_replay --dry-run </dev/null; exit $?
+             fi
+             nohup bash -c "$DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.jev_replay --concurrency $cc_ </dev/null && { [[ -f \"$HOME/.ssh/fx_results\" ]] && ./fx.sh publish; }" >logs/jevreplay.log 2>&1 &
+             echo "started in the background (pid $!). Follow: tail -f logs/jevreplay.log — it publishes when complete." ;;
   imom)      # intraday momentum into the close (registered Nov 7 2026, research/imom/): 15:30 → 16:00 NY in the direction of
              # the previous 16:00 → 15:30 move. ./fx.sh imom [seen|vault] → data/year_test/imom_<stage>/report.md
              # seen = 2021 → Sep 2026 (US30 decides); vault = 2016–2020, only if US30 passed seen.
