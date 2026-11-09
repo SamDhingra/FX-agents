@@ -976,8 +976,15 @@ class PositionManagerAgent(Agent):
         await self.finalize(pos, ev["price"], reason)
 
     async def on_pre_news(self, ev):
-        """Just before a release: protect winners (stop to breakeven+), close everything else."""
+        """Just before a release: protect winners (stop to breakeven+), close everything else.
+        Paper books that run a frozen rule with its own exits (external_mgmt: C10, gold breakout, H1 trend, EMA/RSI,
+        daily RSI2) are left alone: their tested rules hold through news, and the paper record must match the test
+        (Nov 9 2026, Astra exit review). On the practice account the safety exit still applies to every trade."""
+        paper = getattr(self.ctx, "book_key", None) not in (None, "live")
         for pos in list(self.state.positions.values()):
+            if paper and pos.meta.get("external_mgmt"):
+                pos.log(self.now(), "pre_news_skipped", event=ev.get("event"), why="frozen rule book: holds through news")
+                continue
             px = self.state.last_prices.get(pos.symbol, pos.entry)
             if ev["action"] == "protect" and pos.r_now(px) > self.m["lock_r"] + 0.05:
                 be = pos.entry + pos.side * self.m["lock_r"] * pos.risk_per_unit

@@ -141,10 +141,18 @@ class C10Trader(Agent):
         for pos in [p for p in self.state.positions.values() if p.symbol == sym and p.status == "open"
                     and p.strategy == STRATEGY and not p.meta.get("pending_close")]:
             tgt = pos.meta.get("target")
-            if tgt is not None and (bar.high >= tgt if pos.side > 0 else bar.low <= tgt):
-                await self.close(pos, float(tgt), "target", limit=True)
-            elif t.hour * 60 + t.minute >= EXIT_MOD and t.hour < 17:
+            # Nov 9 2026 (Astra exit review): the 15:45 deadline comes FIRST. It used to be checked only when the
+            # minute's mid hadn't touched the target, so a mid touch with the resting target unfilled (bid short of
+            # it) skipped the deadline every such minute. At the deadline: a resting target that already filled is
+            # booked as the target; otherwise the market close cancels it and closes the rest (no double close).
+            if t.hour * 60 + t.minute >= EXIT_MOD and t.hour < 17:
+                if tgt is not None and (pos.meta.get("tp") or {}).get("full"):
+                    await self.close(pos, float(tgt), "target", limit=True)
+                    if pos.status != "open":
+                        continue
                 await self.close(pos, bar.close, "time_1545")
+            elif tgt is not None and (bar.high >= tgt if pos.side > 0 else bar.low <= tgt):
+                await self.close(pos, float(tgt), "target", limit=True)
 
     async def close(self, pos: Position, price: float, reason: str, limit: bool = False):
         try:

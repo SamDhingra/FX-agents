@@ -38,7 +38,6 @@ class H1VolTrendTrader(Agent):
         self.risk_pct = float(c.get("risk_pct", 0.001))
         self.done_day: dict[str, str] = {}          # symbol → trading date whose opportunity is used up
         self.last_hour: dict[str, pd.Timestamp] = {}
-        self.trail: dict[str, dict] = {}            # position id → trailing state (best close, armed)
         self.bus.subscribe("bar_1m", self.on_bar)
 
     def _h1(self, sym: str, upto: pd.Timestamp) -> pd.DataFrame:
@@ -68,7 +67,9 @@ class H1VolTrendTrader(Agent):
     async def manage(self, sym: str, ind: H1Ind, bar: Bar):
         q = float(self.cfg["instruments"][sym]["tick_size"])
         for pos in [p for p in self.state.positions.values() if p.symbol == sym and p.status == "open" and p.strategy == STRATEGY]:
-            st = self.trail.setdefault(pos.id, {})
+            # trailing state (best hourly close, armed at +1R) lives on the position, which paper books save and
+            # restore, so an update/restart continues the same trail (Nov 9 2026, Astra exit review)
+            st = pos.meta.setdefault("h1_trail", {})
             t = len(ind.C) - 1
             if tfloor(pd.Timestamp(pos.opened_ts), "min") > self.last_hour[sym] - pd.Timedelta("1h"):
                 continue                              # this hourly bar began before the entry minute
