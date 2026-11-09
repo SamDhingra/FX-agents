@@ -175,6 +175,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
     lvl = lambda k: px_in + side * (m.rr + (k - 1) * m.trail_step_r) * R                 # noqa: E731
     stop_after = lambda k: px_in + side * ((0.0 if k == 1 else m.rr + (k - 2) * m.trail_step_r) + m.lock_r) * R  # noqa: E731
     stop_px, step, adds = stop, 0, 0
+    j_t1 = -1                                         # the minute the first target was reached (-1: never)
     early_done = False
     open_q, avg, realized = 1.0, px_in, 0.0          # realized in price × qty (initial qty = 1)
     mfe, best_j = 0.0, j0
@@ -187,7 +188,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
     def done(px, reason, j):
         tot = realized + (px - avg) * side * open_q
         return {"r": float(tot / R), "exit_reason": reason, "j_exit": int(j), "adds": adds, "steps": step,
-                "mfe": float(mfe), "R": float(R), "px_in": float(px_in)}
+                "mfe": float(mfe), "R": float(R), "px_in": float(px_in), "j_t1": int(j_t1)}
 
     def try_add(j, worst_stop, ref):
         """Add at market (fills at the ask/bid). The never-risk-open-profit check uses `ref` exactly as live
@@ -262,6 +263,7 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
         while (hi - lvl(step + 1)) * side >= 0:
             step += 1
             if step == 1:
+                j_t1 = j
                 if full_exit:                         # scalp / tpX (or adds globally off): all out
                     return done(mkt, "target", j)
                 q = 0.0 if early_done else min(m.partial, open_q)     # an early partial replaces the 1R one
@@ -495,7 +497,8 @@ def run_job(args) -> list[dict]:
                                  "r": res["r"], "w": w, "rw": res["r"] * w * res["R"] / dist,
                                  "cost_r": spread * (1 + m.add_frac * res["adds"]) / res["R"],
                                  "exit": res["exit_reason"], "bars": int((res["j_exit"] - j0)), "adds": res["adds"],
-                                 "mfe": res["mfe"], "busy_self": busy, "R_px": res["R"]})
+                                 "mfe": res["mfe"], "busy_self": busy, "R_px": res["R"],
+                                 "floor_px": float((getattr(s, "features", None) or {}).get("floor", np.nan))})
     log.info("%s %s: %d trades (%.0fs)", sym, tf, len(rows), time.time() - t0)
     return rows
 

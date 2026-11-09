@@ -536,6 +536,14 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/dowrev-build.log 2>&1 || { echo "build failed — see logs/dowrev-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.dow_reversal "$st_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  floorexit) # early exit when the ICT OTE / DTFX Zone floor breaks (registered Nov 9 2026, research/floor_exit/):
+             # ./fx.sh floorexit [seen|vault] → data/year_test/floor_exit_<stage>/report.md (vault only after a seen pass)
+             need_env; mkdir -p logs; st_="${2:-seen}"
+             case "$st_" in seen) h_=data/history_x/seen_2021_2026; sets_="holdout_m1 dev_m1";; vault) h_=data/history_x/old_2016_2020; sets_="old_m1 old_m1_idx";; *) echo "stage: seen | vault"; exit 1;; esac
+             if [[ ! -d "$h_" ]]; then for s_ in $sets_; do [[ -d "data/export/$s_" ]] || { echo "no $h_ and no data/export/$s_ — run ./fx.sh export first"; exit 1; }; done; fi
+             BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/floorexit-build.log 2>&1 || { echo "build failed — see logs/floorexit-build.log"; exit 1; }
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.floor_exit "$st_" --workers "${3:-2}" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   imom)      # intraday momentum into the close (registered Nov 7 2026, research/imom/): 15:30 → 16:00 NY in the direction of
              # the previous 16:00 → 15:30 move. ./fx.sh imom [seen|vault] → data/year_test/imom_<stage>/report.md
              # seen = 2021 → Sep 2026 (US30 decides); vault = 2016–2020, only if US30 passed seen.

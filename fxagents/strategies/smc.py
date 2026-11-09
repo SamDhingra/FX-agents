@@ -144,6 +144,7 @@ def _leg_retrace_scan(self: Strategy, df, ctx, fib_touch: float, fib_floor: floa
                                  structural_target=side * leg["high"],
                                  features={"leg_atr": float(rng / a[i]),
                                            "retrace": float((leg["high"] - L[i]) / rng),
+                                           "floor": float(side * floor_lvl),     # the setup's own invalidation price (Nov 9 2026)
                                            "draw": [dbox(px, leg["low"], leg["high"], leg["start"] - 3, i, "impulse leg", "leg"),
                                                     dline(px, touch_lvl, leg["start"], i, f"{fib_touch:.0%} retrace"),
                                                     dline(px, floor_lvl, leg["start"], i, f"{fib_floor:.0%} floor", "invalid")]}))
