@@ -197,11 +197,8 @@ class SelectorAgent(Agent):
                 "this_hour": h, "this_hour_exp_shrunk": round(shrunk, 3),
                 "recent": {"n": s["recent_n"], "exp": s["recent_exp"]},
                 "live_trades": live_rec, "rr": st.rr}
-            q = 1 / (1 + math.exp(-(3.0 * shrunk + 1.0 * s["recent_exp"]
-                                    + (0.5 * live_rec["expectancy"] if live_rec["n"] >= 5 else 0))))
-            if s["n"] < sel_cfg["min_trades_for_stats"]:
-                q *= 0.6
-            quant[st.id] = q
+            quant[st.id] = quant_score(shrunk, s["n"], s["recent_exp"], s.get("recent_n", 0), live_rec,
+                                       sel_cfg["min_trades_for_stats"])
         regime = self.regime(sym, hour_ts)
         rating = await self.ctx.jev.rate_strategies(sym, hour, regime, cands)
         w = jcfg["weight"]
@@ -353,6 +350,22 @@ class TraderAgent(Agent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def quant_score(shrunk: float, n: int, recent_exp: float, recent_n: int, live_rec: dict, m: int,
+                old_penalty: bool = False) -> float:
+    """The hourly pick's statistical score, 0…1 (0.5 = no edge). Since Nov 9 2026 a strategy with few trades is not
+    cut by a flat ×0.6 (which kept every new strategy out, however good): instead each average counts in proportion to
+    its evidence, n / (n + m) with m = min_trades_for_stats. A new strategy with a positive record can be picked; three
+    lucky trades can't outrank a long positive record. old_penalty=True gives the rule before Nov 9 (for comparisons)."""
+    if old_penalty:
+        q = 1 / (1 + math.exp(-(3.0 * shrunk + 1.0 * recent_exp
+                                + (0.5 * live_rec.get("expectancy", 0.0) if (live_rec.get("n") or 0) >= 5 else 0))))
+        return q * 0.6 if n < m else q
+    ev = lambda k: k / (k + m) if k > 0 else 0.0                                    # noqa: E731
+    ln = live_rec.get("n") or 0
+    z = 3.0 * shrunk * ev(n) + 1.0 * recent_exp * ev(recent_n or n) + 0.5 * live_rec.get("expectancy", 0.0) * ev(ln)
+    return 1 / (1 + math.exp(-z))
+
+
 def jev_gate(g: dict, jc: dict) -> bool:
     """True = the signal may go on to Risk. 'enforce': quality and confidence gates block.
     'advisory': Jev's grade never blocks (except below advisory_floor) — it sets the size instead.

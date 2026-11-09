@@ -24,23 +24,22 @@ import pandas as pd
 from .config import load_config
 
 
-def quant(c: dict, min_trades: int) -> float:
-    """The selector's own statistical score of a candidate (SelectorAgent.select)."""
-    rec = (c.get("recent") or {}).get("exp", 0.0) or 0.0
-    lr = c.get("live_trades") or {}
-    q = 1 / (1 + math.exp(-(3.0 * float(c.get("this_hour_exp_shrunk", 0.0)) + 1.0 * float(rec)
-                            + (0.5 * float(lr.get("expectancy", 0.0)) if (lr.get("n") or 0) >= 5 else 0))))
-    if ((c.get("overall") or {}).get("n") or 0) < min_trades:
-        q *= 0.6
-    return q
+def quant(c: dict, min_trades: int, old_penalty: bool = False) -> float:
+    """The selector's own statistical score of a candidate (agents.trading.quant_score)."""
+    from .agents.trading import quant_score
+    rec = c.get("recent") or {}
+    return quant_score(float(c.get("this_hour_exp_shrunk", 0.0)), int((c.get("overall") or {}).get("n") or 0),
+                       float(rec.get("exp", 0.0) or 0.0), int(rec.get("n") or 0), c.get("live_trades") or {}, min_trades,
+                       old_penalty)
 
 
-def hour_rows(inputs: dict, outputs: dict, cfg) -> tuple[list[dict], float]:
-    w, mins = float(cfg["jev"]["weight"]), int(cfg["selector"]["min_trades_for_stats"])
+def hour_rows(inputs: dict, outputs: dict, cfg, w: float | None = None, old_penalty: bool = False) -> tuple[list[dict], float]:
+    w = float(cfg["jev"]["weight"]) if w is None else w
+    mins = int(cfg["selector"]["min_trades_for_stats"])
     rows = []
     for k, c in (inputs.get("strategies") or {}).items():
         a = outputs.get(k) or {}
-        q = quant(c, mins)
+        q = quant(c, mins, old_penalty)
         conf, jv = float(a.get("confidence", 0.0)), float(a.get("value", q))
         rows.append({"id": c.get("name"), "tf": c.get("timeframe"), "combined": w * (conf * jv + (1 - conf) * q) + (1 - w) * q,
                      "jev": jv, "quant": q, "hour_exp": c.get("this_hour_exp_shrunk"),
@@ -118,12 +117,74 @@ def _main(argv=None):
 
 
 
+def picks(rows: list[dict], tok: float, minsel: float, top: int, tok_gate: bool) -> tuple[list[str], str]:
+    """The selector's choice for one logged hour: picked ids, and why nothing was picked (or "")."""
+    if tok_gate and tok < 0.4:
+        return [], "Jev said don't trade this hour (trade_ok < 0.4)"
+    per_tf, out = {}, []
+    for r in rows:
+        if r["combined"] >= minsel and per_tf.get(r["tf"], 0) < top:
+            per_tf[r["tf"]] = per_tf.get(r["tf"], 0) + 1
+            out.append(r["id"])
+    return out, "" if out else f"no strategy scored ≥ {minsel}"
+
+
+def compare(days: int = 14, cfg=None) -> str:
+    """Every hourly rating the account logged in the last `days`, re-picked under the rule before Nov 9 2026 (Jev 60%,
+    Jev's trade_ok gate, ×0.6 for few trades) and under today's rule (stats only, evidence-weighted). Read-only."""
+    cfg = cfg or load_config("config.yaml")
+    con = sqlite3.connect(f"file:{Path(cfg['storage']['db_path'])}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    since = (pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(days=days)).isoformat()
+    dec = con.execute("SELECT ts, symbol, source, inputs, outputs FROM decisions WHERE kind='strategy_rating' AND ts >= ? "
+                      "ORDER BY ts", (since,)).fetchall()
+    con.close()
+    minsel, top = float(cfg["jev"]["min_select_score"]), int(cfg["selector"]["top_n_per_tf"])
+    n_old = n_new = 0
+    why_old, why_new, got_old, got_new, sym_old, sym_new = (Counter() for _ in range(6))
+    hours = Counter()
+    for d in dec:
+        i, o = json.loads(d["inputs"] or "{}"), json.loads(d["outputs"] or "{}")
+        hours[d["symbol"]] += 1
+        ro, tok = hour_rows(i, o, cfg, w=0.6, old_penalty=True)
+        rn, _ = hour_rows(i, o, cfg, w=0.0)
+        po, wo = picks(ro, tok, minsel, top, True)
+        pn, wn = picks(rn, tok, minsel, top, False)
+        n_old += len(po); n_new += len(pn); sym_old[d["symbol"]] += len(po); sym_new[d["symbol"]] += len(pn)
+        got_old.update(po); got_new.update(pn)
+        if wo: why_old[wo] += 1
+        if wn: why_new[wn] += 1
+    md = [f"# Hourly pick: before vs after taking Jev out (last {days} days, {len(dec)} logged hourly ratings)", "",
+          "Same logged hours, same strategy statistics, re-picked under each rule. Before = Jev 60% of the score, Jev's "
+          "trade_ok gate, ×0.6 for strategies with fewer than "
+          f"{cfg['selector']['min_trades_for_stats']} trades. Now = statistics only, small samples weighted by evidence. "
+          f"A pick needs a score ≥ {minsel}; at most {top} per timeframe.", "",
+          "| instrument | hours rated | picks before | picks now |", "|---|---|---|---|"]
+    md += [f"| {s} | {hours[s]} | {sym_old[s]} | {sym_new[s]} |" for s in sorted(hours)]
+    md += [f"| **all** | {len(dec)} | **{n_old}** | **{n_new}** |", "",
+           "## Hours with no pick, and why", "", "| reason | before | now |", "|---|---|---|"]
+    for k in sorted(set(why_old) | set(why_new)):
+        md.append(f"| {k} | {why_old[k]} | {why_new[k]} |")
+    md += ["", "## Strategies picked (times)", "", "| strategy | before | now |", "|---|---|---|"]
+    for k in sorted(set(got_old) | set(got_new), key=lambda x: -(got_old[x] + got_new[x])):
+        md.append(f"| {k} | {got_old[k]} | {got_new[k]} |")
+    return "\n".join(md) + "\n"
+
+
 def main(argv=None):
     """Prints the report, or with --publish writes it to data/year_test/pick_why_<name>/report.md (for ./fx.sh publish)."""
     import contextlib
     import io
     import sys
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "compare":
+        days = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 14
+        out = Path("data/year_test/pick_compare")
+        out.mkdir(parents=True, exist_ok=True)
+        md = compare(days)
+        (out / "report.md").write_text(md)
+        print(md)
+        return
     if "--publish" not in argv:
         return _main(argv)
     argv.remove("--publish")

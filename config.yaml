@@ -186,7 +186,7 @@ selector:
   mode: hourly_pick            # hourly_pick: this hour's top strategy per TF | setup_first: scan every strategy each bar
                                # | playbook: the research-selected cells (see `playbook:` below)
   top_n_per_tf: 1              # per symbol per hour: best 5m strategy + best 15m strategy
-  min_trades_for_stats: 8
+  min_trades_for_stats: 8      # evidence scale: a record of n trades counts n / (n + 8) — no flat cut for new strategies (Nov 9 2026)
   hour_shrinkage_k: 12         # Bayesian shrink of hour-of-day stats toward overall
 
 evaluator:

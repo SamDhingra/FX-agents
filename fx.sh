@@ -489,6 +489,10 @@ PY
              BUILDKIT_PROGRESS=plain $DC build fxagents </dev/null >logs/entryedge-build.log 2>&1 || { echo "build failed — see logs/entryedge-build.log"; exit 1; }
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents nice -n 10 python -m fxagents.entry_edge --period "$p_" </dev/null || exit $?
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  pickcompare) # the hourly pick before vs after taking Jev out (Nov 9 2026), re-picked from the logged hours (read-only):
+             # ./fx.sh pickcompare [days=14] → data/year_test/pick_compare/report.md
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.pick_why compare "${2:-14}" </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   pickwhy)   # why the practice account's hourly pick does / doesn't choose a strategy (read-only):
              # ./fx.sh pickwhy [name=sr_rejection] [days=7]
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.pick_why "${2:-sr_rejection}" --days "${3:-7}" --publish </dev/null || exit $?
@@ -724,7 +728,7 @@ PY
   *) cat <<USAGE
 ./fx.sh up | down | restart [svc] | logs [svc] | status | update | localize <file> | test | check | sim [days] | backtest [days] [opts] | research
         backup | why [from] [to] [days] | setup-test <setup> [symbols]
-        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | live setup|up|update|logs|users|add-owner|promote-playbook | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | m15wait | choper [seen|vault] | goldtrail [seen|vault] | goldladder [seen|vault] | goldmore [seen|vault] | goldadd05 | trendprotect [seen|vault] | cellwhy [setup] [days] | pickwhy [name] [days] | entryedge [seen|vault] | supertrend [seen|vault] | trendhold [seen|vault] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
+        yeartest [days] [opts] | bbtest [symbols] | newstrats [days] | astra15 | export … | holdout … | rule … | regimecheck | cisd | breakout | gemini [set] [rules] | gemsmc [rules] | pattest [set] | patgold | scalp | sweepvwap | sweeponly | reclaimv2 | smcidm | volbrk | h4don | bt <plugin> [data] [SYM] | btsetups SYM | bthtf | btcancel | candles | mgmtreplay [days] | live setup|up|update|logs|users|add-owner|promote-playbook | reconcile [days] | tradeprobe [ids] | repair [--apply] | fxcprobe [days] | exitstudy [days] | analystcheck [days] | pbtest [workers] | roomcheck [seen|vault] | m15timing [seen|vault] | newsstudy | newsfade [test|vault|nostop] | hoursbias [seen|vault] [workers] | m15wait | choper [seen|vault] | goldtrail [seen|vault] | goldladder [seen|vault] | goldmore [seen|vault] | goldadd05 | trendprotect [seen|vault] | cellwhy [setup] [days] | pickwhy [name] [days] | pickcompare [days] | entryedge [seen|vault] | supertrend [seen|vault] | trendhold [seen|vault] | candlecheck | liqtest | liqtoday [days] | dynbackfill [book] [n] [redo] [fresh] [dry] | dynprobe | dynexplain [book] | dynpostmortem [book] [n] [dry] | pbmacd | fbr | ndqorb | jevcheck | record [SYMBOL] | lab … | publish-setup | publish | pause | resume | flatten | vnc
 services: fxagents, cloudflared (+ ib-gateway when COMPOSE_PROFILES=ibkr)
 USAGE
   ;;
