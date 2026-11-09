@@ -148,6 +148,10 @@ management:
   trail_step_r: 1.0            # each further +1R step trails the stop up one step
   trail_gap_r: 0                # >0: after the first target the stop also follows the best price this far behind (R)
   runner:                       # after the first target (tested on ~46k research trades, same entries):
+    target_r: 2.0               #   Nov 9 2026: the runner closes at +2R (trend trades, first target 2R: at +3R).
+                                #   0 = no target. Fixed targets and the trailed runner tested within 0.01R of each
+                                #   other (90-day test: all out at 2R −0.222R vs runner −0.228R), so this ends trades
+                                #   cleanly at no measured cost
     stall_minutes: 45           #   no new best price for 45 min → stop tightens to best − 0.5R; trades that keep
     stall_gap_r: 0.5            #   making new highs are left alone (0 = off)
     add_mode: structure         #   step = add at each +1R step (incl. right after the partial) · structure = add
@@ -200,7 +204,7 @@ evaluator:
 c10_account:
   enabled: true
   symbols: [NDQ]
-  risk_pct: 0.0025             # half the normal 0.5%
+  risk_pct: 0.005              # the normal 0.5% (Nov 9 2026, Sam; was 0.25%, halved because 2016–2020 wasn't significant)
   allow_live: false            # never on a real-money account unless you set this
 
 # ── Learner (runs inside the Strategist) ──
@@ -281,7 +285,7 @@ shadow:
   enabled: true
   h1_vol_trend:                 # the audit's H1-VOL-TREND spec on paper, rules frozen (agents/h1_trend_trader.py)
     symbols: [XAUUSD]
-    risk_pct: 0.001             # constant 0.10% of the book's equity per trade
+    risk_pct: 0.005             # 0.50% of the book's equity per trade (Nov 9 2026, Sam: was 0.10%; R results unchanged)
   mode: playbook                # what the shadow book runs (default: setup_first if the real book is hourly_pick)
   ema21_rsi55:                  # Sam's EMA21 + RSI 55 rule on paper, rules frozen (agents/ema_rsi_trader.py)
     symbols: [XAUUSD]           # US30 dropped Nov 2 2026 (Sam: losing on paper); gold kept
@@ -291,7 +295,7 @@ shadow:
   gold_breakout:                # Gold Breakout 15M (WillyAlgoTrader) on paper, rules frozen (agents/breakout_trader.py);
                                 # passed Oct 2024–Sep 2026, NOT the 2021–Sep 2024 holdout → forward record only
     symbols: [XAUUSD]
-    risk_pct: 0.001             # 0.10% of the book's equity at the 1% stop
+    risk_pct: 0.005             # 0.50% of the book's equity at the 1% stop (Nov 9 2026, Sam: was 0.10%)
     sl_pct: 1.0                 # stop 1% of the fill price
     range_end_hour: 7           # range 00:00–07:00 broker time
     close_hour: 20              # flat 20:00 broker time; no target
@@ -304,7 +308,7 @@ shadow:
   c10_afternoon:                # ChatGPT's C10 v2 (morning direction held to 13:00 → continue to 15:45) on paper, rules
                                 # frozen (agents/c10_trader.py); passed 2021–Sep 2026 NDQ, vault +0.082R not significant
     symbols: [NDQ]
-    risk_pct: 0.001             # 0.10% of the book's equity at the 1.25-ATR stop
+    risk_pct: 0.005             # 0.50% of the book's equity at the 1.25-ATR stop (Nov 9 2026, Sam: was 0.10%)
   modes: [playbook, playbook_allhours, playbook_nobias, playbook_nobias_allhours, h1_vol_trend, ema21_rsi55, gold_breakout, daily_rsi2_adx2, c10_afternoon]  # shadow books (Nov 5 2026: the chop filter is gone — the 'Playbook + chop filter' book (playbook_regime) was removed, and the chop + no-bias + all-hours book lost its chop filter and is now playbook_nobias_allhours = bias rule off, entries 20:00 → 15:50, continuing that book's journal (see shadow.db_paths)); playbook_allhours = the playbook with entries 20:00 → 15:50 NY, no session gaps; playbook_nobias = the playbook with the bias rule off (both Oct 29 2026, paper) (overrides `mode`); several run side by side, each with its own journal.
                                   # setup_first was dropped in Oct 2026 (−10R over 35 live trades);
                                   # the first keeps db_path / journal_shadow.sqlite, others journal_<mode>.sqlite

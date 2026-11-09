@@ -509,6 +509,10 @@ PY
                $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.trade_atlas history </dev/null || exit $?
              fi
              [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
+  dailywhy)  # why the daily RSI(2)/ADX(2) book has (not) traded (read-only; Nov 9 2026): ./fx.sh dailywhy [since=2026-10-20]
+             need_env
+             $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.daily_why --since "${2:-2026-10-20}" --publish </dev/null || exit $?
+             [[ -f "$HOME/.ssh/fx_results" ]] && ./fx.sh publish ;;
   cellwhy)   # why a setup is / isn't in the playbook, day by day (read-only): ./fx.sh cellwhy [setup=sr_rejection] [days=14] [old]
              # (a 4th word, e.g. 'old', judges with the NDQ/US30 rules in force before Nov 4 2026)
              $DC run --rm --no-deps -T -e FX_MODE=sim fxagents python -m fxagents.cell_why "${2:-sr_rejection}" --days "${3:-14}" ${4:+--old-index-rules} --publish </dev/null || exit $?

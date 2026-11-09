@@ -43,9 +43,14 @@ def test_trend_profile_banks_partial_and_trails_runner_like_live(cfg):
     O, H, L, C = _path([100, 101, 102, 103, 104, 105, 104.5, 104.0, 103.0, 101.0, 100.0])
     n = len(C)
     m = research.mgmt_profiles(cfg, "15min")["trend"]
+    with_target = research.simulate_live(O, H, L, C, np.arange(n), 0, 1, 99.0, m, 0.0, np.zeros(n, bool), None, 480.0,
+                                         full_exit=research.full_exit(cfg, "trend"))
+    # Nov 9 2026 default: the runner closes at its target, 3R for a 2R first target: 0.5×2 + 0.5×3
+    assert with_target["exit_reason"] == "runner_target" and with_target["r"] == pytest.approx(2.5)
+    m.runner_target_r = 0.0
     res = research.simulate_live(O, H, L, C, np.arange(n), 0, 1, 99.0, m, 0.0, np.zeros(n, bool), None, 480.0,
                                  full_exit=research.full_exit(cfg, "trend"))
-    # half banked at 2R, the runner stopped at the trailed level (5R reached → stop 4.1R): 0.5×2 + 0.5×4.1
+    # no runner target: half banked at 2R, the runner stopped at the trailed level (5R reached → stop 4.1R): 0.5×2 + 0.5×4.1
     assert res["exit_reason"] != "target" and res["adds"] == 0
     assert res["r"] == pytest.approx(3.05)
     # scalp / tpX still close everything at the first target; with pyramiding globally off, so does trend (live)

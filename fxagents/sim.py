@@ -32,6 +32,9 @@ class Mgmt:
     struct_buf_r: float = 0.1
     stall_minutes: float = 0.0
     stall_gap_r: float = 0.5
+    # runner target (Nov 9 2026): after the first target, the rest closes when price reaches this many R
+    # (never below the first target + one step); 0 = no target, the runner ends only on its stop / stall / time
+    runner_target_r: float = 0.0
     # adds: "step" = at each +1R step (default); "structure" = after a confirmed higher low, when price makes a new high
     add_mode: str = "step"
     add_from_step: int = 1            # step adds start at this target step (1 = already at the first target)
@@ -69,6 +72,7 @@ class Mgmt:
                    struct_buf_r=float((m.get("runner") or {}).get("struct_buf_r") or 0.1),
                    stall_minutes=float((m.get("runner") or {}).get("stall_minutes", 0) or 0),
                    stall_gap_r=float((m.get("runner") or {}).get("stall_gap_r") or 0.5),
+                   runner_target_r=float((m.get("runner") or {}).get("target_r", 0) or 0),
                    add_mode=(m.get("runner") or {}).get("add_mode", "step"),
                    add_from_step=int(m["pyramid"].get("from_step", 1)), pyramid=m["pyramid"]["enabled"],
                    max_adds=m["pyramid"]["max_adds"], add_frac=m["pyramid"]["add_size_frac"],

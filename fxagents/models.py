@@ -130,7 +130,11 @@ class Position:
             "strategy": self.strategy, "qty": self.open_qty, "initial_qty": self.initial_qty,
             "entry": round(self.entry, 4), "avg_entry": round(self.avg_entry, 4),
             "stop": round(self.stop, 4), "initial_stop": round(self.initial_stop, 4),
-            "target": round(self.entry + self.side * self.risk_per_unit * self.rr, 4),
+            # the target still ahead: a rule book's own (meta target), the runner target after the first partial
+            # (Nov 9 2026), else the first target
+            "target": round(self.meta["target"] if self.meta.get("target") else
+                            self.meta["runner_target"] if self.stage >= 1 and self.meta.get("runner_target") else
+                            self.entry + self.side * self.risk_per_unit * self.rr, 4),
             "price": round(px, 4), "r_now": round(self.r_now(px), 2), "stage": self.stage,
             "adds": self.adds, "partial_done": self.partial_done,
             "unrealized": round(self.unrealized(px, multiplier), 2), "realized": round(self.realized, 2),

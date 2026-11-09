@@ -804,6 +804,14 @@ class PositionManagerAgent(Agent):
         #    ratchets the stop toward profit and is re-sent on a ≥0.1R improvement
         if pos.stage >= 1 and pos.risk_per_unit:
             run = self.m.get("runner") or {}
+            # runner target (Nov 9 2026): the rest of the trade closes once price reaches target_r (never below the
+            # first target + one step: a 2R trend target runs to 3R). Same rule as research.simulate_live.
+            tr = float(run.get("target_r", 0) or 0)
+            if tr > 0:
+                tgt = pos.entry + pos.side * max(tr, pos.rr + self.m["trail_step_r"]) * pos.risk_per_unit
+                pos.meta["runner_target"] = tgt                  # shown on the dashboard's position card
+                if (hi - tgt) * pos.side >= 0:
+                    return await self.close(pos, tgt, "runner_target", limit=True)
             gap = float(self.m.get("trail_gap_r", 0) or 0)
             cands = []
             if gap > 0:

@@ -1038,6 +1038,8 @@ button,input,select,textarea{font-family:inherit}
 .rail .lb.t{bottom:12px}.rail .lb.b{top:12px}.rail .lb b{display:block;color:var(--text-2);font-weight:600;font-size:10.5px}
 .rail .lb.now b{color:var(--accent-2)}
 .pc .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;font-size:11px}
+.pc .pacts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.pc .pact{flex:1;min-height:40px;font-size:12.5px;min-width:0}
+.pc .pact.arm{background:var(--down);border-color:var(--down);color:#fff}.pc .pact:disabled{opacity:.45}
 .pc .grid4 div{display:flex;flex-direction:column;gap:1px;min-width:0}.pc .grid4 small{color:var(--muted);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase}
 .pc .grid4 b{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pc .anl{margin-top:8px}
@@ -4935,6 +4937,11 @@ positions = function(s){
         <div><small>Risk</small><b>${p.stop_pips != null ? fmt(p.stop_pips, 0) + " pts" : fpx(risk)}${p.risk_mult < 1 ? ` · ×${p.risk_mult}` : ""}</b></div>
         <div><small>Jev</small><b>${p.jev_quality != null ? fmt(p.jev_quality, 2) + " / " + fmt(p.jev_confidence, 2) : "—"}</b></div>
       </div>
+      <div class="pacts" role="group" aria-label="Manage this trade by hand">
+        <button class="btn pact" type="button" data-act="close" data-pid="${esc(p.id)}">Close</button>
+        <button class="btn pact" type="button" data-act="breakeven" data-pid="${esc(p.id)}"${rNow <= 0.1 ? " disabled title=\"Only once the trade is in profit\"" : ""}>Break-even</button>
+        <button class="btn pact" type="button" data-act="partial" data-pid="${esc(p.id)}">Close half</button>
+      </div>
       ${p.analyst && p.analyst.verdict ? `<div class="anl v-${esc(p.analyst.verdict)}" title="Shadow analyst — advice only, it never touches the trade"><b>Analyst: ${esc(ANL_V[p.analyst.verdict] || p.analyst.verdict)}</b>${(p.analyst.checks || []).length ? " · " + (p.analyst.checks || []).map(c => esc(ANL_C[c] || c)).join(" · ") : " · trade on track"}</div>` : ""}
     </div>`;
   }).join("");
@@ -4943,7 +4950,33 @@ positions = function(s){
     c.onclick = e => { if(e.target.closest("button,a,.slide")) return; openTrade(posTrade(p));
       const k = $$("#drawer .kpi .v")[1]; if(k){ k.textContent = sR(p.r_now) + " now"; k.className = "v num " + cls(p.r_now); } }; });
   SEEN10 = new Set(s.positions.map(p => p.id));
+  $$("#positions .pact").forEach(b => b.onclick = e => { e.stopPropagation(); manualAct(b); });
 };
+
+/* by-hand trade actions (Nov 9 2026): Close / Break-even / Close half on one open trade, for the account or the paper
+   book in view. A first tap arms the button, a second within 4 s sends it; the server answers with what happened. */
+const PACT_ASK = {close: "Tap again to close", breakeven: "Tap again: stop to entry", partial: "Tap again: close half"};
+let PACT_BUSY = false;
+async function manualAct(b){
+  if(PACT_BUSY) return;
+  if(!b.classList.contains("arm")){
+    $$("#positions .pact.arm").forEach(x => { x.classList.remove("arm"); x.textContent = x.dataset.lbl; });
+    b.dataset.lbl = b.textContent; b.classList.add("arm"); b.textContent = PACT_ASK[b.dataset.act];
+    setTimeout(() => { if(b.isConnected && b.classList.contains("arm")){ b.classList.remove("arm"); b.textContent = b.dataset.lbl; } }, 4000);
+    return;
+  }
+  PACT_BUSY = true; b.disabled = true; b.textContent = "Sending…";
+  try{
+    const body = {action: b.dataset.act}; if(b.dataset.act === "partial") body.frac = 0.5;
+    const r = await fetch(q("api/positions/" + encodeURIComponent(b.dataset.pid) + "/manual"), {method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal: AbortSignal.timeout(15000)});
+    if(!r.ok) throw new Error(r.status === 401 || r.status === 403 ? "Not authorized. Sign in with the dashboard token." : `Request failed (${r.status}).`);
+    const res = await r.json();
+    toast((res.ok ? "Done: " : "Not done: ") + (res.msg || ""));
+    const st = await fetch(q("api/state"), {credentials: "same-origin"}); if(st.ok) receive(await st.json());
+  }catch(e){ toast(e.name === "TimeoutError" ? "No answer yet. Check the position before retrying." : e.message); }
+  finally{ PACT_BUSY = false; }
+}
 
 /* the Market Bias page */
 function renderBiasPage(){
@@ -5534,7 +5567,7 @@ function renderAnalysis(){
   $$("#anSetups [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
 }
-$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-07.1");
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-09.1");
 const _goAn = go;
 go = function(p){ _goAn(p); if(p === "analysis") loadAnalysis(); };
 const _setBookAn = setBook;

@@ -259,7 +259,8 @@ def test_risk_and_manager_apply_scalp_profile_and_symbol_cap(tmp_path):
 def test_stop_trails_between_steps_after_first_target(tmp_path):
     ctx = make_ctx(tmp_path, [])
     ctx.cfg["management"] = {**ctx.cfg["management"], "trail_gap_r": 0.75,
-                             "pyramid": {**ctx.cfg["management"]["pyramid"], "max_adds": 0}}
+                             "pyramid": {**ctx.cfg["management"]["pyramid"], "max_adds": 0},
+                             "runner": {**ctx.cfg["management"]["runner"], "target_r": 0}}   # the trail itself, no runner target
     risk = RiskAgent(ctx); risk.start()
     pm = PositionManagerAgent(ctx); pm.start()
     px = float(ctx.store.df["close"].iloc[-1])

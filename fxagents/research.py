@@ -274,6 +274,11 @@ def simulate_live(O, H, L, C, tmin, j0: int, side: int, stop: float, m: Mgmt, hs
                 try_add(j, stop_px, lvl(step))
         if step < 1:
             continue
+        # 3b) runner target (Nov 9 2026): the rest closes at market once the mid reaches it, as the live manager does
+        if m.runner_target_r > 0:
+            tgt = max(m.runner_target_r, m.rr + m.trail_step_r)
+            if (hi - (px_in + side * tgt * R)) * side >= 0:
+                return done(mkt, "runner_target", j)
         # 4) runner rules (after the first target)
         if use_struct and j - k > j0 + k:
             p = j - k

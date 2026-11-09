@@ -548,6 +548,31 @@ def build_app(ctx) -> FastAPI:
         bk(request).journal.set_note(trade_id, str(body.get("note", ""))[:2000])
         return {"ok": True}
 
+    @app.post("/api/positions/{pos_id}/manual")
+    async def manual_action(pos_id: str, request: Request):
+        """Close / break-even / partial / stop on ONE open trade, by hand (Nov 9 2026), for the account or a paper book
+        (?book=). Routed through that book's position manager, so the broker rules apply (stops only toward profit,
+        a partial must leave something open). Owner-only on the live site; token-protected here."""
+        need(request, always=True)
+        c = bk(request)
+        b = await request.json()
+        act = str(b.get("action", ""))
+        if act not in ("close", "breakeven", "stop", "partial"):
+            raise HTTPException(400, "unknown action")
+        ev = {"action": act, "id": pos_id, "by": "dashboard"}
+        if act == "stop":
+            try:
+                ev["price"] = float(b["price"])
+            except (KeyError, TypeError, ValueError):
+                raise HTTPException(400, "stop price needed") from None
+        if act == "partial":
+            ev["frac"] = float(b.get("frac") or 0)
+        await c.bus.publish("manual", ev)
+        res = ev.get("result") or {"ok": False, "msg": "no position manager answered"}
+        c.state.alert("info" if res.get("ok") else "warn", f"manual {act} {pos_id}: {res.get('msg', '')}"
+                      + ("" if c is ctx else f" ({getattr(c, 'book_key', 'paper')})"))
+        return res
+
     @app.post("/api/control/{action}")
     async def control(action: str, request: Request):
         need(request, always=True)
