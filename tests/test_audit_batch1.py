@@ -106,7 +106,7 @@ def test_a_heuristic_fallback_grade_never_passes_the_enforce_gate():
     g = {"quality": 0.95, "confidence": 0.95, "source": "heuristic", "fallback": True}
     assert not jev_gate(g, jc) and "unavailable" in jev_gate_why(g, jc)
     assert jev_gate({**g, "fallback": False}, jc)                        # no key at all (sim/replay) is a different thing
-    adv = {**jc, "signal_gate": "advisory"}
+    adv = {**jc, "signal_gate": "advisory", "size_from_quality": [0.3, 0.7]}
     assert jev_gate(g, adv) and g["size_mult"] == 0.5                    # advisory: trades, but at the minimum size
 
 

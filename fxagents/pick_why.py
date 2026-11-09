@@ -89,7 +89,7 @@ def _main(argv=None):
             rated += 1
             same = [r for r in rows if r["tf"] == m["tf"]]
             rank = [r["id"] for r in same].index(m["id"])
-            if tok < 0.4:
+            if tok < 0.4 and cfg["jev"].get("trade_ok_gate", True):
                 reason, best = f"trade_ok {tok:.2f} < 0.4 (whole instrument sat out)", None
             elif rank >= top:
                 best = same[0]

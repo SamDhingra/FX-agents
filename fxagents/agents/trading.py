@@ -219,7 +219,8 @@ class SelectorAgent(Agent):
         for r in ranked:   # best strategy per entry timeframe (5m and 15m each get a pick)
             tf = self.ctx.book.get(r["id"]).tf_label
             r["tf"] = tf
-            ok = r["combined"] >= jcfg["min_select_score"] and trade_ok >= 0.4 and per_tf.get(tf, 0) < sel_cfg["top_n_per_tf"]
+            tok_ok = trade_ok >= 0.4 or not jcfg.get("trade_ok_gate", True)   # Nov 9 2026: off — Jev showed no skill
+            ok = r["combined"] >= jcfg["min_select_score"] and tok_ok and per_tf.get(tf, 0) < sel_cfg["top_n_per_tf"]
             r["selected"] = ok
             if ok:
                 per_tf[tf] = per_tf.get(tf, 0) + 1
@@ -360,10 +361,14 @@ def jev_gate(g: dict, jc: dict) -> bool:
     The thresholds are used exactly as configured (a hidden ×0.8 on the confidence used to lower the bar)."""
     if jc.get("signal_gate", "enforce") == "advisory":
         q, c = float(g.get("quality", 0)), float(g.get("confidence", 0))
-        lo, hi = jc.get("size_from_quality", [0.3, 0.7])
-        g["size_mult"] = round(0.5 + 0.5 * min(1.0, max(0.0, (q - lo) / (hi - lo))), 3)   # 0.5× … 1.0×, never above normal risk
-        if g.get("fallback"):
-            g["size_mult"] = 0.5
+        band = jc.get("size_from_quality", [0.3, 0.7])
+        if not band:                                      # null = Jev's grade is logged only and never changes size
+            g["size_mult"] = 1.0
+        else:
+            lo, hi = band
+            g["size_mult"] = round(0.5 + 0.5 * min(1.0, max(0.0, (q - lo) / (hi - lo))), 3)   # 0.5× … 1.0×
+            if g.get("fallback"):
+                g["size_mult"] = 0.5
         return q >= jc.get("advisory_floor", 0.0)
     if g.get("fallback") and jc.get("fallback_blocks", True):
         return False

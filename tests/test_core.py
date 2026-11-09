@@ -295,12 +295,23 @@ def test_jev_advisory_gate_sizes_instead_of_blocking():
     jc = dict(CFG["jev"]); jc["signal_gate"] = "enforce"
     assert not jev_gate({"quality": 0.62, "confidence": 0.3}, dict(jc))        # confidence blocks
     assert "confidence 0.30" in jev_gate_why({"quality": 0.62, "confidence": 0.3}, jc)
-    jc["signal_gate"] = "advisory"
+    jc["signal_gate"] = "advisory"; jc["size_from_quality"] = [0.3, 0.7]
     lo, mid, hi = ({"quality": q, "confidence": 0.2} for q in (0.1, 0.5, 0.9))
     assert jev_gate(lo, jc) and jev_gate(mid, jc) and jev_gate(hi, jc)       # nothing blocked
     assert lo["size_mult"] == 0.5 and mid["size_mult"] == 0.75 and hi["size_mult"] == 1.0
     jc["advisory_floor"] = 0.2
     assert not jev_gate({"quality": 0.1, "confidence": 0.9}, jc)
+
+
+def test_jev_switched_off_nov9_never_blocks_or_resizes():
+    """Since the Jev replay failed (Nov 9 2026): weight 0, advisory, no size band, no trade_ok gate."""
+    from fxagents.agents.trading import jev_gate
+    jc = CFG["jev"]
+    assert jc["weight"] == 0 and jc["signal_gate"] == "advisory" and jc["size_from_quality"] is None
+    assert jc["trade_ok_gate"] is False
+    for g in ({"quality": 0.05, "confidence": 0.9}, {"quality": 0.95, "confidence": 0.1},
+              {"quality": 0.2, "confidence": 0.2, "fallback": True}):
+        assert jev_gate(g, jc) and g["size_mult"] == 1.0
 
 
 def test_pnl_after_partial_then_add_is_not_overbooked():

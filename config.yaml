@@ -171,14 +171,16 @@ jev:
   enabled: true                # falls back to the local heuristic scorer if no TYPESAFE_API_KEY
   model: null                  # null = account default (jev-latest). Every decision logs the model that answered; pin a version here once TypeSafe names one
   timeout_s: 6
-  weight: 0.6                  # blend: weight × Jev + (1 − weight) × quant stats
+  weight: 0.0                  # blend: weight × Jev + (1 − weight) × quant stats. Was 0.6; 0 since Nov 9 2026 — the Jev replay
+                               # (research/jev_replay/) found no skill: the hourly pick now ranks on the quant stats alone
   min_select_score: 0.55       # below this, the symbol sits out the hour
   min_signal_quality: 0.5      # per-setup gate
   min_signal_confidence: 0.4   # was 0.5 with a hidden ×0.8 in the code (= 0.40 effective): same bar, now written where you can see it
   fallback_blocks: true        # Jev down/timeout → the signal is skipped, not graded by the local heuristic
-  signal_gate: enforce         # enforce: the two gates above block trades | advisory: Jev never blocks, its grade sets size
+  signal_gate: advisory        # Nov 9 2026 (was enforce). enforce: the two gates above block trades | advisory: Jev never blocks, its grade sets size
   advisory_floor: 0.0          # advisory only: block below this quality (0 = never block)
-  size_from_quality: [0.3, 0.7]  # advisory only: quality ≤0.3 → half size, ≥0.7 → full size (never above normal risk)
+  size_from_quality: null      # advisory only: [lo, hi] = quality ≤lo → half size, ≥hi → full size; null = Jev never changes size
+  trade_ok_gate: false         # true = Jev's 'trade this hour?' answer < 0.4 sits the instrument out (off since Nov 9 2026)
 
 selector:
   mode: hourly_pick            # hourly_pick: this hour's top strategy per TF | setup_first: scan every strategy each bar
