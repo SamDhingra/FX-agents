@@ -69,6 +69,8 @@ def report(t: pd.DataFrame, sym: str) -> str:
 
 async def fetch_h1(cfg, sym: str, days: int = 220) -> pd.DataFrame:
     from .oanda import OandaFeed, _inst, oanda_from_cfg
+    from .trade_atlas import journal_cfg
+    cfg = journal_cfg(cfg)          # read-only commands run in sim mode, which skips the OANDA instrument names
     client = oanda_from_cfg(cfg)
     try:
         feed = OandaFeed(cfg, None, None, client)

@@ -31,3 +31,13 @@ def test_a_downtrend_blocks_the_long_only_rule():
     assert not t.entry.any() and not t.above_sma50.any()
     md = report(t, "XAUUSD")
     assert "0 entry signal(s) in 14 daily closes" in md and "above SMA50 0" in md
+
+
+def test_the_command_finds_oandas_instrument_name_in_sim_mode():
+    from fxagents.config import load_config
+    from fxagents.oanda import _inst
+    from fxagents.trade_atlas import journal_cfg
+    cfg = load_config("config.yaml")
+    cfg["mode"] = "sim"                                     # how ./fx.sh runs read-only commands
+    c = journal_cfg(cfg)
+    assert _inst(c, "XAUUSD") == "XAU_USD" and cfg["mode"] == "sim"   # the caller's config is left alone
