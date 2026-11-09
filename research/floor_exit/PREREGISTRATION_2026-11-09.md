@@ -105,3 +105,18 @@ The rule acts only while the position is open and before the first target has be
   no trades changed), read once after 100 changed entries.
 - **Any pass** is no permission to trade a still-negative setup. Adoption needs the managed setup itself to be
   positive under the project's gates.
+
+## Outcome (Nov 9, 2026): fails on seen; the floor exit is closed (vault not opened)
+
+| entries | changed | baseline avg R | floor exit avg R | mean d (95% range) | halves | 2× spread | placebo p | at ≤ −1R |
+|---|---|---|---|---|---|---|---|---|
+| 15,768 | 4,357 | −0.070 | −0.072 | −0.003 (−0.009 to +0.004) | −0.006 / +0.001 | −0.004 | 0.891 | 44.1% → 22.8% |
+
+- **The engine check passed:** the replay reproduced 100% of the engine's results, and every entry had its floor
+  recorded.
+- **Full losses roughly halved, but nothing was gained in total.**
+  - Cutting 3,364 trades that would have been stopped saved +944R.
+  - Cutting 993 trades that would have recovered lost −984R.
+- **The setup's own floor is no better than a random depth:** placebo p = 0.89.
+- **The baseline itself loses −0.07R per entry.** Both setups are negative on every instrument and timeframe, as the
+  atlas found.
