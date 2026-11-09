@@ -2,6 +2,17 @@
 
 Agreed work that is not scheduled yet. Newest decisions first. Each item says where it came from and what "done" means.
 
+## US30 one-stock reversal — waiting for Alpaca keys (Nov 9 2026)
+
+From Astra's "Three instrument-specific strategies" (Nov 7 2026), strategy 3. Registered (b0f4fe0,
+research/dow_reversal/PREREGISTRATION_2026-11-07.md) and built (06ffb76), never run. Sam has no Alpaca keys yet.
+To resume: a free Alpaca account → Paper Trading → API keys; Sam adds `ALPACA_KEY_ID=` / `ALPACA_SECRET_KEY=` to `.env`
+on the server himself (never pasted in chat); `./fx.sh update`; `nohup ./fx.sh dowdata > logs/dowdata.log 2>&1 &`
+(~45 min, resumable); check the per-ticker bar counts at the end of the log (old tickers UTX, DWDP, DD must not be
+zero); then `./fx.sh dowrev` and publish. Done when the seen report is published and judged. Gold (near-contract
+repricing) and NDQ (earnings handoff) from the same document were not built: they need paid second-stamped futures
+quotes / point-in-time earnings times and index weights.
+
 ## Bias system — batch 3 (deferred Oct 26 2026; revisit after the Nov 5 review)
 
 From ChatGPT's bias-filter audit (Oct 26 2026). Batches 1 and 2 are done (b50f359, c37b310): restart-safe and
