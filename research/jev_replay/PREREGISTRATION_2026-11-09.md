@@ -89,3 +89,18 @@ and lows swap. A reader of patterns should swap its up and down answers. This is
   reducing Jev's weight in the hourly pick (a decision for Sam, not automatic). The question and the gates are not
   re-run with a different prompt on these data. A new prompt version is a new registration, run on decisions not yet
   used.
+
+## Outcome (Nov 9, 2026): FAIL; closed for this prompt and these data
+
+| decisions | Jev answered | measured Brier | measured + Jev | Jev alone | mean d (95% range) | halves |
+|---|---|---|---|---|---|---|
+| 7,509 | 100% (jev-1.14.0) | 0.5515 | 0.5733 | 0.6586 | −0.0218 (−0.0265 to −0.0171) | −0.0196 / −0.0239 |
+
+- **Adding Jev made the forecast worse,** clearly and in both halves. Only the coverage gate passed.
+- **Direction is a coin flip.** When the hour moved (3,050 times), Jev's likelier side was right 48.8% of the time;
+  following the previous hour was right 49.6%.
+- **Badly calibrated.** Jev gave a move a 14% chance on average where 39% moved, and 24% where 48% moved.
+- **Weak pattern consistency.** On the upside-down packet, its p(up) and mirrored p(down) correlate only 0.33.
+- **Same on every instrument:** NDQ, US30 and gold all got worse with Jev.
+- The statistical benchmarks barely differ from each other: chart state and previous-hour sign add nothing to the
+  hour-of-day base rate either.
