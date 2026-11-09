@@ -1062,6 +1062,40 @@ class PositionManagerAgent(Agent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def account_block(cfg, state, sym: str, side: int) -> str:
+    """The practice account's limits that apply to a frozen rule trading on the account (C10, gold breakout, gold H1
+    trend): entries blocked / hold, watch-only instrument, max open positions, one position per symbol, and the
+    one-index-per-direction cap. Returns why it is blocked, or ""."""
+    r = cfg["risk"]
+    if getattr(state, "entries_blocked", ""):
+        return f"entries blocked: {state.entries_blocked}"
+    if getattr(state, "hold", ""):
+        return state.hold
+    if cfg["instruments"].get(sym, {}).get("trade", True) is False:
+        return f"instrument off: {sym} is watch-only (trade: false)"
+    open_pos = [p for p in state.positions.values() if p.status == "open"]
+    if len(open_pos) >= r["max_open_positions"]:
+        return "max open positions"
+    if sum(p.symbol == sym for p in open_pos) >= r["max_positions_per_symbol"]:
+        return "already positioned in symbol"
+    grp = list(r.get("index_group", ["NDQ", "US30"]))
+    if sym in grp and sum(p.symbol in grp and p.side == side for p in open_pos) >= int(r.get("index_group_max", 1)):
+        return "index group full (one index position per direction at a time)"
+    return ""
+
+
+def account_margin_cap(cfg, state, ic: dict, price: float, equity: float, qty: float, step: float) -> float:
+    """Cut a frozen rule's account order to the per-position and total margin budgets."""
+    r = cfg["risk"]
+    mpu = margin_per_unit(ic, price)
+    if not mpu:
+        return qty
+    room = min(r.get("max_margin_pct_per_position", 0.25) * equity,
+               r.get("max_margin_pct_total", 0.60) * equity - margin_in_use(cfg, state))
+    return min(qty, max(0.0, floor_step(room / mpu, step)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 class FlattenSupervisor(Agent):
     """Session-end guard on the WALL clock, independent of new bars and of the bus handler chain (which a
     slow Jev call can hold up). From flatten_at − sessions.flatten_buffer_s it blocks new entries, closes every

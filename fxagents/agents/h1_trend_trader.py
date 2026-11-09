@@ -13,15 +13,20 @@ Same decision code as the backtest (fxagents/astra_cfd.py: H1Ind, h1_initial_sto
   • flat at the session flatten (the position manager's time exit); constant risk (`risk_pct` of equity),
     no Jev, no bias rule, no adds
 Config (shadow.h1_vol_trend): symbols [XAUUSD], risk_pct 0.001.
+
+On the practice account too (Nov 9 2026, Sam; `h1_trend_account.enabled`): the same frozen rules send real OANDA
+orders at `h1_trend_account.risk_pct`, inside the account's limits (halt / entries blocked, max open positions, one
+position per symbol, margin budget); the trailing stop moves the stop resting at OANDA. The paper book keeps running.
 """
 from __future__ import annotations
 
 import pandas as pd
 
 from ..astra_cfd import COST_GATE, FOMC, HOLIDAYS, EARLY_CLOSE, H1Ind, h1_initial_stop, h1_trail
+from ..broker import OrderRejected
 from ..models import Bar, Position
 from .core import Agent
-from .trading import floor_step, half_spread, qty_rules
+from .trading import account_block, account_margin_cap, floor_step, half_spread, qty_rules
 from ..timeutil import tfloor
 
 STRATEGY = "astra_h1_vol_trend"
@@ -31,9 +36,17 @@ DECISION_HOURS = (9, 10, 11, 12, 13)
 class H1VolTrendTrader(Agent):
     name = "trader"
 
+    def __init__(self, ctx, on_account: bool = False):
+        super().__init__(ctx)
+        self.on_account = on_account
+        if on_account:
+            self.name = "h1_trend_trader"                 # the account already has a "trader"
+            self.log = __import__("logging").getLogger(self.name)
+
     def start(self):
         super().start()
-        c = (self.cfg.get("shadow") or {}).get("h1_vol_trend") or {}
+        c = ((self.cfg.get("h1_trend_account") or {}) if self.on_account
+             else (self.cfg.get("shadow") or {}).get("h1_vol_trend")) or {}
         self.symbols = [s for s in (c.get("symbols") or ["XAUUSD"]) if s in self.cfg["instruments"]]
         self.risk_pct = float(c.get("risk_pct", 0.001))
         self.done_day: dict[str, str] = {}          # symbol → trading date whose opportunity is used up
@@ -104,6 +117,10 @@ class H1VolTrendTrader(Agent):
                "entry": bar.close, "stop": None, "quality": None, "confidence": None}
         if not self.state.trading_enabled:
             return self._reject(rec, f"trading halted: {self.state.halt_reason}")
+        if self.on_account:
+            why = account_block(self.cfg, self.state, sym, side)
+            if why:
+                return self._reject(rec, why)
         nb = self.ctx.news.blocked(self.now()) if self.ctx.news else None
         if nb:
             return self._reject(rec, f"news blackout: {nb['title']}")
@@ -123,13 +140,18 @@ class H1VolTrendTrader(Agent):
             return self._reject(rec, "equity unknown")
         step, min_u = qty_rules(ic)
         qty = min(floor_step(equity * self.risk_pct / (dist * mult), step), float(ic["max_units"]))
+        if self.on_account:
+            qty = account_margin_cap(self.cfg, self.state, ic, E0, equity, qty, step)
         if qty < min_u:
             return self._reject(rec, f"{min_u:g} unit(s) exceed the {self.risk_pct:.2%} risk budget")
         pos = Position(sym, side, STRATEGY, stop, stop, dist, 99.0, self.now(), jev_source="none",
                        reason=f"H1-VOL-TREND {'long' if side > 0 else 'short'}: 12-bar breakout, EMA32/128 trend, "
                               f"ER24 ≥ 0.30, normal ATR", bias_mode="n/a")
         pos.meta.update(external_mgmt=True, no_pyramid=True, max_hold=10 ** 6)
-        px = await self.ctx.broker.open(pos, qty, mid)
+        try:
+            px = await self.ctx.broker.open(pos, qty, mid)
+        except OrderRejected as e:
+            return self._reject(rec, f"broker guard: {e}")
         pos.risk_per_unit = abs(px - pos.initial_stop)
         pos.last_price = px
         pos.log(self.now(), "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2))

@@ -141,16 +141,23 @@ async def build(cfg, args):
     agents = [MarketDataAgent(ctx), NewsAgent(ctx), BiasAgent(ctx), StrategistAgent(ctx), SelectorAgent(ctx),
               trader, RiskAgent(ctx), pm, TradeAnalystAgent(ctx), JournalAgent(ctx), notifier,
               MonitorAgent(ctx), DynamicReviewAgent(ctx)] + ([playbook_agent] if playbook_agent else [])   # shadow review gate: off outside dynamic.books
-    ca = cfg.get("c10_account") or {}
-    if ca.get("enabled"):
-        # C10 (the one strategy that passed 2021–2026) on the account itself, frozen rules, reduced risk
+    # frozen rule books that also trade the account itself (paper books keep running for the frozen record):
+    # C10 (Oct 21 2026), gold breakout and gold H1 trend (Nov 9 2026, Sam). Never on real money unless allow_live.
+    from fxagents.agents.breakout_trader import BreakoutTrader
+    from fxagents.agents.c10_trader import C10Trader
+    from fxagents.agents.h1_trend_trader import H1VolTrendTrader
+    for key, cls, label in (("c10_account", C10Trader, "C10 afternoon continuation"),
+                            ("gold_breakout_account", BreakoutTrader, "Gold overnight-range breakout"),
+                            ("h1_trend_account", H1VolTrendTrader, "Gold H1 volatility trend")):
+        ca = cfg.get(key) or {}
+        if not ca.get("enabled"):
+            continue
         if cfg["mode"] == "live" and not ca.get("allow_live"):
-            log.warning("c10_account ignored: mode is live (real money) and c10_account.allow_live is false")
-        else:
-            from fxagents.agents.c10_trader import C10Trader
-            agents.append(C10Trader(ctx, on_account=True))
-            log.info("C10 afternoon continuation trades on the account (%s, risk %.2f%%)",
-                     ", ".join(ca.get("symbols") or ["NDQ"]), 100 * float(ca.get("risk_pct", 0.0025)))
+            log.warning("%s ignored: mode is live (real money) and %s.allow_live is false", key, key)
+            continue
+        agents.append(cls(ctx, on_account=True))
+        log.info("%s trades on the account (%s, risk %.2f%%)", label, ", ".join(ca.get("symbols") or []),
+                 100 * float(ca.get("risk_pct", 0.0025)))
     # wall-clock session-end flatten, its own asyncio task (paper/live only; a no-op start in sim/replay).
     # Started at the end of build, after the startup reconciliation has put saved positions back.
     supervisor = FlattenSupervisor(ctx, pm)

@@ -31,7 +31,7 @@ from ..broker import OrderRejected
 from ..bt import ind
 from ..models import Bar, Leg, Position
 from .core import Agent
-from .trading import floor_step, half_spread, margin_in_use, margin_per_unit, qty_rules
+from .trading import account_block, account_margin_cap, floor_step, half_spread, qty_rules
 
 STRATEGY = "c10_afternoon"
 P = {"move_atr": 1.0, "er_n": 12, "er_min": 0.40, "stop_atr": 1.25, "target_r": 2.0, "spread_frac": 0.10 / 1.3}
@@ -203,12 +203,7 @@ class C10Trader(Agent):
         step, min_u = qty_rules(ic)
         qty = min(floor_step(equity * self.risk_pct / (dist * mult), step), float(ic["max_units"]))
         if self.on_account:
-            r = self.cfg["risk"]
-            mpu = margin_per_unit(ic, e0)
-            if mpu:
-                room = min(r.get("max_margin_pct_per_position", 0.25) * equity,
-                           r.get("max_margin_pct_total", 0.60) * equity - margin_in_use(self.cfg, self.state))
-                qty = min(qty, max(0.0, floor_step(room / mpu, step)))
+            qty = account_margin_cap(self.cfg, self.state, ic, e0, equity, qty, step)
         if qty < min_u:
             return self._reject(rec, f"{min_u:g} unit(s) exceed the {self.risk_pct:.2%} risk budget or the margin room")
         word = "up" if side > 0 else "down"
@@ -237,23 +232,8 @@ class C10Trader(Agent):
         await self.bus.publish("position_opened", pos)
 
     def account_block(self, sym: str, side: int) -> str:
-        """The practice account's limits (the RiskAgent's checks that apply to a frozen external rule)."""
-        r = self.cfg["risk"]
-        if getattr(self.state, "entries_blocked", ""):
-            return f"entries blocked: {self.state.entries_blocked}"
-        if getattr(self.state, "hold", ""):
-            return self.state.hold
-        if self.cfg["instruments"].get(sym, {}).get("trade", True) is False:
-            return f"instrument off: {sym} is watch-only (trade: false)"
-        open_pos = [p for p in self.state.positions.values() if p.status == "open"]
-        if len(open_pos) >= r["max_open_positions"]:
-            return "max open positions"
-        if sum(p.symbol == sym for p in open_pos) >= r["max_positions_per_symbol"]:
-            return "already positioned in symbol"
-        grp = list(r.get("index_group", ["NDQ", "US30"]))
-        if sym in grp and sum(p.symbol in grp and p.side == side for p in open_pos) >= int(r.get("index_group_max", 1)):
-            return "index group full (one index position per direction at a time)"
-        return ""
+        """The practice account's limits (shared with the gold books on the account: trading.account_block)."""
+        return account_block(self.cfg, self.state, sym, side)
 
     def _reject(self, rec: dict, why: str):
         self.ctx.journal.add_signal(rec | {"action": "rejected", "why": why})

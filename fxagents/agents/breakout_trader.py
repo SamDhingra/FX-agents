@@ -19,14 +19,22 @@ gate (follow-through ≥ 0.5) is considered only if the trades Jev rated ≥ 0.5
 day-block range above zero; even then the gated version starts its own forward record.
 Config (shadow.gold_breakout): symbols [XAUUSD], risk_pct 0.001, sl_pct 1.0, range_end_hour 7, close_hour 20,
 broker_utc_offset 3.
+
+On the practice account too (Nov 9 2026, Sam; `gold_breakout_account.enabled`): the same frozen rules send real
+OANDA orders at `gold_breakout_account.risk_pct`, inside the account's limits (halt / entries blocked, max open
+positions, one position per symbol, margin budget). The paper book keeps running, so its frozen record continues.
+On the account the "buy stop at the range" is a market order sent when a completed minute's bid/ask reached the level,
+so the fill is the next price (it can be beyond the level); the 1% stop is set from the trigger price and rests at
+OANDA, and the trade's R is measured from the real fill.
 """
 from __future__ import annotations
 
 import pandas as pd
 
+from ..broker import OrderRejected
 from ..models import Bar, Position
 from .core import Agent
-from .trading import floor_step, half_spread, qty_rules
+from .trading import account_block, account_margin_cap, floor_step, half_spread, qty_rules
 
 STRATEGY = "gold_breakout"
 
@@ -34,11 +42,19 @@ STRATEGY = "gold_breakout"
 class BreakoutTrader(Agent):
     name = "trader"
 
+    def __init__(self, ctx, on_account: bool = False):
+        super().__init__(ctx)
+        self.on_account = on_account
+        if on_account:
+            self.name = "gold_breakout_trader"            # the account already has a "trader"
+            self.log = __import__("logging").getLogger(self.name)
+
     def start(self):
         super().start()
-        c = (self.cfg.get("shadow") or {}).get("gold_breakout") or {}
-        self.symbols = [s for s in (c.get("symbols") or ["XAUUSD"]) if s in self.cfg["instruments"]]
-        self.risk_pct = float(c.get("risk_pct", 0.001))
+        c = (self.cfg.get("shadow") or {}).get("gold_breakout") or {}      # the frozen rule's parameters
+        a = (self.cfg.get("gold_breakout_account") or {}) if self.on_account else c
+        self.symbols = [s for s in (a.get("symbols") or ["XAUUSD"]) if s in self.cfg["instruments"]]
+        self.risk_pct = float(a.get("risk_pct", 0.001))
         self.sl_pct = float(c.get("sl_pct", 1.0))
         self.range_end = int(c.get("range_end_hour", 7)) * 60
         self.close_min = int(c.get("close_hour", 20)) * 60
@@ -145,6 +161,10 @@ class BreakoutTrader(Agent):
             rec.update(quality=g.get("prob"), confidence=g.get("confidence"))
         if not self.state.trading_enabled:
             return self._reject(rec, f"trading halted: {self.state.halt_reason}")
+        if self.on_account:
+            why = account_block(self.cfg, self.state, sym, side)
+            if why:
+                return self._reject(rec, why)
         nb = self.ctx.news.blocked(self.now()) if self.ctx.news else None
         if nb:
             return self._reject(rec, f"news blackout: {nb['title']}")
@@ -156,6 +176,8 @@ class BreakoutTrader(Agent):
         dist = side * (fill - stop)
         step, min_u = qty_rules(ic)
         qty = min(floor_step(equity * self.risk_pct / (dist * mult), step), float(ic["max_units"])) if dist > 0 else 0
+        if self.on_account and qty > 0:
+            qty = account_margin_cap(self.cfg, self.state, ic, fill, equity, qty, step)
         if dist <= 0 or qty < min_u:
             return self._reject(rec, f"{min_u:g} unit(s) exceed the {self.risk_pct:.2%} risk budget")
         pos = Position(sym, side, STRATEGY, stop, stop, dist, 99.0, self.now(),
@@ -167,7 +189,10 @@ class BreakoutTrader(Agent):
         pos.meta.update(external_mgmt=True, no_pyramid=True, max_hold=10 ** 6, range_high=round(rh, 4),
                         range_low=round(rl, 4), trigger=round(rh if side > 0 else rl, 4),
                         jev_follow=(g or {}).get("prob"))
-        px = await self.ctx.broker.open(pos, qty, fill - side * hs)     # the broker adds the half-spread back
+        try:
+            px = await self.ctx.broker.open(pos, qty, fill - side * hs)     # the broker adds the half-spread back
+        except OrderRejected as e:
+            return self._reject(rec, f"broker guard: {e}")
         pos.risk_per_unit = abs(px - pos.initial_stop)
         pos.last_price = px
         pos.log(self.now(), "entry", price=px, qty=qty, stop=stop, risk_ccy=round(qty * pos.risk_per_unit * mult, 2),

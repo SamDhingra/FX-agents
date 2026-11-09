@@ -207,6 +207,21 @@ c10_account:
   risk_pct: 0.005              # the normal 0.5% (Nov 9 2026, Sam; was 0.25%, halved because 2016–2020 wasn't significant)
   allow_live: false            # never on a real-money account unless you set this
 
+# ── Gold breakout and gold H1 trend on the account (Nov 9 2026, Sam) ──
+# Same frozen rules as the paper books (shadow.gold_breakout / shadow.h1_vol_trend parameters), real practice orders,
+# inside the account's limits. Evidence: gold breakout passed Oct 2024–Sep 2026 but not the 2021–Sep 2024 holdout and
+# was ~flat on 2016–2020; H1 trend was positive but not significant (+0.07R, 103 trades). The paper books keep running.
+gold_breakout_account:
+  enabled: true
+  symbols: [XAUUSD]
+  risk_pct: 0.005              # 0.5% of the account at the 1% stop
+  allow_live: false
+h1_trend_account:
+  enabled: true
+  symbols: [XAUUSD]
+  risk_pct: 0.005              # 0.5% of the account at the 2 × ATR(1h) stop
+  allow_live: false
+
 # ── Learner (runs inside the Strategist) ──
 learner:
   history_days: 90             # walk-forward window for tuning (needs the setup-map history cache; else the bar store)
