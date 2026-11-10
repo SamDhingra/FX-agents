@@ -65,7 +65,7 @@ instruments:
     tick_size: 0.1
     commission_per_unit: 0.62
     max_units: 20
-    sim_start_price: 2450
+    sim_start_price: 2815
     sim_daily_vol: 0.015
     oanda: {instrument: US2000_USD, multiplier: 1, commission_per_unit: 0, max_units: 200}
     optional: true              # if this OANDA account doesn't offer US2000_USD, it is dropped with a warning (no start-up failure)
@@ -346,7 +346,8 @@ shadow:
     XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
     NDQ: 2.30                   # (was 0.40 / 1.50 / 2.50 — estimates that understated real costs)
     US30: 3.00
-    US2000: 0.50                # PROVISIONAL (Nov 9 2026): replace with the measured median (./fx.sh instcheck US2000_USD)
+    US2000: 0.50                # provisional: instcheck Nov 10 2026 saw 0.40 at 13:33 NY (one quote); kept 0.50 until the
+                                # median over the export is measured
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal
 
 # ── Playbook strategy (selector.mode or shadow.mode = playbook) ──
