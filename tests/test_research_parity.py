@@ -300,3 +300,31 @@ def test_news_block_knows_fomc_2024_and_2025():
     for d in ("2024-01-31", "2024-12-18", "2025-03-19", "2025-12-10", "2026-09-16"):
         assert research.news_block(pd.Timestamp(f"{d} 14:00", tz=TZ)), d
     assert not research.news_block(pd.Timestamp("2025-03-12 14:00", tz=TZ))
+
+
+def test_merge_researches_one_instrument_and_keeps_the_others(tmp_path, monkeypatch):
+    """Nov 10 2026: `run_research.py --symbols US2000 --merge` replaces only US2000's rows in trades.pkl."""
+    import json
+    import pandas as pd
+    from fxagents import research as R
+    out = tmp_path / "research"
+    out.mkdir()
+    pd.DataFrame({"sym": ["NDQ", "US30", "US2000"], "tf": ["5min"] * 3, "r": [0.1, 0.2, 9.9]}).to_pickle(out / "trades.pkl")
+    (out / "trades_meta.json").write_text(json.dumps({"created": "2026-11-01", "tfs": ["5min", "15min"], "symbols": ["NDQ", "US30"]}))
+    monkeypatch.setattr(R, "research_dir", lambda cfg: out)
+    seen = []
+
+    class Ex:
+        def __init__(self, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def map(self, f, jobs):
+            for j in jobs:
+                seen.append((j[1], j[2]))
+                yield pd.DataFrame({"sym": [j[1]], "tf": [j[2]], "r": [0.5]})
+    monkeypatch.setattr(R, "ProcessPoolExecutor", Ex)
+    df = R.run_all({"timezone": "America/New_York", "instruments": {}}, ["US2000"], merge=True)
+    assert seen == [("US2000", "5min"), ("US2000", "15min")]             # the merged research's own timeframes
+    assert sorted(df.sym) == ["NDQ", "US2000", "US2000", "US30"] and 9.9 not in df.r.tolist()
+    m = json.loads((out / "trades_meta.json").read_text())
+    assert m["symbols"] == ["NDQ", "US2000", "US30"] and m["merged"]["kept_from"] == "2026-11-01"

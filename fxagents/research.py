@@ -556,8 +556,15 @@ def run_job_frame(args) -> pd.DataFrame:
     return pd.DataFrame(run_job(args))
 
 
-def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2) -> pd.DataFrame:
+def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2, merge: bool = False) -> pd.DataFrame:
+    """merge=True (Nov 10 2026): research only `symbols` and replace just their rows in the existing trades.pkl, so the
+    other instruments keep their current research (and their playbook cells)."""
     symbols = symbols or [s for s in cfg["instruments"] if (history_dir(cfg) / f"{s}.pkl").exists()]
+    if merge and not tfs:                         # same timeframes as the research being merged into
+        try:
+            tfs = json.loads((research_dir(cfg) / "trades_meta.json").read_text()).get("tfs")
+        except (OSError, ValueError):
+            tfs = None
     tfs = tfs or TFS
     classes = classes or list(SETUPS) + list(BUILTIN)
     # biggest jobs first so the two workers finish together
@@ -576,8 +583,18 @@ def run_all(cfg, symbols=None, tfs=None, classes=None, workers: int = 2) -> pd.D
     del parts
     out = research_dir(cfg)
     out.mkdir(parents=True, exist_ok=True)
+    meta = {"created": pd.Timestamp.now(tz=cfg["timezone"]).isoformat(timespec="seconds"),
+            "symbols": symbols, "tfs": tfs, "classes": classes}
+    if merge and (out / "trades.pkl").exists():
+        old = pd.read_pickle(out / "trades.pkl")
+        kept = old[~old["sym"].isin(symbols)] if len(old) and "sym" in old.columns else old
+        try:
+            prev = json.loads((out / "trades_meta.json").read_text())
+        except (OSError, ValueError):
+            prev = {}
+        meta["symbols"] = sorted(set(kept["sym"].unique() if len(kept) else []) | set(symbols))
+        meta["merged"] = {"researched_now": symbols, "kept_from": prev.get("created")}
+        df = pd.concat([kept, df], ignore_index=True) if len(df) else kept
     df.to_pickle(out / "trades.pkl")
-    (out / "trades_meta.json").write_text(json.dumps({
-        "created": pd.Timestamp.now(tz=cfg["timezone"]).isoformat(timespec="seconds"),
-        "symbols": symbols, "tfs": tfs, "classes": classes, "n": len(df)}, indent=1))
+    (out / "trades_meta.json").write_text(json.dumps({**meta, "n": len(df)}, indent=1))
     return df

@@ -2,6 +2,7 @@
 
     python run_research.py                       # full grid → data/research/trades.pkl
     python run_research.py --symbols XAUUSD --tfs 5min 15min
+    python run_research.py --symbols US2000 --merge   # one instrument; the others keep their research
     python run_research.py --select              # (re)build the playbook from existing trades
 """
 from __future__ import annotations
@@ -20,6 +21,8 @@ def main() -> int:
     ap.add_argument("--classes", nargs="*")
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--select", action="store_true", help="only run the selection / playbook step")
+    ap.add_argument("--merge", action="store_true", help="research only --symbols and keep every other instrument's "
+                    "existing research (e.g. --symbols US2000 --merge)")
     ap.add_argument("--config", default="config.yaml")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(name)s %(message)s", datefmt="%H:%M:%S")
@@ -27,7 +30,7 @@ def main() -> int:
     from fxagents import research
     t0 = time.time()
     if not a.select:
-        df = research.run_all(cfg, a.symbols, a.tfs, a.classes, a.workers)
+        df = research.run_all(cfg, a.symbols, a.tfs, a.classes, a.workers, merge=a.merge)
         logging.info("grid done: %d trades in %.0fs", len(df), time.time() - t0)
     try:
         from fxagents import playbook
