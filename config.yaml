@@ -346,8 +346,7 @@ shadow:
     XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
     NDQ: 2.30                   # (was 0.40 / 1.50 / 2.50 — estimates that understated real costs)
     US30: 3.00
-    US2000: 0.50                # provisional: instcheck Nov 10 2026 saw 0.40 at 13:33 NY (one quote); kept 0.50 until the
-                                # median over the export is measured
+    US2000: 0.40                # measured Nov 10 2026: median of the last 90 days of 1-minute history (90th pct 0.5)
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal
 
 # ── Playbook strategy (selector.mode or shadow.mode = playbook) ──
