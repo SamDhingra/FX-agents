@@ -408,3 +408,15 @@ def test_unknown_trade_with_other_open_legs_is_not_booked_blind():
         await b.close(p, 24510)
     with pytest.raises(OrderRejected, match="still has open trade"):
         run(go())
+
+
+def test_optional_instrument_missing_on_the_account_is_dropped_not_fatal():
+    cfg, fake, c, st, bus, feed, b = setup()
+    from tests import fake_oanda
+    spec = fake_oanda.SPECS.pop("US2000_USD")
+    try:
+        assert cfg["instruments"]["US2000"].get("optional") is True
+        run(feed.qualify())
+        assert "US2000" not in cfg["instruments"] and "US2000" not in feed.syms and "NDQ" in feed.syms
+    finally:
+        fake_oanda.SPECS["US2000_USD"] = spec

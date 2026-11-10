@@ -58,6 +58,17 @@ instruments:
     sim_start_price: 46500
     sim_daily_vol: 0.009
     oanda: {instrument: US30_USD, multiplier: 1, commission_per_unit: 0, max_units: 20}
+  US2000:                       # Russell 2000 (added Nov 9 2026, Sam). Traded on the practice account by the hourly pick
+                                # once its strategies have stats; inside the index group (one index position per direction)
+    contract: {secType: CONTFUT, symbol: M2K, exchange: CME}     # Micro Russell 2000, $5 per point
+    multiplier: 5
+    tick_size: 0.1
+    commission_per_unit: 0.62
+    max_units: 20
+    sim_start_price: 2450
+    sim_daily_vol: 0.015
+    oanda: {instrument: US2000_USD, multiplier: 1, commission_per_unit: 0, max_units: 200}
+    optional: true              # if this OANDA account doesn't offer US2000_USD, it is dropped with a warning (no start-up failure)
   # Forex majors (EURUSD/GBPUSD/AUDUSD) were removed in Oct 2026: watch-only since they were added, never traded,
   # and clearly negative after OANDA spreads in every test. To watch one again, add it here with `trade: false`.
 
@@ -112,7 +123,7 @@ risk:
   max_margin_pct_per_position: 0.25  # margin-funded brokers (OANDA): one position ties up at most 25% of equity
   max_margin_pct_total: 0.60         # …and all positions together at most 60%
   max_positions_per_symbol: 1
-  index_group: [NDQ, US30]           # these move together …
+  index_group: [NDQ, US30, US2000]   # these move together …
   index_group_max: 1                 # … so at most one index position per DIRECTION (long NDQ blocks long US30, not short US30)
   daily_loss_limit_pct: 0.02         # kill switch: flatten + halt for the day at -2%
   max_drawdown_pct: 0.06             # kill switch vs. equity peak
@@ -335,6 +346,7 @@ shadow:
     XAUUSD: 0.62                # gold/NDQ/US30: median opening spread of OANDA 1m bid/ask, Oct 2024–Sep 2026
     NDQ: 2.30                   # (was 0.40 / 1.50 / 2.50 — estimates that understated real costs)
     US30: 3.00
+    US2000: 0.50                # PROVISIONAL (Nov 9 2026): replace with the measured median (./fx.sh instcheck US2000_USD)
   # db_path: data/journal_shadow.sqlite   # default: next to the main journal
 
 # ── Playbook strategy (selector.mode or shadow.mode = playbook) ──
@@ -356,6 +368,7 @@ playbook:
   instruments:
     NDQ:  {min_e: 0.02, max_cells: 10, max_positions: 2, k_p: null, min_n: null}
     US30: {min_e: 0.02, max_cells: 10, max_positions: 2, k_p: null, min_n: null}
+    US2000: {min_e: 0.02, max_cells: 10, max_positions: 2, k_p: null, min_n: null}
 
 # ── 90-day setup map: every setup backtested by symbol × hour × weekday (heatmap + setup-first prior) ──
 setup_map:

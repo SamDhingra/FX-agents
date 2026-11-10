@@ -147,7 +147,7 @@ def target_fills(rows: list[dict]) -> list[dict]:
     return out
 
 
-OANDA_NAMES = {"NDQ": "NAS100_USD", "US30": "US30_USD", "XAUUSD": "XAU_USD", "SPX": "SPX500_USD", "BTCUSD": "BTC_USD"}
+OANDA_NAMES = {"NDQ": "NAS100_USD", "US30": "US30_USD", "US2000": "US2000_USD", "XAUUSD": "XAU_USD", "SPX": "SPX500_USD", "BTCUSD": "BTC_USD"}
 
 
 def _inst_of(cfg, sym: str) -> str:

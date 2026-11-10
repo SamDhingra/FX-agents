@@ -13,6 +13,7 @@ import csv
 import hmac
 import io
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -479,7 +480,7 @@ def build_app(ctx) -> FastAPI:
 
     @app.get("/api/analysis")
     async def api_analysis(request: Request, days: int = 30, symbol: str = "", setup: str = "", side: str = "", tf: str = "",
-                           profile: str = "", session: str = "", bias: str = ""):
+                           profile: str = "", session: str = "", bias: str = "", day: str = ""):
         """Analysis page (Nov 4 2026): setup scorecard with what happened to the signals, refusal reasons, hours,
         weekdays, exits, bias relation, givebacks — for the selected book (?book=) over the last `days`."""
         need(request)
@@ -487,7 +488,23 @@ def build_app(ctx) -> FastAPI:
         out = analysis.build(c.journal.db, max(1, min(int(days), 3650)),       # same thread as every other journal read
                              c.state.now if getattr(c.state, "now", None) is not None else None,
                              {"symbol": symbol, "setup": setup, "side": side, "tf": tf, "profile": profile, "session": session,
-                              "bias": bias}, c.cfg)
+                              "bias": bias}, c.cfg, day=day if day == "today" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", day or "") else None)
+        if out.get("day"):                       # the day report also shows what is still open, under the same filters
+            f = out["filters"]
+            mult = lambda s: float((c.cfg["instruments"].get(s) or {}).get("multiplier", 1))  # noqa: E731
+            ops = []
+            for p in c.state.positions.values():
+                if p.status != "open":
+                    continue
+                d = p.to_public(mult(p.symbol))
+                tag = {"symbol": p.symbol, "setup": analysis.setup_of(p.strategy), "side": d["side"],
+                       "tf": analysis.tf_of(p.strategy), "profile": analysis.profile_of(p.strategy),
+                       "bias": str(p.bias_mode or "—"),
+                       "session": analysis.session_of(pd.Timestamp(d["opened"]).tz_convert(analysis.NY).hour)}
+                if all(str(tag.get(k)) == str(v) for k, v in f.items() if k in tag):
+                    ops.append({k: d[k] for k in ("id", "symbol", "side", "strategy", "opened", "entry", "stop", "target",
+                                                  "price", "r_now", "unrealized", "realized")} | {"setup": tag["setup"], "tf": tag["tf"]})
+            out["open"] = sorted(ops, key=lambda x: x["opened"], reverse=True)
         return JSONResponse(out)
 
     @app.get("/api/signals")

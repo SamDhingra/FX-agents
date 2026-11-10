@@ -132,20 +132,32 @@ def add_pips(t: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     return t
 
 
-def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | None = None, cfg: dict | None = None) -> dict:
+def day_bounds(day: str, now: pd.Timestamp) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """'today' or 'YYYY-MM-DD' → [00:00, next 00:00) New York (Nov 9 2026: the day report)."""
+    d = now.tz_convert(NY).normalize() if day == "today" else pd.Timestamp(day).tz_localize(NY).normalize()
+    return d, d + pd.Timedelta(days=1)
+
+
+def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | None = None, cfg: dict | None = None,
+          day: str | None = None) -> dict:
     now = now if now is not None else pd.Timestamp.now(tz=NY)
-    since = now - pd.Timedelta(days=days)
+    if day:
+        since, until = day_bounds(day, now)
+    else:
+        since, until = now - pd.Timedelta(days=days), None
     f = {k: v for k, v in (filters or {}).items() if k in FILTERS and v not in (None, "", "all")}
     t = pd.read_sql_query("SELECT id, symbol, side, strategy, opened, closed, r_multiple, mfe_r, mae_r, exit_reason, bias_mode, "
                           "realized, qty_initial, qty_gross FROM trades WHERE status='closed' AND r_multiple IS NOT NULL", db)
     t["opened_ny"] = _ny(t["opened"])
     t["closed_ny"] = _ny(t["closed"])
-    t = _tag(t[t["opened_ny"] >= since].copy(), "opened_ny", "strategy")
+    keep = (t["opened_ny"] >= since) & ((t["opened_ny"] < until) if until is not None else True)
+    t = _tag(t[keep].copy(), "opened_ny", "strategy")
     t["bias"] = t["bias_mode"].fillna("—").astype(str)
     t = add_pips(t, cfg)
     sig = pd.read_sql_query("SELECT ts, symbol, strategy, side, action, why FROM signals", db)
     sig["ts_ny"] = _ny(sig["ts"])
-    sig = _tag(sig[sig["ts_ny"] >= since].copy(), "ts_ny", "strategy")
+    keep = (sig["ts_ny"] >= since) & ((sig["ts_ny"] < until) if until is not None else True)
+    sig = _tag(sig[keep].copy(), "ts_ny", "strategy")
     sig["reason"] = [("Taken" if a == "taken" else reason_of(w)) for a, w in zip(sig["action"], sig["why"])]
 
     # what can be filtered on (from the whole range, before filtering, so a choice never hides the others)
@@ -159,7 +171,8 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
 
     # filters that could not apply to signals (signals carry no bias mode): the page says so beside the signal counts
     sig_unscoped = [k for k in f if k not in sig.columns]
-    out: dict = {"days": days, "since": since.isoformat(), "filters": f, "options": opts, "totals": _stats(t),
+    out: dict = {"days": days, "since": since.isoformat(), "day": since.strftime("%Y-%m-%d") if day else None,
+                 "until": until.isoformat() if until is not None else None, "filters": f, "options": opts, "totals": _stats(t),
                  "signal_scope": {"unapplied": sig_unscoped}, "date_basis": "entered",
                  "pnl": round(float(t["realized"].fillna(0).sum()), 2)}
     # 1. scorecard: setup × instrument (with what happened to its signals)
@@ -254,4 +267,14 @@ def build(db, days: int = 30, now: pd.Timestamp | None = None, filters: dict | N
     out["big_payoff"] = sorted([r for r in rows if r["n"] >= 5 and (r["win"] or 0) < 0.45 and (r.get("pips") or 0) > 0],
                                key=lambda r: -(r.get("pips") or 0))
     out["pips_by_symbol"] = {sym: _stats(g)["pips"] for sym, g in t.groupby("symbol")}
+    # 11. the trades themselves (newest first) — the day report lists every one
+    tl = t.sort_values("opened_ny", ascending=False).head(300)
+    num = lambda x, k=2: round(float(x), k) if pd.notna(x) else None  # noqa: E731
+    out["trades"] = [{"id": r.id, "opened": r.opened_ny.isoformat(), "closed": r.closed_ny.isoformat() if pd.notna(r.closed_ny) else None,
+                      "symbol": r.symbol, "side": r.side, "setup": r.setup, "tf": r.tf, "profile": r.profile,
+                      "session": r.session, "bias": r.bias, "r": num(r.r_multiple), "mfe": num(r.mfe_r),
+                      "pips": num(r.pips, 1), "pnl": num(r.realized),
+                      "exit": r.exit_reason if isinstance(r.exit_reason, str) else None}
+                     for r in tl.itertuples()]
+    out["trades_more"] = max(0, len(t) - len(tl))
     return out

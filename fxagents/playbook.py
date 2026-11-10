@@ -60,8 +60,9 @@ class Policy:
         # wins earn minus what the losses cost, per unit of risk. Indices keep heavier shrinkage, 30 trades minimum.
         "NDQ": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
         "US30": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
+        "US2000": InstrumentRule("selective", 0.0, 0.03, 4, 1, k_p=40.0, min_n=30),
 })                              # forex majors removed Oct 2026 (never traded; negative after spread)
-    index_group: tuple = ("NDQ", "US30")
+    index_group: tuple = ("NDQ", "US30", "US2000")
     index_group_max: int = 1          # NDQ / US30 move together: one index position per direction at a time
     max_open: int = 3
     daily_loss_r: float = 4.0         # -2% day at 0.5% per trade = -4R
@@ -345,7 +346,7 @@ def params_of(setup: str, variant: str) -> dict:
     raise KeyError(f"{setup}: unknown variant {variant}")
 
 
-SYM_TAG = {"XAUUSD": "xau", "NDQ": "ndq", "US30": "us30", "SPX": "spx", "EURUSD": "eu", "GBPUSD": "gu", "AUDUSD": "au"}
+SYM_TAG = {"XAUUSD": "xau", "NDQ": "ndq", "US30": "us30", "US2000": "rty", "SPX": "spx", "EURUSD": "eu", "GBPUSD": "gu", "AUDUSD": "au"}
 
 
 def cell_id(setup: str, tf: str, variant: str, mgmt: str, sym: str = "") -> str:

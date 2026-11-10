@@ -694,6 +694,10 @@ dialog.sheetdlg{z-index:70}
 .atlwrap svg{display:block}.atc{cursor:pointer}
 .rcbtn{margin-left:auto;font-size:12.5px;padding:6px 10px}
 #recapDialog{width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 40px);padding:0;border:1px solid var(--line-2);border-radius:18px;background:var(--card);color:var(--text);overflow:auto}
+#anRange .anday{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+#anRange .anday input{padding:2px 4px;border:0;background:transparent;color:inherit;font:inherit;max-width:130px}
+.antrades tr[data-tid]{cursor:pointer}
+.antrades tr[data-tid]:hover td{background:var(--card-2)}
 #recapDialog::backdrop{background:rgb(5 8 15 / .55);backdrop-filter:blur(3px)}
 #rcBody{padding:18px 20px 22px}
 .rchead{display:flex;align-items:flex-end;gap:12px}.rchead h3{margin:4px 0 0;font-size:20px}.rchead .eyebrow{font-size:10px;letter-spacing:.14em;color:var(--muted);font-weight:700}
@@ -1690,12 +1694,13 @@ html body{font-size:13.5px}
 
     <!-- ANALYSIS (Nov 4 2026) -->
     <section class="page" id="p-analysis">
-      <div class="filters anrange" id="anRange"><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
+      <div class="filters anrange" id="anRange"><button class="fchip" data-day="today">Today</button><label class="fchip anday" title="Pick one day (New York date)">Day <input type="date" id="anDay" aria-label="Report for one day"></label><button class="fchip" data-d="7">7 days</button><button class="fchip on" data-d="30">30 days</button><button class="fchip" data-d="90">90 days</button><button class="fchip" data-d="365">1 year</button><span class="mut anbook" id="anBook"></span></div>
       <div class="anfilt" id="anFilt"></div>
       <div id="anStale"></div>
       <div class="kcards" id="anK"></div>
       <div class="kcards" id="anP"></div>
       <div class="grid hrows">
+        <div class="card c12" id="anDayCard" hidden><h3><span id="anDayTitle">Today's trades</span> <span class="mut heading-note">entered this day (New York) · tap a trade to open it</span></h3><div id="anOpen"></div><div class="tbl" id="anTrades"></div></div>
         <div class="card c12"><h3>Running total <span class="mut heading-note">cumulative R, one step per trade in close order (trade sequence, not a time axis)</span><span class="sp"></span><span class="mut heading-note" id="anCurveNote"></span></h3><div id="anCurve"></div></div>
         <div class="card c12"><h3>Setups <span class="mut heading-note">what each setup made, and what happened to its signals · tap a row to filter</span><span class="sp"></span><span class="ansort" id="anSort"><button data-s="sum">Total R</button><button data-s="pips">Net pips</button><button data-s="win">Win rate</button><button data-s="payoff">Payoff</button></span></h3><div class="tbl" id="anSetups"><div class="empty">Loading…</div></div></div>
         <div class="card c12"><h3>Low win rate, positive pips <span class="mut heading-note">setups winning under 45% that still net pips — their winners carry the losers</span></h3><div class="tbl" id="anBig"></div></div>
@@ -2364,10 +2369,10 @@ async function loadCompare(){
 }
 /* Oct 30 2026: every book × every instrument in one table (rows = books, columns = instruments + total) */
 let SYM_UNIT = (() => { try{ return localStorage.getItem("fx.symUnit") || "r"; }catch(e){ return "r"; } })();
-const SYM_SHORT = {XAUUSD:"Gold", NDQ:"NDQ", US30:"US30"};
+const SYM_SHORT = {XAUUSD:"Gold", NDQ:"NDQ", US30:"US30", US2000:"RUT"};
 function instrumentTable(LG){
   if(!LG.length || !LG.some(r => r.symbols)) return "";
-  const order = ["XAUUSD", "NDQ", "US30"];
+  const order = ["XAUUSD", "NDQ", "US30", "US2000"];
   const syms = [...new Set(LG.flatMap(r => Object.keys(r.symbols || {})))].sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99) || a.localeCompare(b));
   const cols = syms.length ? syms : order;
   const tot = {}; cols.forEach(k => tot[k] = {trades:0, wins:0, sum_r:0, pnl:0});
@@ -2569,7 +2574,7 @@ function ruleText(inst, pol){
     + (r.min_p ? ` and an estimated win probability ≥ <b>${Math.round(r.min_p*100)}%</b>` : ` (any win rate: what counts is that winners outweigh losers)`)
     + `, at least <b>${r.min_n || pol.min_n}</b> trades and a profit in both halves of the last ${pol.window_days} days.`
     + (r.k_p ? ` Estimates are shrunk harder here (${r.k_p} pseudo-trades), because good-looking records regress.` : "")
-    + (pol.index_group && pol.index_group.includes(inst.sym) ? ` One index position at a time across NDQ/US30.` : "");
+    + (pol.index_group && pol.index_group.includes(inst.sym) ? ` One index position at a time across NDQ/US30/US2000.` : "");
 }
 function wfCurve(trades){
   const by = {}; let c = 0;
@@ -2583,7 +2588,7 @@ function renderResearch(){
     el.innerHTML = `<div class="card"><div class="empty">No research yet. On the server: <code>docker compose exec fxagents python run_research.py</code> (≈5 minutes), or wait for the weekly refresh after the history cache updates.</div></div>`;
     return;
   }
-  const ORD = ["XAUUSD","NDQ","US30","SPX"], ks = Object.keys(RS.instruments);
+  const ORD = ["XAUUSD","NDQ","US30","US2000","SPX"], ks = Object.keys(RS.instruments);
   const syms = ["ALL", ...ORD.filter(x => ks.includes(x)), ...ks.filter(x => !ORD.includes(x))];
   if(!syms.includes(pbv.sym)) pbv.sym = syms[1] || "ALL";
   $("#pbSym").innerHTML = syms.map(x => `<button class="fchip ${pbv.sym===x?"on":""}" data-v="${x}">${x==="ALL"?"All":x}</button>`).join("");
@@ -4827,9 +4832,9 @@ function btHist(H){
 }
 
 /* ══ v10 (Oct 22 2026): Terminal theme · Market Bias page · open-position rail · dense overview ═══════════════════ */
-const INAME = {XAUUSD:"Gold", NDQ:"Nasdaq 100", US30:"Dow 30", SPX500:"S&P 500", BTCUSD:"Bitcoin", ETHUSD:"Ether",
+const INAME = {XAUUSD:"Gold", NDQ:"Nasdaq 100", US30:"Dow 30", US2000:"Russell 2000", SPX500:"S&P 500", BTCUSD:"Bitcoin", ETHUSD:"Ether",
   EURUSD:"Euro / Dollar", GBPUSD:"Pound / Dollar", USDJPY:"Dollar / Yen", AUDUSD:"Aussie / Dollar", USDCAD:"Dollar / CAD", XAGUSD:"Silver"};
-const ICODE = {XAUUSD:"AU", NDQ:"NQ", US30:"DJ", SPX500:"SP", BTCUSD:"BT", ETHUSD:"ET", XAGUSD:"AG"};
+const ICODE = {XAUUSD:"AU", NDQ:"NQ", US30:"DJ", US2000:"RT", SPX500:"SP", BTCUSD:"BT", ETHUSD:"ET", XAGUSD:"AG"};
 const icode = s => ICODE[s] || String(s).slice(0, 2);
 const iname = s => INAME[s] || s;
 let BG = null, BG_AT = 0;
@@ -5404,11 +5409,21 @@ titles.analysis = "Analysis";
 pageDescriptions.analysis = "Which setups make money, why signals weren't taken, when and how trades end — for the selected book.";
 shortTitles.analysis = "Analysis";
 MORE.push("analysis");
-const AN = {days: 30, data: null};
+const AN = {days: 30, data: null, day: null};
 try{ const d = +localStorage.getItem("fx-an-days"); if([7,30,90,365].includes(d)) AN.days = d; }catch(e){}
-$$("#anRange .fchip").forEach(b => { b.classList.toggle("on", +b.dataset.d === AN.days); b.onclick = () => {
-  AN.days = +b.dataset.d; try{ localStorage.setItem("fx-an-days", AN.days); }catch(e){}
-  $$("#anRange .fchip").forEach(x => x.classList.toggle("on", x === b)); loadAnalysis(); }; });
+try{ if(localStorage.getItem("fx-an-day") === "today") AN.day = "today"; }catch(e){}
+/* Nov 9 2026 (Sam): the day report — Today, or any one day, under the same filters as every other range */
+function anRangeMark(){
+  $$("#anRange button.fchip").forEach(x => x.classList.toggle("on", AN.day ? x.dataset.day === AN.day : +x.dataset.d === AN.days));
+  const lab = $("#anRange .anday"); lab.classList.toggle("on", !!AN.day && AN.day !== "today");
+  if(AN.day && AN.day !== "today") $("#anDay").value = AN.day; else $("#anDay").value = "";
+}
+$$("#anRange button.fchip").forEach(b => b.onclick = () => {
+  if(b.dataset.day){ AN.day = b.dataset.day; } else { AN.day = null; AN.days = +b.dataset.d; try{ localStorage.setItem("fx-an-days", AN.days); }catch(e){} }
+  try{ localStorage.setItem("fx-an-day", AN.day === "today" ? "today" : ""); }catch(e){}
+  anRangeMark(); loadAnalysis(); });
+$("#anDay").onchange = () => { const v = $("#anDay").value; if(!v) return; AN.day = v; try{ localStorage.setItem("fx-an-day", ""); }catch(e){} anRangeMark(); loadAnalysis(); };
+anRangeMark();
 AN.f = {};
 try{ AN.f = JSON.parse(localStorage.getItem("fx-an-f") || "{}") || {}; }catch(e){}
 const AN_FIELDS = [["symbol","Instrument"],["setup","Setup"],["side","Direction"],["tf","Timeframe"],["profile","Exit profile"],["session","Session"],["bias","Bias"]];
@@ -5433,16 +5448,17 @@ function anFilters(opts){
    committed together. While loading or after a failure, the figures on screen are marked as the previous snapshot. */
 AN.seq = 0;
 const anBookName = b => b === "live" ? "Practice account" : bookName(b);
-const anRangeTxt = d => d >= 365 ? "last year" : `last ${d} days`;
+const anRangeTxt = (d, day) => day === "today" ? "today" : day ? "day " + day : d >= 365 ? "last year" : `last ${d} days`;
 async function loadAnalysis(){
-  const id = ++AN.seq, want = {book: BOOK, days: AN.days, f: {...AN.f}};
+  const id = ++AN.seq, want = {book: BOOK, days: AN.days, day: AN.day, f: {...AN.f}};
   const qs = Object.entries(want.f).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join("");
-  if(AN.shown) $("#anStale").innerHTML = `<div class="anstale mut">Loading ${esc(anBookName(want.book))} · ${anRangeTxt(want.days)}… the figures below are still ${esc(anBookName(AN.shown.book))} as of ${hm(AN.shown.at)}.</div>`;
+  if(AN.shown) $("#anStale").innerHTML = `<div class="anstale mut">Loading ${esc(anBookName(want.book))} · ${anRangeTxt(want.days, want.day)}… the figures below are still ${esc(anBookName(AN.shown.book))} · ${anRangeTxt(AN.shown.days, AN.shown.day)} as of ${hm(AN.shown.at)}.</div>`;
   try{
-    const data = await api(q("api/analysis?days=" + want.days + qs));
+    const data = await api(q("api/analysis?days=" + want.days + (want.day ? "&day=" + encodeURIComponent(want.day) : "") + qs));
     if(id !== AN.seq) return;                                       // a newer request was started: drop this one
     AN.data = data; AN.shown = {...want, at: new Date().toISOString()};
-    $("#anBook").textContent = `${anBookName(want.book)} · trades entered in the ${anRangeTxt(want.days)} · as of ${hm(AN.shown.at)}`;
+    $("#anBook").textContent = want.day ? `${anBookName(want.book)} · trades entered ${want.day === "today" ? "today (" + data.day + ")" : "on " + data.day} · as of ${hm(AN.shown.at)}`
+      : `${anBookName(want.book)} · trades entered in the ${anRangeTxt(want.days)} · as of ${hm(AN.shown.at)}`;
     $("#anStale").innerHTML = "";
     anFilters(data.options || {}); renderAnalysis();
   }catch(e){
@@ -5470,15 +5486,38 @@ function anSigScope(d){
   const un = ((d.signal_scope || {}).unapplied || []).map(k => (AN_FIELDS.find(f => f[0] === k) || [k, k])[1].toLowerCase());
   return un.length ? `signals: all ${un.join(", ")} states (not recorded on signals)` : "";
 }
+function anDayReport(d){
+  const card = $("#anDayCard"); card.hidden = !d.day; if(!d.day) return;
+  $("#anDayTitle").textContent = (AN.shown && AN.shown.day === "today" ? "Today's trades" : "Trades on " + d.day);
+  const op = d.open || [];
+  $("#anOpen").innerHTML = op.length ? `<div class="mut" style="margin:2px 0 6px">Still open (${op.length})</div><table class="antbl"><tr><th>Opened</th><th>Instrument</th><th>Setup</th><th>Now</th><th class="hm">Unrealized</th></tr>` +
+    op.map(p => `<tr data-oid="${esc(p.id)}"><td>${hm(p.opened)}</td><td>${esc(iname(p.symbol))} <span class="mut">${p.side === "LONG" ? "long" : "short"}</span></td><td>${esc(p.setup)} <span class="mut">${esc(p.tf)}</span></td><td class="${cls(p.r_now)}"><b>${sR(p.r_now)}</b></td><td class="hm ${cls(p.unrealized)}">${smoney(p.unrealized)}</td></tr>`).join("") + `</table>` : "";
+  const tr = d.trades || [];
+  if(tr.length && matchMedia("(max-width:760px)").matches){        // phone: one line per trade, result on the right
+    $("#anTrades").innerHTML = (op.length ? `<div class="mut" style="margin:10px 0 6px">Closed (${tr.length})</div>` : "") +
+      tr.map(t => `<div class="ancard" role="button" tabindex="0" data-tid="${esc(t.id)}"><div class="ah"><span class="mut">${hm(t.opened)}</span> <b>${esc(iname(t.symbol))}</b> <span class="mut">${t.side === "LONG" ? "long" : "short"}</span><span class="sp"></span><b class="${cls(t.r)}">${sR(t.r)}</b></div>
+        <div class="mut am">${esc(t.setup)} ${esc(t.tf)} · ${smoney(t.pnl)}${t.pips != null ? ` · ${pp(t.pips)} pips` : ""}${t.mfe != null ? ` · best ${sR(t.mfe)}` : ""}${t.exit ? ` · ${esc(t.exit)}` : ""}</div></div>`).join("")
+      + (d.trades_more ? `<div class="mut">… and ${d.trades_more} more</div>` : "");
+  } else
+  $("#anTrades").innerHTML = (tr.length ? (op.length ? `<div class="mut" style="margin:10px 0 6px">Closed (${tr.length})</div>` : "") +
+    `<table class="antbl antrades"><tr><th>Entered</th><th>Instrument</th><th>Setup</th><th>Result</th><th class="hm">Pips</th><th class="hm">P&amp;L</th><th class="hm">Best</th><th class="hm">Exit</th></tr>` +
+    tr.map(t => `<tr role="button" tabindex="0" data-tid="${esc(t.id)}" title="Open this trade"><td>${hm(t.opened)}</td><td>${esc(iname(t.symbol))} <span class="mut">${t.side === "LONG" ? "long" : "short"}</span></td><td>${esc(t.setup)} <span class="mut">${esc(t.tf)}</span></td><td class="${cls(t.r)}"><b>${sR(t.r)}</b></td><td class="hm ${cls(t.pips)}">${pp(t.pips)}</td><td class="hm ${cls(t.pnl)}">${smoney(t.pnl)}</td><td class="hm">${t.mfe != null ? sR(t.mfe) : "—"}</td><td class="hm mut">${esc(t.exit || "—")}</td></tr>`).join("") + `</table>`
+    + (d.trades_more ? `<div class="mut">… and ${d.trades_more} more</div>` : "")
+    : (op.length ? "" : `<div class="empty">No trades entered ${d.day === (AN.data || {}).day && AN.shown && AN.shown.day === "today" ? "today" : "on " + d.day} with these filters.</div>`));
+  $$("#anTrades [data-tid]").forEach(el => { const open = async () => {
+      try{ openTrade(await api(q("api/trades/" + encodeURIComponent(el.dataset.tid)))); }catch(e){ toast("Couldn't open that trade."); } };
+    el.onclick = open; el.onkeydown = e => { if(e.key === "Enter") open(); }; });
+}
 function renderAnalysis(){
   const d = AN.data; if(!d) return;
   const T = d.totals || {}, st = d.streaks || {}, sg = d.signals || {};
   const tile = (h, b, sub, c = "") => `<div class="kc"><div class="kh"><span>${h}</span></div><b class="num ${c}">${b}</b><em>${sub}</em></div>`;
   $("#anK").innerHTML =
-      tile("Trades", T.n || 0, T.n ? `${anPct(T.win)} won · avg ${sR(T.avg)}` : `none in the last ${d.days} days`)
+      tile("Trades", T.n || 0, T.n ? `${anPct(T.win)} won · avg ${sR(T.avg)}` : `none ${d.day ? "on " + d.day : `in the last ${d.days} days`}`)
     + tile("Result", sR(T.sum, 1), smoney(d.pnl), cls(T.sum))
     + tile("Deepest dip", st.max_dd_r != null ? sR(st.max_dd_r, 1) : "—", st.longest_loss != null ? `longest losing run ${st.longest_loss} · winning ${st.longest_win}` : "", st.max_dd_r < 0 ? "down" : "")
     + tile("Signals taken", `${sg.taken || 0} / ${sg.seen || 0}`, anSigScope(d) || (d.giveback_share != null ? `gave back +1R: ${anPct(d.giveback_share)} of ${((d.excursion || {}).mfe_cov || [])[0]}` : ""));
+  anDayReport(d);
   const pbs = Object.entries(d.pips_by_symbol || {}).filter(([, v]) => v != null);
   AN.onePip = pbs.length === 1 && (d.by_symbol || []).length === 1;   // pips only add up within one instrument
   // payoff and break-even in R, on the same trades as the win rate (wins ÷ wins + losses); pip payoff only as a note,
@@ -5567,7 +5606,7 @@ function renderAnalysis(){
   $$("#anSetups [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
 }
-$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-09.1");
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-09.2");
 const _goAn = go;
 go = function(p){ _goAn(p); if(p === "analysis") loadAnalysis(); };
 const _setBookAn = setBook;

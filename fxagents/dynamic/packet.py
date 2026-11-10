@@ -21,7 +21,7 @@ from ..timeutil import tfloor
 NY = "America/New_York"
 MIN = pd.Timedelta("1min")
 N_M5, N_M15, N_H1 = 24, 16, 24
-FALLBACK_DECIMALS = {"XAUUSD": 2, "NDQ": 2, "US30": 1}
+FALLBACK_DECIMALS = {"XAUUSD": 2, "NDQ": 2, "US30": 1, "US2000": 2}
 LEVEL_KEYS = ("pdh", "pdl", "asia_hi", "asia_lo", "h4_swing_hi", "h4_swing_lo")
 
 

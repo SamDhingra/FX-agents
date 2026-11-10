@@ -10,8 +10,8 @@ Conventions (override per instrument in config: `pip_size`, `lot_units`):
 Lots = units × contract multiplier ÷ lot size, so the same position reads the same on either broker."""
 from __future__ import annotations
 
-PIP = {"XAUUSD": 0.1, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "EURUSD": 0.0001, "GBPUSD": 0.0001, "AUDUSD": 0.0001}
-LOT = {"XAUUSD": 100.0, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "EURUSD": 100000.0, "GBPUSD": 100000.0, "AUDUSD": 100000.0}
+PIP = {"XAUUSD": 0.1, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "US2000": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001, "AUDUSD": 0.0001}
+LOT = {"XAUUSD": 100.0, "SPX": 1.0, "NDQ": 1.0, "US30": 1.0, "US2000": 1.0, "EURUSD": 100000.0, "GBPUSD": 100000.0, "AUDUSD": 100000.0}
 
 
 def pip_size(cfg, sym: str) -> float:

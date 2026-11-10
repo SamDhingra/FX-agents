@@ -148,3 +148,25 @@ def test_one_trade_endpoint(tmp_path):
     one = c.get(f"/api/trades/{rows[0]['id']}").json()
     assert one["id"] == rows[0]["id"] and isinstance(one["events"], list) and "pips" in one
     assert c.get("/api/trades/nope").status_code == 404
+
+
+def test_day_report_only_that_new_york_day(tmp_path):
+    """Nov 9 2026 (Sam): the day report — 'today' or one date, same filters, with every trade listed."""
+    j = _journal(tmp_path)
+    now = pd.Timestamp("2026-11-03 20:00", tz="America/New_York")
+    d = A.build(j.db, now=now, day="today")
+    assert d["day"] == "2026-11-03" and d["totals"]["n"] == 2 and {t["id"] for t in d["trades"]} == {"b", "c"}
+    assert d["signals"]["seen"] == 3                                     # 09:00, 14:25, 15:45 on Nov 3
+    one = A.build(j.db, now=now, day="2026-11-02")
+    assert [t["id"] for t in one["trades"]] == ["a"] and one["trades"][0]["r"] == 1.5
+    f = A.build(j.db, now=now, day="today", filters={"symbol": "NDQ"})
+    assert [t["id"] for t in f["trades"]] == ["c"] and f["trades"][0]["setup"] == "smc_mss" and f["trades"][0]["tf"] == "5m"
+    assert A.build(j.db, now=now, days=30)["day"] is None
+
+
+def test_day_endpoint_lists_open_positions_under_the_filters(tmp_path):
+    ctx = make_ctx(tmp_path)
+    cl = TestClient(build_app(ctx))
+    r = cl.get("/api/analysis?day=today").json()
+    assert r["day"] and "open" in r and "trades" in r
+    assert cl.get("/api/analysis?day=bogus").json()["day"] is None      # anything but today / a date → normal range

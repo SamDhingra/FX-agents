@@ -21,7 +21,7 @@ import pandas as pd
 
 log = logging.getLogger("ask")
 
-SYMS = {"XAUUSD": r"gold|xau", "NDQ": r"nasdaq|ndq|nq|nas100|us100", "US30": r"us30|dow|dji|ym"}
+SYMS = {"XAUUSD": r"gold|xau", "NDQ": r"nasdaq|ndq|nq|nas100|us100", "US30": r"us30|dow|dji|ym", "US2000": r"us2000|russell|rut|rty|small.?caps?"}
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 SYSTEM = (
     "You are FX-Agents, Sam's automated trading bot, explaining your own decisions to him. Answer ONLY from the FACTS "

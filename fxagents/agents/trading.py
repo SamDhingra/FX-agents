@@ -454,7 +454,7 @@ class RiskAgent(Agent):
             return self._reject(rec, "already positioned in symbol")
         # NDQ / US30 move together: one index position at a time for EVERY book, not just playbook entries
         # (Oct 2026 audit F7 — the cap used to depend on the playbook passing its `group` metadata)
-        grp = pb.get("group") or {"members": list(r.get("index_group", ["NDQ", "US30"])),
+        grp = pb.get("group") or {"members": list(r.get("index_group", ["NDQ", "US30", "US2000"])),
                                   "max": int(r.get("index_group_max", 1))}
         if sig.symbol in grp.get("members", []) and \
                 sum(p.symbol in grp["members"] and p.side == sig.side for p in open_pos) >= int(grp.get("max", 99)):
@@ -1096,7 +1096,7 @@ def account_block(cfg, state, sym: str, side: int) -> str:
         return "max open positions"
     if sum(p.symbol == sym for p in open_pos) >= r["max_positions_per_symbol"]:
         return "already positioned in symbol"
-    grp = list(r.get("index_group", ["NDQ", "US30"]))
+    grp = list(r.get("index_group", ["NDQ", "US30", "US2000"]))
     if sym in grp and sum(p.symbol in grp and p.side == side for p in open_pos) >= int(r.get("index_group_max", 1)):
         return "index group full (one index position per direction at a time)"
     return ""

@@ -17,6 +17,7 @@ selector:
 instruments:                    # … real orders on NDQ only; gold and US30 are watched (prices, bias, charts), never traded
   XAUUSD: {trade: false}
   US30: {trade: false}
+  US2000: {trade: false}        # added to practice Nov 9 2026; watched only here until it has a record
 
 playbook:
   frozen: true                  # the "Playbook + chop filter" paper book: cells change only when you promote a

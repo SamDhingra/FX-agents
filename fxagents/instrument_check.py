@@ -18,7 +18,7 @@ import pandas as pd
 from .config import apply_broker, load_config
 from .oanda import oanda_from_cfg
 
-ALIAS = {"BTC_USD": "BTCUSD", "ETH_USD": "ETHUSD", "XAU_USD": "XAUUSD", "NAS100_USD": "NDQ", "US30_USD": "US30"}
+ALIAS = {"BTC_USD": "BTCUSD", "ETH_USD": "ETHUSD", "XAU_USD": "XAUUSD", "NAS100_USD": "NDQ", "US30_USD": "US30", "US2000_USD": "US2000"}
 WINDOWS = {"London 02:00–05:00": (120, 300), "NY AM 08:30–11:30": (510, 690), "NY PM 13:30–15:30": (810, 930),
            "Asia 20:00–23:59": (1200, 1440), "daily open 18:00–18:05": (1080, 1085)}
 
