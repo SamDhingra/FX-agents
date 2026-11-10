@@ -41,7 +41,22 @@ def cached_spread(sym: str) -> None:
             if m.any():
                 print(f"    {k:24} median {np.median(sp[m]):.4g}")
         return
-    print("  no downloaded history in data/bt/cache for this symbol (run ./fx.sh export, then any backtest on it)")
+    ex = sorted(Path("data/export").glob(f"*/{sym}_M1.csv.gz"), key=lambda f: f.stat().st_mtime)
+    if ex:                                        # Nov 10 2026: a plain export is enough (e.g. us2000_m1)
+        from .simple_rules import load
+        d = load(ex[-1])
+        d = d[d.index >= d.index[-1] - pd.Timedelta(days=90)]
+        sp, mid = (d.ask_o - d.bid_o).to_numpy(float), ((d.ask_o + d.bid_o) / 2).to_numpy(float)
+        loc = d.index.tz_convert("America/New_York")
+        mod = np.asarray(loc.hour * 60 + loc.minute)
+        print(f"  exported history ({ex[-1].parent.name}, last 90 days to {loc[-1]:%Y-%m-%d}): median spread {np.median(sp):.4g} "
+              f"({np.median(sp / mid) * 1e4:.2f} bps of price), 90th percentile {np.percentile(sp, 90):.4g}")
+        for k, (a, b) in WINDOWS.items():
+            m = (mod >= a) & (mod < b)
+            if m.any():
+                print(f"    {k:24} median {np.median(sp[m]):.4g}")
+        return
+    print("  no downloaded history in data/bt/cache or data/export for this symbol (run ./fx.sh export)")
 
 
 async def check(names: list[str]) -> None:
