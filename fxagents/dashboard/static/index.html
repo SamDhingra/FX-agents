@@ -1013,7 +1013,10 @@ button,input,select,textarea{font-family:inherit}
 .tfc{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 0;border-radius:5px;background:var(--card);border:1px solid var(--line);font-size:9px;color:var(--muted);letter-spacing:.05em}
 .tfc b{font-size:12px;line-height:1}.tfc.u{border-color:rgb(31 201 139 / .35);background:var(--up-soft)}.tfc.u b{color:var(--up-text)}
 .tfc.d{border-color:rgb(255 90 106 / .35);background:var(--down-soft)}.tfc.d b{color:var(--down-text)}.tfc.n b{color:var(--muted)}
-.tfc.ctx{opacity:.75}
+.tfc.ctx{opacity:.45;border-style:dashed}
+.swl{margin:8px 0 2px;display:grid;gap:3px;font-size:11.5px}
+.swr{display:grid;grid-template-columns:44px 40px 1fr;gap:2px 6px;align-items:baseline}
+.swr span:last-child{grid-column:3}
 .ctxp{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:5px;border:1px solid var(--line-2);color:var(--text-2);white-space:nowrap}
 .ctxp.Bullish{color:var(--up-text);border-color:rgb(31 201 139 / .4);background:var(--up-soft)}.ctxp.Bearish{color:var(--down-text);border-color:rgb(255 90 106 / .4);background:var(--down-soft)}
 .ctxp.Mixed,.ctxp.Suspended,.ctxp.In{color:var(--warn);border-color:rgb(244 181 68 / .4);background:var(--warn-soft)}
@@ -1069,7 +1072,7 @@ button,input,select,textarea{font-family:inherit}
 .mbt th.ctxh{color:var(--muted);opacity:.8}.mbt td.sym b{display:block}.mbt td.sym small{color:var(--muted)}
 .mbe{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)}
 .mbe:last-child{border-bottom:0}.mbe .ic{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--card-2);border:1px solid var(--line);color:var(--text-2)}
-.mbe .w{display:flex;flex-direction:column;gap:3px;min-width:0}.mbe .w .elig span{white-space:normal}.mbe .ls{font-size:11px;color:var(--muted)}
+.mbe .w{display:flex;flex-direction:column;gap:3px;min-width:0}.mbe .w .elig span,.mbc .elig span{white-space:normal}.mbc .elig{align-items:flex-start}.mbe .ls{font-size:11px;color:var(--muted)}
 .wl{position:relative;height:28px;border-radius:6px;background:var(--card-2);border:1px solid var(--line);margin:4px 0 18px}
 .wl .w{position:absolute;top:3px;bottom:3px;border-radius:4px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
 .wl .nw{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--accent);box-shadow:0 0 8px var(--accent)}
@@ -4875,6 +4878,18 @@ const arrowOf = v => v == null ? `<b class="mut">·</b>` : v > 0 ? `<b>↗</b>` 
 const tfCls = v => v == null ? "n" : v > 0 ? "u" : v < 0 ? "d" : "n";
 const tfWord = v => v == null ? "—" : v > 0 ? "Bullish" : v < 0 ? "Bearish" : "Neutral";
 function ctxOf(row){ const c = row.context; return c === "In Doubt" ? "In" : c; }
+/* Nov 12 2026 (Sam): where each counted timeframe last switched, and the level that would switch it back —
+   so the bias can be checked against TradingView. Times are New York, at the close of the candle that broke. */
+function swingHTML(r){
+  const L = r.levels; if(!L) return "";
+  const lab = {d: "Daily", h4: "4H", h1: "1H"};
+  const when = t => { if(!t) return "—"; const d = new Date(t); return `${md(t)} ${hm(t)}`; };
+  return `<div class="swl">${["h1", "h4", "d"].map(k => { const x = L[k]; if(!x) return "";
+    const up = x.state > 0, dn = x.state < 0, back = up ? x.flips_down_below : dn ? x.flips_up_above : null;
+    return `<div class="swr"><b>${lab[k]}</b><span class="${up ? "pos" : dn ? "neg" : "mut"}">${up ? "up" : dn ? "down" : "none"}</span>
+      <span class="mut">${x.last_flip_bar ? `since ${when(x.last_flip_bar)}${x.last_flip_level != null ? ` (${up ? "closed above" : "closed below"} ${fpx(x.last_flip_level)})` : ""}` : "no switch in history"}</span>
+      <span class="mut">${back != null ? `${up ? "turns down below" : "turns up above"} <b class="num">${fpx(back)}</b>` : ""}</span></div>`; }).join("")}</div>`;
+}
 function eligHTML(e){ if(!e) return ""; return `<div class="elig ${esc(e.state)}"><i></i><b>${esc(e.label)}</b><span>${esc(e.why || "")}</span></div>`; }
 function chg(p){ return p == null ? "" : `<span class="${cls(p)}">${p > 0 ? "+" : ""}${fmt(p, 2)}%</span>`; }
 
@@ -4991,13 +5006,15 @@ function renderBiasPage(){
   $("#mbMin").textContent = fmt(BG.min_align, 2);
   $("#mbCards").innerHTML = rows.map(r => {
     const c = r.cells || {}, pos = r.score == null ? null : Math.round((r.score + 1) / 2 * 100);
-    const n = r.known || 0, agree = r.up >= r.down ? `${r.up} of ${n} bullish` : `${r.down} of ${n} bearish`;
+    const cnt = ["d", "h4", "h1"].map(k => c[k]).filter(v => v != null), cu = cnt.filter(v => v > 0).length, cd = cnt.filter(v => v < 0).length;
+    const n = cnt.length, agree = cu >= cd ? `${cu} of ${n} counted bullish` : `${cd} of ${n} counted bearish`;
     return `<div class="card mbc" data-sym="${esc(r.symbol)}" role="button" tabindex="0">
       <div class="h"><span class="ic">${esc(icode(r.symbol))}</span><div class="nm"><b>${esc(iname(r.symbol))}</b><small>${esc(r.symbol)}</small></div><span class="ctxp ${ctxOf(r)}">${esc(r.context)}</span></div>
       <div class="px"><b class="num">${fpx(r.price)}</b>${chg(r.change_pct)}<span class="mut" style="font-weight:500">since 17:00</span></div>
       <div class="tfr">${tfs.map(t => `<div class="tfc ${tfCls(c[t.key])}${t.key.startsWith("m") ? " ctx" : ""}" title="${t.label}: ${tfWord(c[t.key])}">${t.label}${arrowOf(c[t.key])}</div>`).join("")}</div>
       ${pos == null ? "" : `<div class="gbar" title="bias score ${fmt(r.score, 2)}"><em style="left:${(1 - BG.min_align) / 2 * 100}%"></em><em style="left:${(1 + BG.min_align) / 2 * 100}%"></em><i style="left:calc(${pos}% - 1px)"></i></div>`}
-      <div class="ft"><span>${n ? agree : "warming up"}</span><span>score <b class="num ${cls(r.score)}">${r.score == null ? "—" : (r.score > 0 ? "+" : "") + fmt(r.score, 2)}</b></span></div>
+      <div class="ft"><span>${n ? agree : "warming up"}</span><span>score <b class="num ${cls(r.score)}" title="Daily 40% + 4H 35% + 1H 25%. 15m and 5m are shown for context only.">${r.score == null ? "—" : (r.score > 0 ? "+" : "") + fmt(r.score, 2)}</b> <span class="mut" style="font-size:10.5px">D·4H·1H</span></span></div>
+      ${swingHTML(r)}
       ${eligHTML(r.eligibility)}
     </div>`;
   }).join("") || `<div class="card"><div class="empty">No instruments.</div></div>`;
@@ -5606,7 +5623,7 @@ function renderAnalysis(){
   $$("#anSetups [data-setup]").forEach(r => r.onclick = () => anSetFilter({setup: r.dataset.setup, symbol: r.dataset.sym}));
   $("#anBias").innerHTML = anSmall(d.bias, r => anMode(r.mode), "Bias");
 }
-$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-09.2");
+$("#uiBuild") && ($("#uiBuild").textContent = "UI build 2026-11-12.1");
 const _goAn = go;
 go = function(p){ _goAn(p); if(p === "analysis") loadAnalysis(); };
 const _setBookAn = setBook;

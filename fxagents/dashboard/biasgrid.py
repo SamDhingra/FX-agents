@@ -73,8 +73,12 @@ def eligibility(ctx, sym: str, b: dict | None, now) -> dict:
     if b is None:
         return {"state": "wait", "label": "Warming up", "why": "Not enough hourly history for the bias yet."}
     if b.get("suspended"):
+        h = (b.get("levels") or {}).get("h1") or {}
+        lvl = h.get("flips_down_below") if (h.get("state") or 0) > 0 else h.get("flips_up_above")
+        brk = (f"a 1H close {'below' if (h.get('state') or 0) > 0 else 'above'} {lvl:,.2f}" if lvl is not None
+               else "a fresh 1H structure break")
         return {"state": "blocked", "label": "Bias suspended",
-                "why": "Bias-aligned losses in a row; waits for a fresh 1H structure break."}
+                "why": f"2 bias-aligned losses in a row. Resumes on {brk} or at the next trading day (17:00 NY)."}
     if now is not None and not in_windows(now, wins):
         t, lab = _next_window(now, wins)
         return {"state": "wait", "label": "Outside entry window",
@@ -123,6 +127,7 @@ def grid(ctx) -> dict:
             "pdl": b.get("pdl") if b else None, "pd_pos": b.get("pd_pos") if b else None,
             "accuracy": b.get("accuracy") if b else None, "accuracy_n": b.get("accuracy_n") if b else 0,
             "audit_p": b.get("audit_p") if b else None, "updated": b.get("updated") if b else None,
+            "levels": b.get("levels") if b else None,
             "eligibility": eligibility(ctx, sym, b, now),
             "last_signal": {k: s.get(k) for k in ("ts", "strategy", "side", "action", "why")} if s else None,
         })

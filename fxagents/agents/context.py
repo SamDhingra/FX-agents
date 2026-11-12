@@ -42,13 +42,20 @@ class GuardMixin:
                 self.log.warning("could not save the loss guards: %s", e)
 
     def _roll(self, now: pd.Timestamp) -> bool:
-        """New 17:00-NY trading day → every loss streak starts over (suspensions stay)."""
+        """New 17:00-NY trading day → every loss streak starts over. Since Nov 12 2026 (Sam) a suspension also ends
+        there (bias.safeguards.release_on_new_day): an hourly swing can stay unbroken for days, and a suspension
+        must not stop trading for that long. It still ends earlier on a fresh 1H break."""
         tday = str(trading_day(now).date())
         if tday == self.state.guard_day:
             return False
+        first = not self.state.guard_day
         self.state.guard_day = tday
-        for g in self.guard.values():
+        lift = self.sg.get("release_on_new_day", True) and not first
+        for sym, g in self.guard.items():
             g["aligned_losses"] = 0
+            if lift and g.get("suspended"):
+                g["suspended"] = False
+                self.state.alert("info", f"{sym}: bias suspension lifted — new trading day")
         self._persist()
         return True
 
@@ -135,7 +142,10 @@ def compute_bias(h1: pd.DataFrame, now: pd.Timestamp, px: float, weights: dict, 
     return {"score": round(float(b["score"]), 3), "d": int(b["d"]), "h4": int(b["h4"]), "h1": int(b["h1"]),
             "label": label(float(b["score"]), min_align), "pd_pos": f(b.get("pd_pos")),
             "pdh": f(b["pdh"]), "pdl": f(b["pdl"]), "asia_hi": f(b["asia_hi"]), "asia_lo": f(b["asia_lo"]),
-            "h4_swing_hi": f(b["h4_swing_hi"]), "h4_swing_lo": f(b["h4_swing_lo"]), "price": round(px, 4)}
+            "h4_swing_hi": f(b["h4_swing_hi"]), "h4_swing_lo": f(b["h4_swing_lo"]), "price": round(px, 4),
+            "levels": {k: {"state": int(b[k]), "flips_up_above": f(b[f"{k}_swing_hi"]), "flips_down_below": f(b[f"{k}_swing_lo"]),
+                           "last_flip_bar": None if pd.isna(b[f"{k}_flip_at"]) else pd.Timestamp(b[f"{k}_flip_at"]).isoformat(),
+                           "last_flip_level": f(b[f"{k}_flip_px"])} for k in ("d", "h4", "h1")}}
 
 
 class BiasAgent(GuardMixin, Agent):

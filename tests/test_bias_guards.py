@@ -39,6 +39,7 @@ class StubJev:
 
 def make_bias(tmp_path=None, jev=None, state=None, cfg=None):
     cfg = cfg or copy.deepcopy(CFG)
+    cfg["bias"]["safeguards"]["jev_audit"] = True       # off in config.yaml since Nov 12 2026; these tests cover the mechanism
     cfg["instruments"] = {"NDQ": cfg["instruments"]["NDQ"]}
     st = state or LiveState(mode="paper")
     st.now = T0
@@ -290,3 +291,39 @@ def test_a_late_audit_for_an_older_reading_does_not_overwrite_a_newer_one():
     g = st.guards["NDQ"]
     assert g["audit_label"] == "BEARISH" and g["audit_p"] == 0.1 and g["in_doubt"] is True
     assert st.bias["NDQ"]["label"] == "BEARISH"
+
+
+def test_suspension_ends_at_the_next_trading_day_nov12():
+    """Sam, Nov 12 2026: an hourly swing can stay unbroken for days — the suspension must not last that long."""
+    a, st, ctx = make_bias()
+    a._roll(T0)
+    st.bias["NDQ"] = reading() | {"h1": 1}
+    two_losses(a)
+    assert st.guards["NDQ"]["suspended"]
+    a._roll(T0 + pd.Timedelta(hours=7))                         # 16:05, same trading day: still suspended
+    assert st.guards["NDQ"]["suspended"]
+    a._roll(pd.Timestamp("2026-10-26 17:01", tz=TZ))           # the 17:00 roll starts the next trading day
+    assert not st.guards["NDQ"]["suspended"] and st.guards["NDQ"]["aligned_losses"] == 0
+    a.sg["release_on_new_day"] = False                          # the old behaviour stays available
+    two_losses(a)
+    a._roll(pd.Timestamp("2026-10-27 17:01", tz=TZ))
+    assert st.guards["NDQ"]["suspended"]
+
+
+def test_bias_reports_switch_levels_nov12():
+    import numpy as np
+    from fxagents.agents.context import compute_bias
+    idx = pd.date_range("2026-10-01", periods=24 * 20, freq="1h", tz=TZ)
+    t = np.arange(len(idx))
+    px = 100 + 5 * np.sin(t / 9.0) + t * 0.01
+    h1 = pd.DataFrame({"open": px, "high": px + 0.3, "low": px - 0.3, "close": px}, index=idx)
+    b = compute_bias(h1, idx[-1] + pd.Timedelta("1h"), float(px[-1]), {"d": .4, "h4": .35, "h1": .25}, 0.25)
+    lv = b["levels"]
+    assert set(lv) == {"d", "h4", "h1"}
+    h = lv["h1"]
+    assert h["state"] == b["h1"] and h["last_flip_bar"] is not None and h["last_flip_level"] is not None
+    assert pd.Timestamp(h["last_flip_bar"]) <= idx[-1] + pd.Timedelta("1h")
+    # the switch level is the swing that was broken: a flip up broke a level below that bar's close
+    flip_t = pd.Timestamp(h["last_flip_bar"]) - pd.Timedelta("1h")
+    c = float(h1.close.loc[flip_t])
+    assert (c > h["last_flip_level"]) if h["state"] > 0 else (c < h["last_flip_level"])

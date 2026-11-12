@@ -87,7 +87,9 @@ bias:
   safeguards:
     suspend_after_losses: 2      # 2 bias-aligned losses in a row on a symbol → bias suspended…
                                  # …until the 1H structure prints a fresh break (either way)
-    jev_audit: true              # hourly: Jev judges whether the bias is still valid
+    release_on_new_day: true     # …or the next trading day starts (17:00 NY), whichever is first (Nov 12 2026)
+    jev_audit: false             # hourly Jev check of the bias (in doubt → half size). Off since Nov 12 2026: Jev showed no
+                                 # skill in the Nov 9 replay, so it no longer changes size or setups
     audit_doubt_below: 0.35      #   below this → "in doubt": half size, only A-grade setups
     doubt_min_quality: 0.7
     reversal_exception: true     # counter-bias trade ONLY if: liquidity pool raided (PDH/PDL/Asia)

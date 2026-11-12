@@ -53,13 +53,21 @@ def structure_state(htf: pd.DataFrame, swing: int) -> pd.DataFrame:
     C = htf["close"].to_numpy(dtype=float)
     lv = swing_levels(pivots_arr(H, L, swing, swing, reduce=False), len(C))
     st = np.zeros(len(C))
-    cur = 0
+    flip_i = np.full(len(C), -1)             # Nov 12 2026: the bar of the last switch and the level it broke
+    flip_px = np.full(len(C), np.nan)
+    cur, fi, fp = 0, -1, np.nan
     for i in range(len(C)):
         h, l = lv["hi"][i], lv["lo"][i]
+        prev = cur
         if not np.isnan(h) and C[i] > h: cur = 1
         if not np.isnan(l) and C[i] < l: cur = -1
-        st[i] = cur
-    return pd.DataFrame({"state": st, "swing_hi": lv["hi"], "swing_lo": lv["lo"]}, index=htf.index)
+        if cur != prev:
+            fi, fp = i, (h if cur > 0 else l)
+        st[i], flip_i[i], flip_px[i] = cur, fi, fp
+    idx = htf.index
+    flip_at = [idx[k] if k >= 0 else pd.NaT for k in flip_i]
+    return pd.DataFrame({"state": st, "swing_hi": lv["hi"], "swing_lo": lv["lo"], "flip_at": flip_at, "flip_px": flip_px},
+                        index=idx)
 
 
 def _known(frame: pd.DataFrame, ends) -> pd.DataFrame:
@@ -86,13 +94,20 @@ def bias_frame(h1: pd.DataFrame, when: pd.DatetimeIndex, close_at_when: np.ndarr
     for key, frame, swing, per in (("d", d, 1, d["end"]), ("h4", h4, 2, h4["end"]),
                                    ("h1", h1[["open", "high", "low", "close"]], 2, pd.Timedelta("1h"))):
         s = structure_state(frame, swing)
+        if isinstance(per, pd.Timedelta):              # report the switch at the CLOSE of the candle that made it
+            s["flip_at"] = s["flip_at"] + per
+        else:
+            s["flip_at"] = s["flip_at"].map(pd.Series(per.to_numpy(), index=frame.index))
         parts[key] = _align(_known(s, per), when)
     out = pd.DataFrame(index=when)
     for k, p in parts.items():
         out[k] = p["state"].fillna(0).to_numpy()
     out["score"] = sum(w[k] * out[k] for k in w)
-    out["h4_swing_hi"] = parts["h4"]["swing_hi"].to_numpy()
-    out["h4_swing_lo"] = parts["h4"]["swing_lo"].to_numpy()
+    for k, p in parts.items():                      # what would flip each timeframe, and when it last flipped
+        out[f"{k}_swing_hi"] = p["swing_hi"].to_numpy()
+        out[f"{k}_swing_lo"] = p["swing_lo"].to_numpy()
+        out[f"{k}_flip_at"] = p["flip_at"].to_numpy()
+        out[f"{k}_flip_px"] = p["flip_px"].to_numpy()
     # prior day range + premium/discount
     dk = _align(_known(d[["high", "low"]].rename(columns={"high": "pdh", "low": "pdl"}), d["end"]), when)
     out["pdh"], out["pdl"] = dk["pdh"].to_numpy(), dk["pdl"].to_numpy()
